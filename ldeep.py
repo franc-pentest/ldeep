@@ -76,7 +76,7 @@ class ResolverThread(object):
 					break
 			else:
 				pass
-		except dns.resolver.NXDOMAIN:
+		except Exception:
 			pass
 
 
@@ -155,12 +155,13 @@ class ActiveDirectoryView(object):
 		self.hostnames = []
 		results = self.query(COMPUTERS_FILTER, ['name'])
 		for result in results:
-			self.hostnames.append(result['name'][0])
+			self.hostnames.append('%s.%s' % (result['name'][0], self.fqdn))
 			# print only if resolution was not mandated
 			if not resolve:
-				print result['name'][0]
+				print '%s.%s' % (result['name'][0], self.fqdn)
 		# do the resolution
-		self.resolve()
+		if resolve:
+			self.resolve()
 
 	def list_groups(self):
 		results = self.query(GROUPS_FILTER)
@@ -188,6 +189,20 @@ class ActiveDirectoryView(object):
 					print group_dn
 			else:
 				print '[-] No groups for user %s' % user
+	
+	def search(self, filter_, attr):
+		try:
+			if attr:
+				results = self.query(filter_, [attr])
+			else:
+				results = self.query(filter_)
+			for result in results:
+				if attr in result and attr:
+					print "\n".join(result[attr])
+				else:
+					print result
+		except Exception, e:
+			print e
 
 	def resolve(self):
 		pool = ThreadPool(20)
@@ -211,8 +226,10 @@ if __name__ == "__main__":
 	action.add_argument('--computers', action="store_true", help='Lists all computers')
 	action.add_argument('--members', metavar="GROUP", help='Returns users in a specific group')
 	action.add_argument('--membership', metavar="USER", help='Returns all groups the users in member of')
-	
-	parser.add_argument('--resolve', action="store_true", required='--computers' in sys.argv, help="Performs a resolution on all computer names, should be used with --computers")
+	action.add_argument('--search', help="Custom LDAP filter")
+
+	parser.add_argument('--resolve', action="store_true", required=False, help="Performs a resolution on all computer names, should be used with --computers")
+	parser.add_argument('--attr', required=False, help="Filters output of --search")
 
 	args = parser.parse_args()
 	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged)
@@ -225,4 +242,6 @@ if __name__ == "__main__":
 		ad.list_membership(args.membership)
 	elif args.computers:
 		ad.list_computers(args.resolve)
+	elif args.search:
+		ad.search(args.search, args.attr)
 
