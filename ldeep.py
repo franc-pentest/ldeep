@@ -3,21 +3,91 @@
 import ldap
 import sys
 import time
+from tqdm import tqdm
 import argparse
+from ldap.controls import SimplePagedResultsControl
+from multiprocessing.dummy import Pool as ThreadPool
+from distutils.version import LooseVersion
+import dns.resolver
+
 
 GROUPS_FILTER = "(&(objectClass=group))"
+COMPUTERS_FILTER = "(&(objectClass=computer))"
 GROUP_DN_FILTER = "(&(objectClass=group)(cn=%s))"
 USERS_IN_GROUP_FILTER = "(&(objectCategory=user)(memberOf=%s))"
 USER_IN_GROUPS_FILTER = "(&(sAMAccountName=%s))"
 
+PAGESIZE = 1000
+
+# Check if we're using the Python "ldap" 2.4 or greater API
+LDAP24API = LooseVersion(ldap.__version__) >= LooseVersion('2.4')
+
+
+def create_controls(pagesize):
+	"""Create an LDAP control with a page size of "pagesize"."""
+	# Initialize the LDAP controls for paging. Note that we pass ''
+	# for the cookie because on first iteration, it starts out empty.
+	if LDAP24API:
+		return SimplePagedResultsControl(True, size=pagesize, cookie='')
+	else:
+		return SimplePagedResultsControl(ldap.LDAP_CONTROL_PAGE_OID, True,
+										 (pagesize, ''))
+
+
+def get_pctrls(serverctrls):
+	"""Lookup an LDAP paged control object from the returned controls."""
+	# Look through the returned controls and find the page controls.
+	# This will also have our returned cookie which we need to make
+	# the next search request.
+	if LDAP24API:
+		return [c for c in serverctrls
+				if c.controlType == SimplePagedResultsControl.controlType]
+	else:
+		return [c for c in serverctrls
+				if c.controlType == ldap.LDAP_CONTROL_PAGE_OID]
+
+
+def set_cookie(lc_object, pctrls, pagesize):
+	"""Push latest cookie back into the page control."""
+	if LDAP24API:
+		cookie = pctrls[0].cookie
+		lc_object.cookie = cookie
+		return cookie
+	else:
+		est, cookie = pctrls[0].controlValue
+		lc_object.controlValue = (pagesize, cookie)
+		return cookie
+
+
+class ResolverThread(object):
+
+	resolutions = []
+
+	@classmethod
+	def resolve(cls, hostname):
+		try:
+			answers = dns.resolver.query(hostname, 'A')
+			for rdata in answers:
+				if rdata.address:
+					cls.resolutions.append({
+						"hostname": hostname,
+						"address": rdata.address
+					})
+					break
+			else:
+				pass
+		except dns.resolver.NXDOMAIN:
+			pass
+
 
 class ActiveDirectoryView(object):
 
-	def __init__(self, username, password, server, fqdn):
+	def __init__(self, username, password, server, fqdn, dpaged):
 		self.username = username
 		self.password = password
 		self.server = server
 		self.fqdn = fqdn
+		self.dpaged = dpaged
 		try:
 			self.ldap = ldap.open(self.server)
 			self.ldap.simple_bind_s("{username}@{fqdn}".format(**self.__dict__), self.password)
@@ -26,50 +96,106 @@ class ActiveDirectoryView(object):
 			sys.exit(0)
 
 		self.ldap.set_option(ldap.OPT_REFERRALS, 0)
+		ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_ALLOW)
 
 		self.base_dn = ",".join(map(lambda x: "dc=%s" % x, fqdn.split('.')))
 		self.search_scope = ldap.SCOPE_SUBTREE
 
 	def query(self, ldapfilter, attributes=[]):
-		try:
-			ldap_result_id = self.ldap.search(self.base_dn, self.search_scope, ldapfilter, attributes)
-			result_set = []
-			while 1:
-				result_type, result_data = self.ldap.result(ldap_result_id, 0)
-				if (result_data == []):
+		result_set = []
+		if not self.dpaged:
+			lc = create_controls(PAGESIZE)
+
+			while True:
+				try:
+					msgid = self.ldap.search_ext(self.base_dn, ldap.SCOPE_SUBTREE, ldapfilter,
+										 attributes, serverctrls=[lc])
+				except ldap.LDAPError as e:
+					sys.exit('LDAP search failed: %s' % e)
+
+				try:
+					rtype, rdata, rmsgid, serverctrls = self.ldap.result3(msgid)
+				except ldap.LDAPError as e:
+					sys.exit('Could not pull LDAP results: %s' % e)
+
+				for dn, attrs in rdata:
+					if dn:
+						result_set.append(attrs)
+
+				# Get cookie for next request
+				pctrls = get_pctrls(serverctrls)
+				if not pctrls:
+					print >> sys.stderr, 'Warning: Server ignores RFC 2696 control.'
 					break
-				else:
-					if result_type == ldap.RES_SEARCH_ENTRY:
-						result_set.append(result_data)
+
+				# Ok, we did find the page control, yank the cookie from it and
+				# insert it into the control for our next search. If however there
+				# is no cookie, we are done!
+				cookie = set_cookie(lc, pctrls, PAGESIZE)
+				if not cookie:
+					break
 			return result_set
-		except ldap.LDAPError, e:
-			print '[!] %s' % e
-			sys.exit(0)
+		else:
+			try:
+				ldap_result_id = self.ldap.search(self.base_dn, self.search_scope, ldapfilter, attributes)
+				result_set = []
+				while 1:
+					result_type, result_data = self.ldap.result(ldap_result_id, 0)
+					if (result_data == []):
+						break
+					else:
+						if result_type == ldap.RES_SEARCH_ENTRY:
+							result_set.extend(result_data)
+				return result_set
+			except ldap.LDAPError, e:
+				print '[!] %s' % e
+				sys.exit(0)
+
+	def list_computers(self, resolve):
+		self.hostnames = []
+		results = self.query(COMPUTERS_FILTER, ['name'])
+		for result in results:
+			self.hostnames.append(result['name'][0])
+			# print only if resolution was not mandated
+			if not resolve:
+				print result['name'][0]
+		# do the resolution
+		self.resolve()
 
 	def list_groups(self):
 		results = self.query(GROUPS_FILTER)
 		for result in results:
-			_, result = result[0]
 			print result['sAMAccountName'][0]
 
 	def list_membersof(self, group):
 		# retrieve group DN
 		results = self.query(GROUP_DN_FILTER % group, ["distinguishedName"])
 		for result in results:
-			_, result = result[0]
 			group_dn = result['distinguishedName'][0]
+		else:
+			print '[!] Group %s does not exists' % group
+			sys.exit(0)
 		results = self.query(USERS_IN_GROUP_FILTER % group_dn)
 		for result in results:
-			_, result = result[0]
 			print result['sAMAccountName'][0]
 
 	def list_membership(self, user):
 		# retrieve group DN
 		results = self.query(USER_IN_GROUPS_FILTER % user, ["memberOf"])
 		for result in results:
-			_, result = result[0]
-			for group_dn in result['memberOf']:
-				print group_dn
+			if 'memberOf' in result:
+				for group_dn in result['memberOf']:
+					print group_dn
+			else:
+				print '[-] No groups for user %s' % user
+
+	def resolve(self):
+		pool = ThreadPool(20)
+		pool.map(ResolverThread.resolve, tqdm(self.hostnames, desc="Resolution", bar_format = '{desc} {n_fmt}/{total_fmt} hostnames'))
+		pool.close()
+		pool.join()
+		for computer in ResolverThread.resolutions:
+			print '%s %s' % (computer['address'].ljust(20, ' '), computer['hostname'])
 
 
 if __name__ == "__main__":
@@ -77,15 +203,19 @@ if __name__ == "__main__":
 	parser.add_argument('-u', '--username', help="The username", required=True)
 	parser.add_argument('-p', '--password', help="The password", required=True)
 	parser.add_argument('-d', '--fqdn', help="The domain FQDN (ex : domain.local)", required=True)
-	parser.add_argument('-s', '--ldapserver', help="The IP address of an LDAP server", required=True)
+	parser.add_argument('-s', '--ldapserver', help="The LDAP path (ex : ldap://corp.contoso.com:389)", required=True)
+	parser.add_argument('--dpaged', action="store_true", help="Disable paged search (in case of unwanted behavior)")
 
 	action = parser.add_mutually_exclusive_group(required=True)
 	action.add_argument('--groups', action="store_true", help='Lists all available groups')
+	action.add_argument('--computers', action="store_true", help='Lists all computers')
 	action.add_argument('--members', metavar="GROUP", help='Returns users in a specific group')
 	action.add_argument('--membership', metavar="USER", help='Returns all groups the users in member of')
+	
+	parser.add_argument('--resolve', action="store_true", required='--computers' in sys.argv, help="Performs a resolution on all computer names, should be used with --computers")
 
 	args = parser.parse_args()
-	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn)
+	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged)
 
 	if args.groups:
 		ad.list_groups()
@@ -93,4 +223,6 @@ if __name__ == "__main__":
 		ad.list_membersof(args.members)
 	elif args.membership:
 		ad.list_membership(args.membership)
+	elif args.computers:
+		ad.list_computers(args.resolve)
 
