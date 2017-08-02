@@ -13,7 +13,7 @@ import dns.resolver
 
 GROUPS_FILTER = "(&(objectClass=group))"
 COMPUTERS_FILTER = "(&(objectClass=computer))"
-GROUP_DN_FILTER = "(&(objectClass=group)(cn=%s))"
+GROUP_DN_FILTER = "(&(objectClass=group)(sAMAccountName=%s))"
 USERS_IN_GROUP_FILTER = "(&(objectCategory=user)(memberOf=%s))"
 USER_IN_GROUPS_FILTER = "(&(sAMAccountName=%s))"
 
@@ -171,8 +171,8 @@ class ActiveDirectoryView(object):
 	def list_membersof(self, group):
 		# retrieve group DN
 		results = self.query(GROUP_DN_FILTER % group, ["distinguishedName"])
-		for result in results:
-			group_dn = result['distinguishedName'][0]
+		if results:
+			group_dn = results[0]['distinguishedName'][0]
 		else:
 			print '[!] Group %s does not exists' % group
 			sys.exit(0)
@@ -189,7 +189,7 @@ class ActiveDirectoryView(object):
 					print group_dn
 			else:
 				print '[-] No groups for user %s' % user
-	
+
 	def search(self, filter_, attr):
 		try:
 			if attr:
