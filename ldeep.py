@@ -206,7 +206,9 @@ class ActiveDirectoryView(object):
 
 	def resolve(self):
 		pool = ThreadPool(20)
-		pool.map(ResolverThread.resolve, tqdm(self.hostnames, desc="Resolution", bar_format = '{desc} {n_fmt}/{total_fmt} hostnames'))
+		with tqdm(total=len(self.hostnames)) as pbar:
+			for _ in pool.imap_unordered(ResolverThread.resolve, tqdm(self.hostnames, desc="Resolution", bar_format='{desc} {n_fmt}/{total_fmt} hostnames')):
+				pbar.update()
 		pool.close()
 		pool.join()
 		for computer in ResolverThread.resolutions:
