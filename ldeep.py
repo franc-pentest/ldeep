@@ -61,15 +61,21 @@ def set_cookie(lc_object, pctrls, pagesize):
 
 class ResolverThread(object):
 
-	resolutions = []
+	def __init__(self, dns_server):
+		self.dns_server = dns_server
+		self.resolutions = []
 
-	@classmethod
-	def resolve(cls, hostname):
+	def resolve(self, hostname):
+		if self.dns_server:
+			resolver = dns.resolver.Resolver()
+			resolver.nameservers = [self.dns_server]
+		else:
+			resolver = dns.resolver
 		try:
-			answers = dns.resolver.query(hostname, 'A')
+			answers = resolver.query(hostname, 'A', tcp=True)
 			for rdata in answers:
 				if rdata.address:
-					cls.resolutions.append({
+					self.resolutions.append({
 						"hostname": hostname,
 						"address": rdata.address
 					})
@@ -151,7 +157,7 @@ class ActiveDirectoryView(object):
 				print '[!] %s' % e
 				sys.exit(0)
 
-	def list_computers(self, resolve):
+	def list_computers(self, resolve, dns_server):
 		self.hostnames = []
 		results = self.query(COMPUTERS_FILTER, ['name'])
 		for result in results:
@@ -161,7 +167,7 @@ class ActiveDirectoryView(object):
 				print '%s.%s' % (result['name'][0], self.fqdn)
 		# do the resolution
 		if resolve:
-			self.resolve()
+			self.resolve(dns_server)
 
 	def list_groups(self):
 		results = self.query(GROUPS_FILTER)
@@ -204,14 +210,15 @@ class ActiveDirectoryView(object):
 		except Exception, e:
 			print e
 
-	def resolve(self):
+	def resolve(self, dns_server):
 		pool = ThreadPool(20)
+		resolver_thread = ResolverThread(dns_server)
 		with tqdm(total=len(self.hostnames)) as pbar:
-			for _ in pool.imap_unordered(ResolverThread.resolve, tqdm(self.hostnames, desc="Resolution", bar_format='{desc} {n_fmt}/{total_fmt} hostnames')):
+			for _ in pool.imap_unordered(resolver_thread.resolve, tqdm(self.hostnames, desc="Resolution", bar_format='{desc} {n_fmt}/{total_fmt} hostnames')):
 				pbar.update()
 		pool.close()
 		pool.join()
-		for computer in ResolverThread.resolutions:
+		for computer in resolver_thread.resolutions:
 			print '%s %s' % (computer['address'].ljust(20, ' '), computer['hostname'])
 
 
@@ -221,6 +228,7 @@ if __name__ == "__main__":
 	parser.add_argument('-p', '--password', help="The password", required=True)
 	parser.add_argument('-d', '--fqdn', help="The domain FQDN (ex : domain.local)", required=True)
 	parser.add_argument('-s', '--ldapserver', help="The LDAP path (ex : ldap://corp.contoso.com:389)", required=True)
+	parser.add_argument('--dns', help="An optional DNS server to use", default=False)
 	parser.add_argument('--dpaged', action="store_true", help="Disable paged search (in case of unwanted behavior)")
 
 	action = parser.add_mutually_exclusive_group(required=True)
@@ -243,7 +251,7 @@ if __name__ == "__main__":
 	elif args.membership:
 		ad.list_membership(args.membership)
 	elif args.computers:
-		ad.list_computers(args.resolve)
+		ad.list_computers(args.resolve, args.dns)
 	elif args.search:
 		ad.search(args.search, args.attr)
 
