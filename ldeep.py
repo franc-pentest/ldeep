@@ -36,6 +36,7 @@ TRUSTS_INFO_FILTER = "(&(objectCategory=trustedDomain))"
 OU_FILTER = "(&(objectClass=OrganizationalUnit))"
 
 PAGESIZE = 1000
+VERBOSE = False
 
 DOMAIN_PASSWORD_COMPLEX = 1
 DOMAIN_PASSWORD_NO_ANON_CHANGE = 2
@@ -83,12 +84,57 @@ def set_cookie(lc_object, pctrls, pagesize):
 
 def display(ldap_object):
 
-	if "group" in ldap_object["objectClass"]:
-		print(ldap_object["sAMAccountName"][0] + " (group)")
-	if "user" in ldap_object["objectClass"]:
-		print(ldap_object["sAMAccountName"][0])
+	if verbose:
+		if "objectSid" in ldap_object:
+			ldap_object["objectSid"] = binary_to_text_SID(ldap_object["objectSid"])
+		pprint(ldap_object)
+	else:
+		if "group" in ldap_object["objectClass"]:
+			print(ldap_object["sAMAccountName"][0] + " (group)")
+		if "user" in ldap_object["objectClass"]:
+			print(ldap_object["sAMAccountName"][0])
 
 # UTILS
+
+WELL_KNOWN_SIDs = {
+	"S-1-5-32-544"	: "BUILTIN\Administrators",
+	"S-1-5-32-545"	: "BUILTIN\Users",
+	"S-1-5-32-546"	: "BUILTIN\Guests",
+	"S-1-5-32-547"	: "BUILTIN\Power Users",
+	"S-1-5-32-548"	: "BUILTIN\Account Operators",
+	"S-1-5-32-549"	: "BUILTIN\Server Operators",
+	"S-1-5-32-550"	: "BUILTIN\Print Operators",
+	"S-1-5-32-551"	: "BUILTIN\Backup Operators",
+	"S-1-5-32-552"	: "BUILTIN\Replicators",
+	"S-1-5-64-10"	: "BUILTIN\NTLM Authentication",
+	"S-1-5-64-14"	: "BUILTIN\SChannel Authentication",
+	"S-1-5-64-21"	: "BUILTIN\Digest Authentication",
+	"S-1-16-4096"	: "BUILTIN\Low Mandatory Level",
+	"S-1-16-8192"	: "BUILTIN\Medium Mandatory Level",
+	"S-1-16-8448"	: "BUILTIN\Medium Plus Mandatory Level",
+	"S-1-16-12288"	: "BUILTIN\High Mandatory Level",
+	"S-1-16-16384"	: "BUILTIN\System Mandatory Level",
+	"S-1-16-20480"	: "BUILTIN\Protected Process Mandatory Level",
+	"S-1-16-28672"	: "BUILTIN\Secure Process Mandatory Level",
+	"S-1-5-32-554"	: "BUILTIN\BUILTIN\Pre-Windows 2000 Compatible Access",
+	"S-1-5-32-555"	: "BUILTIN\BUILTIN\Remote Desktop Users",
+	"S-1-5-32-556"	: "BUILTIN\BUILTIN\Network Configuration Operators",
+	"S-1-5-32-557"	: "BUILTIN\BUILTIN\Incoming Forest Trust Builders",
+	"S-1-5-32-558"	: "BUILTIN\BUILTIN\Performance Monitor Users",
+	"S-1-5-32-559"	: "BUILTIN\BUILTIN\Performance Log Users",
+	"S-1-5-32-560"	: "BUILTIN\BUILTIN\Windows Authorization Access Group",
+	"S-1-5-32-561"	: "BUILTIN\BUILTIN\Terminal Server License Servers",
+	"S-1-5-32-562"	: "BUILTIN\BUILTIN\Distributed COM Users",
+	"S-1-5-32-569"	: "BUILTIN\BUILTIN\Cryptographic Operators",
+	"S-1-5-32-573"	: "BUILTIN\BUILTIN\Event Log Readers",
+	"S-1-5-32-574"	: "BUILTIN\BUILTIN\Certificate Service DCOM Access",
+	"S-1-5-32-575"	: "BUILTIN\BUILTIN\RDS Remote Access Servers",
+	"S-1-5-32-576"	: "BUILTIN\BUILTIN\RDS Endpoint Servers",
+	"S-1-5-32-577"	: "BUILTIN\BUILTIN\RDS Management Servers",
+	"S-1-5-32-578"	: "BUILTIN\BUILTIN\Hyper-V Administrators",
+	"S-1-5-32-579"	: "BUILTIN\BUILTIN\Access Control Assistance Operators",
+	"S-1-5-32-580"	: "BUILTIN\BUILTIN\Remote Management Users",
+}
 
 
 def text_to_binary_SID(text):
@@ -254,8 +300,12 @@ class ActiveDirectoryView(object):
 				print("%s: %s" % (field, val))
 
 	def resolve_sid(self, sid):
-		result = self.query("ObjectSid={sid}".format(sid=text_to_binary_SID(sid)))
-		display(result[0])
+		# Local SID
+		if sid in WELL_KNOWN_SIDs:
+			print(WELL_KNOWN_SIDs[sid])
+		else:
+			result = self.query("ObjectSid={sid}".format(sid=text_to_binary_SID(sid)))
+			display(result[0])
 
 	def get_gpo(self):
 		results = self.query(GPO_INFO_FILTER)
@@ -418,6 +468,7 @@ if __name__ == "__main__":
 	parser.add_argument("-d", "--fqdn", help="The domain FQDN (ex : domain.local)", required=True)
 	parser.add_argument("-s", "--ldapserver", help="The LDAP path (ex : ldap://corp.contoso.com:389)", required=True)
 	parser.add_argument("-b", "--base", default="", help="LDAP base for query")
+	parser.add_argument("-v", "--verbose", action="store_true", help="Results will contain full information")
 	parser.add_argument("--dns", help="An optional DNS server to use", default=False)
 	parser.add_argument("--dpaged", action="store_true", help="Disable paged search (in case of unwanted behavior)")
 
@@ -440,6 +491,10 @@ if __name__ == "__main__":
 	parser.add_argument("--attr", required=False, help="Filters output of --search")
 
 	args = parser.parse_args()
+
+	if args.verbose:
+		VERBOSE = True
+
 	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged, args.base)
 	if args.groups:
 		ad.list_groups()
