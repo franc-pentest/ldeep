@@ -3,14 +3,16 @@
 import sys
 import json
 import argparse
+import ldap
 from math import fabs
+import dns.resolver
 from multiprocessing.dummy import Pool as ThreadPool
 from distutils.version import LooseVersion
 from tqdm import tqdm
-import ldap
 from ldap.controls import SimplePagedResultsControl
-import dns.resolver
 from pprint import pprint
+from re import compile as re_compile, findall
+from struct import unpack
 
 # userAccountControl flags
 
@@ -28,10 +30,19 @@ USERS_IN_GROUP_FILTER = "(&(|(objectCategory=user)(objectCategory=group))(member
 USER_IN_GROUPS_FILTER = "(&(sAMAccountName=%s))"
 DOMAIN_INFO_FILTER = "(&(objectClass=domain))"
 GPO_INFO_FILTER = "(&(objectCategory=groupPolicyContainer))"
+GPO_INFO_FILTER_BY_GUID = "(&(objectCategory=groupPolicyContainer){})"
 PSO_INFO_FILTER = "(&(objectClass=msDS-PasswordSettings))"
 TRUSTS_INFO_FILTER = "(&(objectCategory=trustedDomain))"
+OU_FILTER = "(&(objectClass=OrganizationalUnit))"
 
 PAGESIZE = 1000
+
+DOMAIN_PASSWORD_COMPLEX = 1
+DOMAIN_PASSWORD_NO_ANON_CHANGE = 2
+DOMAIN_PASSWORD_NO_CLEAR_CHANGE = 4
+DOMAIN_LOCKOUT_ADMINS = 8
+DOMAIN_PASSWORD_STORE_CLEARTEXT = 16
+DOMAIN_REFUSE_PASSWORD_CHANGE = 32
 
 # Check if we're using the Python "ldap" 2.4 or greater API
 LDAP24API = LooseVersion(ldap.__version__) >= LooseVersion('2.4')
@@ -77,6 +88,25 @@ def display(ldap_object):
 	if "user" in ldap_object["objectClass"]:
 		print(ldap_object["sAMAccountName"][0])
 
+# UTILS
+
+
+def text_to_binary_SID(text):
+	return "".join(['\\{:02X}'.format(ord(x)) for x in text])
+
+
+def binary_to_text_SID(blob):
+	offset = 0
+	text = "S"
+	text += "-" + str(unpack("B", blob[offset:offset + 1])[0])
+	no = unpack("B", blob[offset + 1:offset + 2])[0]
+	text += "-" + str(unpack(">L", blob[offset + 2:offset + 6])[0] + unpack(">H", blob[offset + 6:offset + 8])[0])
+	mem_offset = offset + 8
+	for j in range(no):
+		text += "-" + str(unpack("<L", blob[mem_offset:mem_offset + 4])[0])
+		mem_offset += 4
+	return text
+
 
 class ResolverThread(object):
 
@@ -107,7 +137,7 @@ class ResolverThread(object):
 
 class ActiveDirectoryView(object):
 
-	def __init__(self, username, password, server, fqdn, dpaged):
+	def __init__(self, username, password, server, fqdn, dpaged, base=""):
 		self.username = username
 		self.password = password
 		self.server = server
@@ -115,7 +145,7 @@ class ActiveDirectoryView(object):
 		self.dpaged = dpaged
 		self.hostnames = []
 		try:
-			self.ldap = ldap.open(self.server)
+			self.ldap = ldap.initialize(self.server)
 			self.ldap.simple_bind_s("{username}@{fqdn}".format(**self.__dict__), self.password)
 		except ldap.LDAPError, e:
 			print('[!] %s' % e)
@@ -124,7 +154,10 @@ class ActiveDirectoryView(object):
 		self.ldap.set_option(ldap.OPT_REFERRALS, 0)
 		ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_ALLOW)
 
-		self.base_dn = ','.join(["dc=%s" % x for x in fqdn.split(".")])
+		if base:
+			self.base_dn = base
+		else:
+			self.base_dn = ','.join(["dc=%s" % x for x in fqdn.split(".")])
 		self.search_scope = ldap.SCOPE_SUBTREE
 
 	def query(self, ldapfilter, attributes=[]):
@@ -207,17 +240,44 @@ class ActiveDirectoryView(object):
 				if field in FILETIME_TIMESTAMP_FIELDS.keys():
 					val = int((fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
 					val = "%d %s" % (val, FILETIME_TIMESTAMP_FIELDS[field][1])
+				elif field == "pwdProperties":
+					if int(val) == 1:
+						val = "complexity enabled"
+					elif int(val) == 2:
+						val = "complexity disabled"
+
 				print("%s: %s" % (field, val))
 
-	def list_gpo(self):
+	def resolve_sid(self, sid):
+		result = self.query("ObjectSid={sid}".format(sid=text_to_binary_SID(sid)))
+		display(result[0])
+
+	def get_gpo(self):
 		results = self.query(GPO_INFO_FILTER)
+		gpos = {}
 		for result in results:
-			print("%s: %s" % (result["cn"][0], result["displayName"][0]))
+			gpos[result["cn"][0]] = result["displayName"][0]
+		return gpos
+
+	def list_gpo(self):
+		gpos = self.get_gpo()
+		for k, v in gpos.items():
+			print("%s: %s" % (k, v))
+
+	def list_ou(self):
+		results = self.query(OU_FILTER)
+		cn_re = re_compile("{[^}]+}")
+		gpos = self.get_gpo()
+		# print(json.dumps(results, ensure_ascii=False, indent=2))
+		for result in results:
+			print(result["distinguishedName"][0])
+			if "gPLink" in result:
+				guids = cn_re.findall(result["gPLink"][0])
+				if len(guids) > 0:
+					print("[gPLink]")
+					print("* {}".format("\n* ".join([gpos[g] if g in gpos else g for g in guids])))
 
 	def list_pso(self):
-		results = self.query(PSO_INFO_FILTER)
-		for result in results:
-			print(result)
 		FILETIME_TIMESTAMP_FIELDS = {
 			"msDS-LockoutObservationWindow": (60, "mins"),
 			"msDS-MinimumPasswordAge": (86400, "days"),
@@ -246,7 +306,7 @@ class ActiveDirectoryView(object):
 				if field in FILETIME_TIMESTAMP_FIELDS.keys():
 					val = int((fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
 					val = "%d %s" % (val, FILETIME_TIMESTAMP_FIELDS[field][1])
-				print("%s: %s" % (field, val))
+			print("%s: %s" % (field, val))
 
 	def list_trusts(self):
 		results = self.query(TRUSTS_INFO_FILTER)
@@ -276,6 +336,7 @@ class ActiveDirectoryView(object):
 
 	def list_groups(self):
 		results = self.query(GROUPS_FILTER)
+		# print(json.dumps(results, ensure_ascii=False, indent=2))
 		for result in results:
 			print(result["sAMAccountName"][0])
 
@@ -291,6 +352,7 @@ class ActiveDirectoryView(object):
 
 		for result in results:
 			display(result)
+		# print(json.dumps(results, ensure_ascii=False, indent=2))
 
 	def list_membersof(self, group):
 		# retrieve group DN
@@ -350,15 +412,19 @@ if __name__ == "__main__":
 	parser.add_argument("-p", "--password", help="The password", required=True)
 	parser.add_argument("-d", "--fqdn", help="The domain FQDN (ex : domain.local)", required=True)
 	parser.add_argument("-s", "--ldapserver", help="The LDAP path (ex : ldap://corp.contoso.com:389)", required=True)
+	parser.add_argument("-b", "--base", default="", help="LDAP base for query")
 	parser.add_argument("--dns", help="An optional DNS server to use", default=False)
 	parser.add_argument("--dpaged", action="store_true", help="Disable paged search (in case of unwanted behavior)")
 
 	action = parser.add_mutually_exclusive_group(required=True)
 	action.add_argument("--groups", action="store_true", help="Lists all available groups")
 	action.add_argument("--users", nargs='?', const="all", action="store", choices=["all", "enabled", "noexpire", "disabled", "locked"], help="Lists all available users")
+	action.add_argument("--object", metavar="OBJECT" help="Return information on an object (group, computer, user, etc.)")
 	action.add_argument("--computers", action="store_true", help="Lists all computers")
+	action.add_argument("--sid", metavar="SID", help="Return the record associated to the SID")
 	action.add_argument("--domain_policy", action="store_true", help="Print the domain policy")
 	action.add_argument("--gpo", action="store_true", help="List GPO GUID and their name")
+	action.add_argument("--ou", action="store_true", help="List OU and resolve linked GPO")
 	action.add_argument("--pso", action="store_true", help="Dump Password Setting Object (PSO) containers")
 	action.add_argument("--trusts", action="store_true", help="List domain trusts")
 	action.add_argument("--members", metavar="GROUP", help="Returns users in a specific group")
@@ -369,13 +435,17 @@ if __name__ == "__main__":
 	parser.add_argument("--attr", required=False, help="Filters output of --search")
 
 	args = parser.parse_args()
-	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged)
+	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged, args.base)
 	if args.groups:
 		ad.list_groups()
 	elif args.users:
 		ad.list_users(args.users)
 	elif args.members:
 		ad.list_membersof(args.members)
+	elif args.sid:
+		ad.resolve_sid(args.sid)
+	elif args.object:
+		pass
 	elif args.membership:
 		ad.list_membership(args.membership)
 	elif args.computers:
@@ -384,6 +454,8 @@ if __name__ == "__main__":
 		ad.list_domain_policy()
 	elif args.gpo:
 		ad.list_gpo()
+	elif args.ou:
+		ad.list_ou()
 	elif args.pso:
 		ad.list_pso()
 	elif args.trusts:
