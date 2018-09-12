@@ -209,6 +209,11 @@ class ActiveDirectoryView(object):
 				print("[!] %s" % e)
 				sys.exit(0)
 
+	def get_object(self, ldap_object):
+		results = query("cn=*{ldap_object}*".format(ldap_object))
+		for result in results:
+			display(result)
+
 	def list_computers(self, resolve, dns_server):
 		self.hostnames = []
 		results = self.query(COMPUTERS_FILTER, ["name"])
@@ -419,7 +424,7 @@ if __name__ == "__main__":
 	action = parser.add_mutually_exclusive_group(required=True)
 	action.add_argument("--groups", action="store_true", help="Lists all available groups")
 	action.add_argument("--users", nargs='?', const="all", action="store", choices=["all", "enabled", "noexpire", "disabled", "locked"], help="Lists all available users")
-	action.add_argument("--object", metavar="OBJECT" help="Return information on an object (group, computer, user, etc.)")
+	action.add_argument("--object", metavar="OBJECT", help="Return information on an object (group, computer, user, etc.)")
 	action.add_argument("--computers", action="store_true", help="Lists all computers")
 	action.add_argument("--sid", metavar="SID", help="Return the record associated to the SID")
 	action.add_argument("--domain_policy", action="store_true", help="Print the domain policy")
@@ -445,7 +450,7 @@ if __name__ == "__main__":
 	elif args.sid:
 		ad.resolve_sid(args.sid)
 	elif args.object:
-		pass
+		ad.get_object(args.object)
 	elif args.membership:
 		ad.list_membership(args.membership)
 	elif args.computers:
