@@ -12,6 +12,7 @@ from tqdm import tqdm
 from ldap.controls import SimplePagedResultsControl
 from pprint import pprint
 from re import compile as re_compile, findall
+from datetime import timedelta, datetime
 from struct import unpack
 
 # userAccountControl flags
@@ -83,10 +84,13 @@ def set_cookie(lc_object, pctrls, pagesize):
 
 
 def display(ldap_object):
-
-	if verbose:
-		if "objectSid" in ldap_object:
-			ldap_object["objectSid"] = binary_to_text_SID(ldap_object["objectSid"])
+	if VERBOSE:
+		if "objectSid" in ldap_object and len(ldap_object["objectSid"]) == 1:
+			ldap_object["objectSid"] = binary_to_text_SID(ldap_object["objectSid"][0])
+		for field in filetime_fields_in_ldap:
+			if field in ldap_object and len(ldap_object[field]) == 1:
+				if int(ldap_object[field][0]) != 0:
+					ldap_object[field] = filetime_to_dt(int(ldap_object[field][0])).strftime("%Y-%m-%d %H:%M:%S")
 		pprint(ldap_object)
 	else:
 		if "group" in ldap_object["objectClass"]:
@@ -153,6 +157,23 @@ def binary_to_text_SID(blob):
 		text += "-" + str(unpack("<L", blob[mem_offset:mem_offset + 4])[0])
 		mem_offset += 4
 	return text
+
+
+EPOCH_AS_FILETIME = 116444736000000000  # January 1, 1970 as MS file time
+
+
+def filetime_to_dt(ft):
+	us = (ft - EPOCH_AS_FILETIME) // 10
+	return datetime(1970, 1, 1) + timedelta(microseconds=us)
+
+
+filetime_fields_in_ldap = [
+	'badPasswordTime',
+	'lastLogon',
+	'lastLogoff',
+	'lastLogonTimestamp',
+	'pwdLastSet'
+]
 
 
 class ResolverThread(object):
@@ -257,7 +278,7 @@ class ActiveDirectoryView(object):
 				sys.exit(0)
 
 	def get_object(self, ldap_object):
-		results = query("cn=*{ldap_object}*".format(ldap_object))
+		results = self.query("cn=*{ldap_object}*".format(ldap_object=ldap_object))
 		for result in results:
 			display(result)
 
@@ -469,7 +490,7 @@ if __name__ == "__main__":
 	parser.add_argument("-d", "--fqdn", help="The domain FQDN (ex : domain.local)", required=True)
 	parser.add_argument("-s", "--ldapserver", help="The LDAP path (ex : ldap://corp.contoso.com:389)", required=True)
 	parser.add_argument("-b", "--base", default="", help="LDAP base for query")
-	parser.add_argument("-v", "--verbose", action="store_true", help="Results will contain full information")
+	parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Results will contain full information")
 	parser.add_argument("--dns", help="An optional DNS server to use", default=False)
 	parser.add_argument("--dpaged", action="store_true", help="Disable paged search (in case of unwanted behavior)")
 
