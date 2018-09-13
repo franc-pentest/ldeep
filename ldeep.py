@@ -37,7 +37,6 @@ TRUSTS_INFO_FILTER = "(&(objectCategory=trustedDomain))"
 OU_FILTER = "(&(objectClass=OrganizationalUnit))"
 
 PAGESIZE = 1000
-VERBOSE = False
 
 DOMAIN_PASSWORD_COMPLEX = 1
 DOMAIN_PASSWORD_NO_ANON_CHANGE = 2
@@ -83,20 +82,6 @@ def set_cookie(lc_object, pctrls, pagesize):
 		return cookie
 
 
-def display(ldap_object):
-	if VERBOSE:
-		if "objectSid" in ldap_object and len(ldap_object["objectSid"]) == 1:
-			ldap_object["objectSid"] = binary_to_text_SID(ldap_object["objectSid"][0])
-		for field in filetime_fields_in_ldap:
-			if field in ldap_object and len(ldap_object[field]) == 1:
-				if int(ldap_object[field][0]) != 0:
-					ldap_object[field] = filetime_to_dt(int(ldap_object[field][0])).strftime("%Y-%m-%d %H:%M:%S")
-		pprint(ldap_object)
-	else:
-		if "group" in ldap_object["objectClass"]:
-			print(ldap_object["sAMAccountName"][0] + " (group)")
-		if "user" in ldap_object["objectClass"]:
-			print(ldap_object["sAMAccountName"][0])
 
 # UTILS
 
@@ -205,17 +190,19 @@ class ResolverThread(object):
 
 class ActiveDirectoryView(object):
 
-	def __init__(self, username, password, server, fqdn, dpaged, base=""):
+	def __init__(self, username, password, server, fqdn, dpaged, base, verbose):
 		self.username = username
 		self.password = password
 		self.server = server
 		self.fqdn = fqdn
 		self.dpaged = dpaged
 		self.hostnames = []
+		self.verbose = verbose
+
 		try:
 			self.ldap = ldap.initialize(self.server)
 			self.ldap.simple_bind_s("{username}@{fqdn}".format(**self.__dict__), self.password)
-		except ldap.LDAPError, e:
+		except ldap.LDAPError as e:
 			print('[!] %s' % e)
 			sys.exit(0)
 
@@ -280,7 +267,7 @@ class ActiveDirectoryView(object):
 	def get_object(self, ldap_object):
 		results = self.query("cn=*{ldap_object}*".format(ldap_object=ldap_object))
 		for result in results:
-			display(result)
+			self.display(result)
 
 	def list_computers(self, resolve, dns_server):
 		self.hostnames = []
@@ -327,7 +314,7 @@ class ActiveDirectoryView(object):
 			print(WELL_KNOWN_SIDs[sid])
 		else:
 			result = self.query("ObjectSid={sid}".format(sid=text_to_binary_SID(sid)))
-			display(result[0])
+			self.display(result[0])
 
 	def get_gpo(self):
 		results = self.query(GPO_INFO_FILTER)
@@ -428,7 +415,7 @@ class ActiveDirectoryView(object):
 			results = self.query(USER_DONT_EXPIRE_FILTER)
 
 		for result in results:
-			display(result)
+			self.display(result)
 		# print(json.dumps(results, ensure_ascii=False, indent=2))
 
 	def list_membersof(self, group):
@@ -482,6 +469,21 @@ class ActiveDirectoryView(object):
 		for computer in resolver_thread.resolutions:
 			print("%s %s" % (computer["address"].ljust(20, " "), computer["hostname"]))
 
+	def display(self, ldap_object):
+		if self.verbose:
+			if "objectSid" in ldap_object and len(ldap_object["objectSid"]) == 1:
+				ldap_object["objectSid"] = binary_to_text_SID(ldap_object["objectSid"][0])
+			for field in filetime_fields_in_ldap:
+				if field in ldap_object and len(ldap_object[field]) == 1:
+					if int(ldap_object[field][0]) != 0:
+						ldap_object[field] = filetime_to_dt(int(ldap_object[field][0])).strftime("%Y-%m-%d %H:%M:%S")
+			pprint(ldap_object)
+		else:
+			if "group" in ldap_object["objectClass"]:
+				print(ldap_object["sAMAccountName"][0] + " (group)")
+			if "user" in ldap_object["objectClass"]:
+				print(ldap_object["sAMAccountName"][0])
+
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser("LDEEP - Bangalore")
@@ -514,10 +516,7 @@ if __name__ == "__main__":
 
 	args = parser.parse_args()
 
-	if args.verbose:
-		VERBOSE = True
-
-	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged, args.base)
+	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged, args.base, args.verbose)
 	if args.groups:
 		ad.list_groups()
 	elif args.users:
