@@ -15,6 +15,7 @@ from ldap.controls import SimplePagedResultsControl
 from pprint import pprint
 from re import compile as re_compile, findall
 from datetime import timedelta, datetime
+from base64 import b64encode
 from struct import unpack
 
 # userAccountControl flags
@@ -82,7 +83,6 @@ def set_cookie(lc_object, pctrls, pagesize):
 		est, cookie = pctrls[0].controlValue
 		lc_object.controlValue = (pagesize, cookie)
 		return cookie
-
 
 
 # UTILS
@@ -510,7 +510,7 @@ class ActiveDirectoryView(object):
 
 	def display(self, record):
 		if self.verbose:
-			#pprint(ldap_object)
+			# pprint(ldap_object)
 			for field, values in record.items():
 				for idx, value in enumerate(values):
 					if field == "objectSid":
@@ -521,6 +521,12 @@ class ActiveDirectoryView(object):
 						record[field][idx] = datetime_to_human(value)
 					elif field == 'objectGUID':
 						record[field][idx] = binary_to_text_GUID(value)
+					# test if it could correctly displayed otherwise encode in base64
+					try:
+						value.encode("utf-8")
+					except UnicodeError:
+						record[field][idx] = b64encode(value)
+
 				if len(values) == 1:
 					record[field] = values[0]
 			print(json.dumps(record, ensure_ascii=False, indent=2))
