@@ -1,9 +1,11 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import sys
 import json
 import argparse
 import ldap
+from binascii import hexlify, unhexlify
 from math import fabs
 import dns.resolver
 from multiprocessing.dummy import Pool as ThreadPool
@@ -126,6 +128,35 @@ WELL_KNOWN_SIDs = {
 	"S-1-5-32-580"	: r"BUILTIN\Remote Management Users",
 }
 
+FILETIME_FIELDS = [
+	'badPasswordTime',
+	'lastLogon',
+	'lastLogoff',
+	'lastLogonTimestamp',
+	'pwdLastSet',
+	'accountExpires'
+]
+
+DATETIME_FIELDS = [
+	'whenChanged',
+	'whenCreated',
+	'dSCorePropagationData'
+]
+
+
+def binary_to_text_GUID(blob):
+	guid = list(hexlify(blob))
+	guid.insert(20, '-')
+	guid.insert(16, '-')
+	guid.insert(12, '-')
+	guid.insert(8, '-')
+	return ''.join(guid)
+
+
+def text_to_binary_GUID(text):
+	guid = text.replace('-', '')
+	return unhexlify(guid)
+
 
 def text_to_binary_SID(text):
 	return "".join(['\\{:02X}'.format(ord(x)) for x in text])
@@ -147,18 +178,20 @@ def binary_to_text_SID(blob):
 EPOCH_AS_FILETIME = 116444736000000000  # January 1, 1970 as MS file time
 
 
-def filetime_to_dt(ft):
-	us = (ft - EPOCH_AS_FILETIME) // 10
-	return datetime(1970, 1, 1) + timedelta(microseconds=us)
+def filetime_to_human(ft):
+	ft = int(ft)
+	if ft == 9223372036854775807:
+		return "Never"
+	else:
+		us = (ft - EPOCH_AS_FILETIME) // 10
+		return (datetime(1970, 1, 1) + timedelta(microseconds=us)).strftime("%Y-%m-%d %H:%M:%S")
 
 
-filetime_fields_in_ldap = [
-	'badPasswordTime',
-	'lastLogon',
-	'lastLogoff',
-	'lastLogonTimestamp',
-	'pwdLastSet'
-]
+def datetime_to_human(dt):
+	if int(dt[0:4]) < 1900:
+		return "Never"
+	else:
+		return datetime.strptime(dt, "%Y%m%d%H%M%S.%fZ").strftime("%Y-%m-%d %H:%M:%S")
 
 
 class ResolverThread(object):
@@ -470,15 +503,22 @@ class ActiveDirectoryView(object):
 		for computer in resolver_thread.resolutions:
 			print("%s %s" % (computer["address"].ljust(20, " "), computer["hostname"]))
 
-	def display(self, ldap_object):
+	def display(self, record):
 		if self.verbose:
-			if "objectSid" in ldap_object and len(ldap_object["objectSid"]) == 1:
-				ldap_object["objectSid"] = binary_to_text_SID(ldap_object["objectSid"][0])
-			for field in filetime_fields_in_ldap:
-				if field in ldap_object and len(ldap_object[field]) == 1:
-					if int(ldap_object[field][0]) != 0:
-						ldap_object[field] = filetime_to_dt(int(ldap_object[field][0])).strftime("%Y-%m-%d %H:%M:%S")
-			pprint(ldap_object)
+			#pprint(ldap_object)
+			for field, values in record.items():
+				for idx, value in enumerate(values):
+					if field == "objectSid":
+						record[field][idx] = binary_to_text_SID(value)
+					elif field in FILETIME_FIELDS and value != '0':
+						record[field][idx] = filetime_to_human(value)
+					elif field in DATETIME_FIELDS and value != '0':
+						record[field][idx] = datetime_to_human(value)
+					elif field == 'objectGUID':
+						record[field][idx] = binary_to_text_GUID(value)
+				if len(values) == 1:
+					record[field] = values[0]
+			print(json.dumps(record, ensure_ascii=False, indent=2))
 		else:
 			if "group" in ldap_object["objectClass"]:
 				print(ldap_object["sAMAccountName"][0] + " (group)")
