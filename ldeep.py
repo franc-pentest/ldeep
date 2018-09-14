@@ -522,10 +522,11 @@ class ActiveDirectoryView(object):
 					elif field == 'objectGUID':
 						record[field][idx] = binary_to_text_GUID(value)
 					# test if it could correctly displayed otherwise encode in base64
-					try:
-						value.encode("utf-8")
-					except UnicodeError:
-						record[field][idx] = b64encode(value)
+					else:
+						try:
+							value.encode("utf-8")
+						except UnicodeError:
+							record[field][idx] = b64encode(value)
 
 				if len(values) == 1:
 					record[field] = values[0]
