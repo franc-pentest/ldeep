@@ -313,8 +313,9 @@ class ActiveDirectoryView(object):
 		if sid in WELL_KNOWN_SIDs:
 			print(WELL_KNOWN_SIDs[sid])
 		else:
-			result = self.query("ObjectSid={sid}".format(sid=text_to_binary_SID(sid)))
-			self.display(result[0])
+			results = self.query("ObjectSid={sid}".format(sid=text_to_binary_SID(sid)))
+			if results and len(results) > 0:
+				self.display(results[0])
 
 	def get_gpo(self):
 		results = self.query(GPO_INFO_FILTER)
