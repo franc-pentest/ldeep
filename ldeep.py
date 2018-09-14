@@ -350,6 +350,11 @@ class ActiveDirectoryView(object):
 			if results and len(results) > 0:
 				self.display(results[0])
 
+	def resolve_guid(self, guid):
+		results = self.query("ObjectGUID={guid}".format(guid=text_to_binary_GUID(guid)))
+		if results and len(results) > 0:
+			self.display(results[0])
+
 	def get_gpo(self):
 		results = self.query(GPO_INFO_FILTER)
 		gpos = {}
@@ -520,10 +525,10 @@ class ActiveDirectoryView(object):
 					record[field] = values[0]
 			print(json.dumps(record, ensure_ascii=False, indent=2))
 		else:
-			if "group" in ldap_object["objectClass"]:
-				print(ldap_object["sAMAccountName"][0] + " (group)")
-			if "user" in ldap_object["objectClass"]:
-				print(ldap_object["sAMAccountName"][0])
+			if "group" in record["objectClass"]:
+				print(record["sAMAccountName"][0] + " (group)")
+			if "user" in record["objectClass"]:
+				print(record["sAMAccountName"][0])
 
 
 if __name__ == "__main__":
@@ -543,6 +548,7 @@ if __name__ == "__main__":
 	action.add_argument("--object", metavar="OBJECT", help="Return information on an object (group, computer, user, etc.)")
 	action.add_argument("--computers", action="store_true", help="Lists all computers")
 	action.add_argument("--sid", metavar="SID", help="Return the record associated to the SID")
+	action.add_argument("--guid", metavar="GUID", help="Return the record associated to the GUID")
 	action.add_argument("--domain_policy", action="store_true", help="Print the domain policy")
 	action.add_argument("--gpo", action="store_true", help="List GPO GUID and their name")
 	action.add_argument("--ou", action="store_true", help="List OU and resolve linked GPO")
@@ -566,6 +572,8 @@ if __name__ == "__main__":
 		ad.list_membersof(args.members)
 	elif args.sid:
 		ad.resolve_sid(args.sid)
+	elif args.guid:
+		ad.resolve_guid(args.guid)
 	elif args.object:
 		ad.get_object(args.object)
 	elif args.membership:
