@@ -342,7 +342,7 @@ class ActiveDirectoryView(object):
 		# 		exit(0)
 
 	def get_object(self, ldap_object):
-		results = self.query("cn=*{ldap_object}*".format(ldap_object=ldap_object))
+		results = self.query("(&(cn=*{ldap_object}*))".format(ldap_object=ldap_object))
 		for result in results:
 			self.display(result)
 
@@ -390,12 +390,12 @@ class ActiveDirectoryView(object):
 		if sid in WELL_KNOWN_SIDs:
 			print(WELL_KNOWN_SIDs[sid])
 		else:
-			results = self.query("ObjectSid={sid}".format(sid=text_to_binary_SID(sid)))
+			results = self.query("(&(ObjectSid={sid}))".format(sid=text_to_binary_SID(sid)))
 			if results and len(results) > 0:
 				self.display(results[0])
 
 	def resolve_guid(self, guid):
-		results = self.query("ObjectGUID={guid}".format(guid=text_to_binary_GUID(guid)))
+		results = self.query("(&(ObjectGUID={guid}))".format(guid=text_to_binary_GUID(guid)))
 		if results and len(results) > 0:
 			self.display(results[0])
 
