@@ -4,6 +4,8 @@ from sys import exit
 import json
 import argparse
 from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL
+from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
+from ldap3.protocol.formatters.validators import validate_sid, validate_guid
 from binascii import hexlify, unhexlify
 from math import fabs
 import dns.resolver
@@ -141,58 +143,6 @@ DATETIME_FIELDS = [
 	"whenChanged",
 	"whenCreated"
 ]
-
-
-def binary_to_text_GUID(blob):
-	guid = list(hexlify(blob).decode("ascii"))
-	guid.insert(20, '-')
-	guid.insert(16, '-')
-	guid.insert(12, '-')
-	guid.insert(8, '-')
-	return ''.join(map(str, guid))
-
-
-def text_to_binary_GUID(text):
-	guid = text.replace('-', '')
-	return unhexlify(guid)
-
-
-def text_to_binary_SID(text):
-	return "".join(["\\{:02X}".format(ord(x)) for x in text])
-
-
-def binary_to_text_SID(blob):
-	offset = 0
-	text = "S"
-	text += "-" + str(unpack(">B", blob[offset:offset + 1])[0])
-	no = unpack("B", blob[offset + 1:offset + 2])[0]
-	text += "-" + str(unpack(">L", blob[offset + 2:offset + 6])[0] + unpack(">H", blob[offset + 6:offset + 8])[0])
-	mem_offset = offset + 8
-	for j in range(no):
-		if blob[mem_offset:mem_offset + 4] == b'':
-			break
-		text += "-" + str(unpack("<L", blob[mem_offset:mem_offset + 4])[0])
-		mem_offset += 4
-	return text
-
-
-EPOCH_AS_FILETIME = 116444736000000000  # January 1, 1970 as MS file time
-
-
-def filetime_to_human(ft):
-	ft = int(ft)
-	if ft == 9223372036854775807:
-		return "Never"
-	else:
-		us = (ft - EPOCH_AS_FILETIME) // 10
-		return (datetime(1970, 1, 1) + timedelta(microseconds=us)).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def datetime_to_human(dt):
-	if dt.year < 1900:
-		return "Never"
-	else:
-		return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def convert(data):
@@ -389,15 +339,20 @@ class ActiveDirectoryView(object):
 		# Local SID
 		if sid in WELL_KNOWN_SIDs:
 			print(WELL_KNOWN_SIDs[sid])
-		else:
-			results = self.query("(&(ObjectSid={sid}))".format(sid=text_to_binary_SID(sid)))
+		elif validate_sid(sid):
+			results = self.query("(&(ObjectSid={sid}))".format(sid=sid))
 			if results and len(results) > 0:
 				self.display(results[0])
+		else:
+			print("[!] Invalid SID")
 
 	def resolve_guid(self, guid):
-		results = self.query("(&(ObjectGUID={guid}))".format(guid=text_to_binary_GUID(guid)))
-		if results and len(results) > 0:
-			self.display(results[0])
+		if validate_guid(guid):
+			results = self.query("(&(ObjectGUID={guid}))".format(guid=guid))
+			if results and len(results) > 0:
+				self.display(results[0])
+		else:
+			print("[!] Invalid GUID")
 
 	def get_gpo(self):
 		results = self.query(GPO_INFO_FILTER)
@@ -559,9 +514,9 @@ class ActiveDirectoryView(object):
 				if isinstance(values, list):
 					for idx, value in enumerate(values):
 						if field in FILETIME_FIELDS and value != '0':
-							record[field][idx] = filetime_to_human(value)
+							record[field] = str(format_ad_timestamp(value))
 						elif field in DATETIME_FIELDS and value != '0':
-							record[field][idx] = datetime_to_human(value)
+							record[field][idx] = str(format_ad_timestamp(value))
 						elif isinstance(value, bytes):
 							record[field] = b64encode(value).decode("utf-8")
 
@@ -571,9 +526,9 @@ class ActiveDirectoryView(object):
 				else:
 					value = values
 					if field in FILETIME_FIELDS and value != '0':
-						record[field] = datetime_to_human(value)
+						record[field] = str(format_ad_timestamp(value))
 					elif field in DATETIME_FIELDS and value != '0':
-						record[field] = datetime_to_human(value)
+						record[field] = str(format_ad_timestamp(value))
 					elif isinstance(value, bytes):
 						record[field] = b64encode(value).decode("utf-8")
 
