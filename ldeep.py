@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 
 import sys
 import json
@@ -15,7 +14,7 @@ from ldap.controls import SimplePagedResultsControl
 from pprint import pprint
 from re import compile as re_compile, findall
 from datetime import timedelta, datetime
-from base64 import b64encode
+from base64 import b64encode, b64decode
 from struct import unpack
 
 # userAccountControl flags
@@ -49,7 +48,7 @@ DOMAIN_PASSWORD_STORE_CLEARTEXT = 16
 DOMAIN_REFUSE_PASSWORD_CHANGE = 32
 
 # Check if we're using the Python "ldap" 2.4 or greater API
-LDAP24API = LooseVersion(ldap.__version__) >= LooseVersion('2.4')
+LDAP24API = LooseVersion(ldap.__version__) >= LooseVersion("2.4")
 
 
 def create_controls(pagesize):
@@ -129,28 +128,28 @@ WELL_KNOWN_SIDs = {
 }
 
 FILETIME_FIELDS = [
-	'badPasswordTime',
-	'lastLogon',
-	'lastLogoff',
-	'lastLogonTimestamp',
-	'pwdLastSet',
-	'accountExpires'
+	"badPasswordTime",
+	"lastLogon",
+	"lastLogoff",
+	"lastLogonTimestamp",
+	"pwdLastSet",
+	"accountExpires"
 ]
 
 DATETIME_FIELDS = [
-	'whenChanged',
-	'whenCreated',
-	'dSCorePropagationData'
+	"whenChanged",
+	"whenCreated",
+	"dSCorePropagationData"
 ]
 
 
 def binary_to_text_GUID(blob):
-	guid = list(hexlify(blob))
+	guid = list(hexlify(blob).decode("ascii"))
 	guid.insert(20, '-')
 	guid.insert(16, '-')
 	guid.insert(12, '-')
 	guid.insert(8, '-')
-	return ''.join(guid)
+	return ''.join(map(str, guid))
 
 
 def text_to_binary_GUID(text):
@@ -159,17 +158,19 @@ def text_to_binary_GUID(text):
 
 
 def text_to_binary_SID(text):
-	return "".join(['\\{:02X}'.format(ord(x)) for x in text])
+	return "".join(["\\{:02X}".format(ord(x)) for x in text])
 
 
 def binary_to_text_SID(blob):
 	offset = 0
 	text = "S"
-	text += "-" + str(unpack("B", blob[offset:offset + 1])[0])
+	text += "-" + str(unpack(">B", blob[offset:offset + 1])[0])
 	no = unpack("B", blob[offset + 1:offset + 2])[0]
 	text += "-" + str(unpack(">L", blob[offset + 2:offset + 6])[0] + unpack(">H", blob[offset + 6:offset + 8])[0])
 	mem_offset = offset + 8
 	for j in range(no):
+		if blob[mem_offset:mem_offset + 4] == b'':
+			break
 		text += "-" + str(unpack("<L", blob[mem_offset:mem_offset + 4])[0])
 		mem_offset += 4
 	return text
@@ -191,7 +192,26 @@ def datetime_to_human(dt):
 	if int(dt[0:4]) < 1900:
 		return "Never"
 	else:
-		return datetime.strptime(dt, "%Y%m%d%H%M%S.%fZ").strftime("%Y-%m-%d %H:%M:%S")
+		return datetime.strptime(dt.decode("utf-8"), "%Y%m%d%H%M%S.%fZ").strftime("%Y-%m-%d %H:%M:%S")
+
+
+def convert(data):
+	data_type = type(data)
+
+	if data_type == bytes:
+		try:
+			return data.decode("utf-8")
+		except UnicodeDecodeError:
+			return b64encode(data).decode()
+	if data_type == str:
+		return data
+	if data_type == int:
+		return data
+
+	if data_type == dict:
+		data = data.items()
+
+	return data_type(map(convert, data))
 
 
 class ResolverThread(object):
@@ -236,7 +256,7 @@ class ActiveDirectoryView(object):
 			self.ldap = ldap.initialize(self.server)
 			self.ldap.simple_bind_s("{username}@{fqdn}".format(**self.__dict__), self.password)
 		except ldap.LDAPError as e:
-			print('[!] %s' % e)
+			print("[!] %s" % e)
 			sys.exit(0)
 
 		self.ldap.set_option(ldap.OPT_REFERRALS, 0)
@@ -271,7 +291,7 @@ class ActiveDirectoryView(object):
 				# Get cookie for next request
 				pctrls = get_pctrls(serverctrls)
 				if not pctrls:
-					print >> sys.stderr, 'Warning: Server ignores RFC 2696 control.'
+					print("[!] Warning: Server ignores RFC 2696 control.")
 					break
 
 				# Ok, we did find the page control, yank the cookie from it and
@@ -293,7 +313,7 @@ class ActiveDirectoryView(object):
 						if result_type == ldap.RES_SEARCH_ENTRY:
 							result_set.extend(result_data)
 				return result_set
-			except ldap.LDAPError, e:
+			except ldap.LDAPError as e:
 				print("[!] %s" % e)
 				sys.exit(0)
 
@@ -306,10 +326,11 @@ class ActiveDirectoryView(object):
 		self.hostnames = []
 		results = self.query(COMPUTERS_FILTER, ["name"])
 		for result in results:
-			self.hostnames.append("%s.%s" % (result["name"][0], self.fqdn))
+			computer_name = convert(result["name"][0])
+			self.hostnames.append("%s.%s" % (computer_name, self.fqdn))
 			# print only if resolution was not mandated
 			if not resolve:
-				print("%s.%s" % (result["name"][0], self.fqdn))
+				print("%s.%s" % (computer_name, self.fqdn))
 		# do the resolution
 		if resolve:
 			self.resolve(dns_server)
@@ -339,7 +360,7 @@ class ActiveDirectoryView(object):
 					elif int(val) == 2:
 						val = "complexity disabled"
 
-				print("%s: %s" % (field, val))
+				print("%s: %s" % (field, convert(val)))
 
 	def resolve_sid(self, sid):
 		# Local SID
@@ -359,7 +380,7 @@ class ActiveDirectoryView(object):
 		results = self.query(GPO_INFO_FILTER)
 		gpos = {}
 		for result in results:
-			gpos[result["cn"][0]] = result["displayName"][0]
+			gpos[convert(result["cn"][0])] = convert(result["displayName"][0])
 		return gpos
 
 	def list_gpo(self):
@@ -373,12 +394,12 @@ class ActiveDirectoryView(object):
 		gpos = self.get_gpo()
 		# print(json.dumps(results, ensure_ascii=False, indent=2))
 		for result in results:
-			print(result["distinguishedName"][0])
+			print(convert(result["distinguishedName"][0]))
 			if "gPLink" in result:
-				guids = cn_re.findall(result["gPLink"][0])
+				guids = cn_re.findall(convert(result["gPLink"][0]))
 				if len(guids) > 0:
 					print("[gPLink]")
-					print("* {}".format("\n* ".join([gpos[g] if g in gpos else g for g in guids])))
+					print("* {}".format("\n* ".join([convert(gpos[g]) if g in gpos else g for g in guids])))
 
 	def list_pso(self):
 		FILETIME_TIMESTAMP_FIELDS = {
@@ -412,6 +433,7 @@ class ActiveDirectoryView(object):
 			print("%s: %s" % (field, val))
 
 	def list_trusts(self):
+		# python3: no tested
 		results = self.query(TRUSTS_INFO_FILTER)
 		FIELDS_TO_PRINT = ["dn", "cn", "name", "trustDirection", "trustPartner", "trustType", "trustAttributes", "flatName"]
 		for result in results:
@@ -434,14 +456,14 @@ class ActiveDirectoryView(object):
 							val = "Windows domain running Active Directory"
 						elif int(val) == 0x00000003:
 							val = "Non Windows domain"
-					print("%s: %s" % (field, val))
+					print("%s: %s" % (field, convert(val)))
 			print("")
 
 	def list_groups(self):
 		results = self.query(GROUPS_FILTER)
 		# print(json.dumps(results, ensure_ascii=False, indent=2))
 		for result in results:
-			print(result["sAMAccountName"][0])
+			print(convert(result["sAMAccountName"][0]))
 
 	def list_users(self, filter_):
 		if filter_ == "all":
@@ -494,8 +516,8 @@ class ActiveDirectoryView(object):
 # 					print "\n".join(result[attr])
 # 				else:
 # 					pprint.pprint(result)
-		except Exception, e:
-			print e
+		except Exception as e:
+			print(e)
 
 	def resolve(self, dns_server):
 		pool = ThreadPool(20)
@@ -519,23 +541,19 @@ class ActiveDirectoryView(object):
 						record[field][idx] = filetime_to_human(value)
 					elif field in DATETIME_FIELDS and value != '0':
 						record[field][idx] = datetime_to_human(value)
-					elif field == 'objectGUID':
+					elif field == "objectGUID":
 						record[field][idx] = binary_to_text_GUID(value)
-					# test if it could correctly displayed otherwise encode in base64
-					else:
-						try:
-							value.encode("utf-8")
-						except UnicodeError:
-							record[field][idx] = b64encode(value)
 
 				if len(values) == 1:
 					record[field] = values[0]
+
+			record = convert(record)
 			print(json.dumps(record, ensure_ascii=False, indent=2))
 		else:
-			if "group" in record["objectClass"]:
-				print(record["sAMAccountName"][0] + " (group)")
-			if "user" in record["objectClass"]:
-				print(record["sAMAccountName"][0])
+			if b"group" in record["objectClass"]:
+				print(convert(record["sAMAccountName"][0] + " (group)"))
+			if b"user" in record["objectClass"]:
+				print(convert(record["sAMAccountName"][0]))
 
 
 if __name__ == "__main__":
