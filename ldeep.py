@@ -2,7 +2,7 @@
 
 from sys import exit
 import json
-import argparse
+from argparse import ArgumentParser
 from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
 from ldap3.protocol.formatters.validators import validate_sid, validate_guid
@@ -12,12 +12,10 @@ import dns.resolver
 from multiprocessing.dummy import Pool as ThreadPool
 from distutils.version import LooseVersion
 from tqdm import tqdm
-# from ldap.controls import SimplePagedResultsControl
 from pprint import pprint
 from re import compile as re_compile, findall
 from datetime import timedelta, datetime
 from base64 import b64encode, b64decode
-from struct import unpack
 
 # userAccountControl flags
 
@@ -48,42 +46,6 @@ DOMAIN_PASSWORD_NO_CLEAR_CHANGE = 4
 DOMAIN_LOCKOUT_ADMINS = 8
 DOMAIN_PASSWORD_STORE_CLEARTEXT = 16
 DOMAIN_REFUSE_PASSWORD_CHANGE = 32
-
-# Check if we're using the Python "ldap" 2.4 or greater API
-# LDAP24API = LooseVersion(ldap.__version__) >= LooseVersion("2.4")
-
-
-# def create_controls(pagesize):
-# 	"""Create an LDAP control with a page size of "pagesize"."""
-# 	# Initialize the LDAP controls for paging. Note that we pass ''
-# 	# for the cookie because on first iteration, it starts out empty.
-# 	if LDAP24API:
-# 		return SimplePagedResultsControl(True, size=pagesize, cookie='')
-# 	else:
-# 		return SimplePagedResultsControl(ldap.LDAP_CONTROL_PAGE_OID, True, (pagesize, ''))
-# 
-# 
-# def get_pctrls(serverctrls):
-# 	"""Lookup an LDAP paged control object from the returned controls."""
-# 	# Look through the returned controls and find the page controls.
-# 	# This will also have our returned cookie which we need to make
-# 	# the next search request.
-# 	if LDAP24API:
-# 		return [c for c in serverctrls if c.controlType == SimplePagedResultsControl.controlType]
-# 	else:
-# 		return [c for c in serverctrls if c.controlType == ldap.LDAP_CONTROL_PAGE_OID]
-
-
-# def set_cookie(lc_object, pctrls, pagesize):
-# 	"""Push latest cookie back into the page control."""
-# 	if LDAP24API:
-# 		cookie = pctrls[0].cookie
-# 		lc_object.cookie = cookie
-# 		return cookie
-# 	else:
-# 		est, cookie = pctrls[0].controlValue
-# 		lc_object.controlValue = (pagesize, cookie)
-# 		return cookie
 
 
 # UTILS
@@ -145,25 +107,6 @@ DATETIME_FIELDS = [
 ]
 
 
-def convert(data):
-	data_type = type(data)
-
-	if data_type == bytes:
-		try:
-			return data.decode("utf-8")
-		except UnicodeDecodeError:
-			return b64encode(data).decode()
-	if data_type == str:
-		return data
-	if data_type == int:
-		return data
-
-	if data_type == dict:
-		data = data.items()
-
-	return data_type(map(convert, data))
-
-
 class ResolverThread(object):
 
 	def __init__(self, dns_server):
@@ -214,16 +157,6 @@ class ActiveDirectoryView(object):
 			print("[!] Unable to bind with provided information")
 			exit(1)
 
-		# try:
-		# 	self.ldap = ldap.initialize(self.server)
-		# 	self.ldap.simple_bind_s("{username}@{fqdn}".format(**self.__dict__), self.password)
-		# except ldap.LDAPError as e:
-		# 	print("[!] %s" % e)
-		# 	exit(0)
-
-		# self.ldap.set_option(ldap.OPT_REFERRALS, 0)
-		# ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_ALLOW)
-
 		if base:
 			self.base_dn = base
 		else:
@@ -231,65 +164,23 @@ class ActiveDirectoryView(object):
 		self.search_scope = SUBTREE
 
 	def query(self, ldapfilter, attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]):
-
-		if not self.ldap.search(self.base_dn, ldapfilter, search_scope=self.search_scope, attributes=attributes):
-			print("[!] An error occurred during the search")
+		entry_generator = self.ldap.extend.standard.paged_search(
+			search_base=self.base_dn,
+			search_filter=ldapfilter,
+			search_scope=self.search_scope,
+			attributes=attributes,
+			paged_size=PAGESIZE,
+			generator=True
+		)
 
 		result_set = []
-		for entry in self.ldap.response:
+		for entry in entry_generator:
 			if "dn" in entry:
 				d = entry["attributes"]
 				d["dn"] = entry["dn"]
 				result_set.append(d)
 
 		return result_set
-		# result_set = []
-		# if not self.dpaged:
-		# 	lc = create_controls(PAGESIZE)
-
-		# 	while True:
-		# 		try:
-		# 			msgid = self.ldap.search_ext(self.base_dn, ldap.SCOPE_SUBTREE, ldapfilter, attributes, serverctrls=[lc])
-		# 		except ldap.LDAPError as e:
-		# 			exit("LDAP search failed: %s" % e)
-
-		# 		try:
-		# 			rtype, rdata, rmsgid, serverctrls = self.ldap.result3(msgid)
-		# 		except ldap.LDAPError as e:
-		# 			exit("Could not pull LDAP results: %s" % e)
-
-		# 		for dn, attrs in rdata:
-		# 			if dn:
-		# 				result_set.append(attrs)
-
-		# 		# Get cookie for next request
-		# 		pctrls = get_pctrls(serverctrls)
-		# 		if not pctrls:
-		# 			print("[!] Warning: Server ignores RFC 2696 control.")
-		# 			break
-
-		# 		# Ok, we did find the page control, yank the cookie from it and
-		# 		# insert it into the control for our next search. If however there
-		# 		# is no cookie, we are done!
-		# 		cookie = set_cookie(lc, pctrls, PAGESIZE)
-		# 		if not cookie:
-		# 			break
-		# 	return result_set
-		# else:
-		# 	try:
-		# 		ldap_result_id = self.ldap.search(self.base_dn, self.search_scope, ldapfilter, attributes)
-		# 		result_set = []
-		# 		while 1:
-		# 			result_type, result_data = self.ldap.result(ldap_result_id, 0)
-		# 			if (result_data == []):
-		# 				break
-		# 			else:
-		# 				if result_type == ldap.RES_SEARCH_ENTRY:
-		# 					result_set.extend(result_data)
-		# 		return result_set
-		# 	except ldap.LDAPError as e:
-		# 		print("[!] %s" % e)
-		# 		exit(0)
 
 	def get_object(self, ldap_object):
 		results = self.query("(&(cn=*{ldap_object}*))".format(ldap_object=ldap_object))
@@ -300,7 +191,7 @@ class ActiveDirectoryView(object):
 		self.hostnames = []
 		results = self.query(COMPUTERS_FILTER, ["name"])
 		for result in results:
-			computer_name = convert(result["name"])
+			computer_name = result["name"]
 			self.hostnames.append("%s.%s" % (computer_name, self.fqdn))
 			# print only if resolution was not mandated
 			if not resolve:
@@ -370,14 +261,13 @@ class ActiveDirectoryView(object):
 		results = self.query(OU_FILTER)
 		cn_re = re_compile("{[^}]+}")
 		gpos = self.get_gpo()
-		# print(json.dumps(results, ensure_ascii=False, indent=2))
 		for result in results:
 			print(result["distinguishedName"])
 			if "gPLink" in result:
 				guids = cn_re.findall(result["gPLink"])
 				if len(guids) > 0:
 					print("[gPLink]")
-					print("* {}".format("\n* ".join([convert(gpos[g]) if g in gpos else g for g in guids])))
+					print("* {}".format("\n* ".join([gpos[g] if g in gpos else g for g in guids])))
 
 	def list_pso(self):
 		FILETIME_TIMESTAMP_FIELDS = {
@@ -434,16 +324,25 @@ class ActiveDirectoryView(object):
 							val = "Windows domain running Active Directory"
 						elif int(val) == 0x00000003:
 							val = "Non Windows domain"
-					print("%s: %s" % (field, convert(val)))
+					print("%s: %s" % (field, val))
 			print("")
 
 	def list_groups(self):
-		results = self.query(GROUPS_FILTER)
-		# print(json.dumps(results, ensure_ascii=False, indent=2))
+		if not self.verbose:
+			attributes = ["samAccountName", "objectClass"]
+		else:
+			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+
+		results = self.query(GROUPS_FILTER, attributes)
 		for result in results:
-			print(result["sAMAccountName"])
+			self.display(result)
 
 	def list_users(self, filter_):
+		if not self.verbose:
+			attributes = ["samAccountName", "objectClass"]
+		else:
+			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+
 		if filter_ == "all":
 			results = self.query(USER_ALL_FILTER)
 		elif filter_ == "enabled":
@@ -455,22 +354,18 @@ class ActiveDirectoryView(object):
 
 		for result in results:
 			self.display(result)
-		# print(json.dumps(results, ensure_ascii=False, indent=2))
 
 	def list_membersof(self, group):
 		# retrieve group DN
 		results = self.query(GROUP_DN_FILTER % group, ["distinguishedName"])
 		if results:
-			group_dn = results[0]["distinguishedName"][0]
+			group_dn = results[0]["distinguishedName"]
 		else:
 			print("[!] Group %s does not exists" % group)
 			exit(0)
 		results = self.query(USERS_IN_GROUP_FILTER % group_dn)
 		for result in results:
-			if "group" in result["objectClass"]:
-				print(result["sAMAccountName"][0] + " (group)")
-			else:
-				print(result["sAMAccountName"][0])
+			self.display(result)
 
 	def list_membership(self, user):
 		# retrieve group DN
@@ -489,11 +384,6 @@ class ActiveDirectoryView(object):
 			else:
 				results = self.query(filter_)
 			print(json.dumps(results, ensure_ascii=False, indent=2))
-# 			for result in results:
-# 				if attr in result and attr:
-# 					print "\n".join(result[attr])
-# 				else:
-# 					pprint.pprint(result)
 		except Exception as e:
 			print(e)
 
@@ -541,7 +431,7 @@ class ActiveDirectoryView(object):
 
 
 if __name__ == "__main__":
-	parser = argparse.ArgumentParser("LDEEP - Bangalore")
+	parser = ArgumentParser("LDEEP - Bangalore")
 	parser.add_argument("-d", "--fqdn", help="The domain FQDN (ex : domain.local)", required=True)
 	parser.add_argument("-s", "--ldapserver", help="The LDAP path (ex : ldap://corp.contoso.com:389)", required=True)
 	parser.add_argument("-b", "--base", default="", help="LDAP base for query")
