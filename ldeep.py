@@ -14,7 +14,6 @@ from binascii import hexlify, unhexlify
 from math import fabs
 import dns.resolver
 from multiprocessing.dummy import Pool as ThreadPool
-from distutils.version import LooseVersion
 from tqdm import tqdm
 from pprint import pprint
 from re import compile as re_compile, findall
@@ -159,16 +158,20 @@ DATETIME_FIELDS = [
 
 class Logger(object):
 
-	def __init__(self, outfile=None):
-		self.terminal = sys.stdout
+	def __init__(self, outfile=None, quiet=False):
+		self.quiet = quiet
+		self.terminal = sys.__stdout__
 		self.log = open(outfile, 'w') if outfile else None
 
 	def write(self, message):
-		self.terminal.write(message)
+		if not self.quiet:
+			self.terminal.write(message)
 		if self.log:
 			self.log.write(message)
 
 	def flush(self):
+		if self.log:
+			self.log.flush()
 		pass
 
 
@@ -470,12 +473,16 @@ class ActiveDirectoryView(object):
 				print("[-] No groups for user %s" % user)
 
 	def search(self, filter_, attr):
+		# custom search is custom, verbose on for printing
+		# all attributes
+		self.verbose = True
 		try:
 			if attr:
 				results = self.query(filter_, [attr])
 			else:
 				results = self.query(filter_)
-			print(json.dumps(results, ensure_ascii=False, indent=2))
+			for result in results:
+				self.display(result)
 		except Exception as e:
 			print(e)
 
@@ -538,6 +545,7 @@ if __name__ == "__main__":
 
 	action = parser.add_argument_group("Action (exclusive)")
 	xgroup = action.add_mutually_exclusive_group(required=True)
+	xgroup.add_argument("--all", action="store_true", help="Lists all things")
 	xgroup.add_argument("--groups", action="store_true", help="Lists all available groups")
 	xgroup.add_argument("--users", nargs='?', const="all", action="store", choices=["all", "enabled", "noexpire", "disabled", "locked"], help="Lists all available users")
 	xgroup.add_argument("--zones", action="store_true", help="Return configured DNS zones")
@@ -570,8 +578,37 @@ if __name__ == "__main__":
 		print("[!] Lack of authentication options: either Kerberos or Username with Password (can be a NTLM hash).")
 		exit(1)
 
-	sys.stdout = Logger(args.output)
 	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged, args.base, method, args.verbose)
+	if args.all:
+		if not args.output:
+			print("[!] --all cannot only be used with -o/--output")
+			sys.exit(0)
+		sys.stdout = Logger("%s_all_users.lst" % args.output, quiet=True)
+		ad.list_users("all")
+		sys.stdout = Logger("%s_enabled_users.lst" % args.output, quiet=True)
+		ad.list_users("enabled")
+		sys.stdout = Logger("%s_noexpire_users.lst" % args.output, quiet=True)
+		ad.list_users("noexpire")
+		sys.stdout = Logger("%s_disabled_users.lst" % args.output, quiet=True)
+		ad.list_users("disabled")
+		sys.stdout = Logger("%s_groups.lst" % args.output, quiet=True)
+		ad.list_groups()
+		sys.stdout = Logger("%s_computers.lst" % args.output, quiet=True)
+		ad.list_computers(args.resolve, args.dns)
+		sys.stdout = Logger("%s_ou.lst" % args.output, quiet=True)
+		ad.list_ou()
+		sys.stdout = Logger("%s_gpo.lst" % args.output, quiet=True)
+		ad.list_gpo()
+		sys.stdout = Logger("%s_pso.lst" % args.output, quiet=True)
+		ad.list_pso()
+		sys.stdout = Logger("%s_trusts.lst" % args.output, quiet=True)
+		ad.list_trusts()
+		# implement "locked"
+		#sys.stdout = Logger("%s_locked_users.lst" % args.output)
+		#ad.list_users("locked")
+		sys.exit(0)
+
+	sys.stdout = Logger(args.output)
 	if args.groups:
 		ad.list_groups()
 	elif args.users:
