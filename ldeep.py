@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
 from sys import exit
+from struct import unpack
+import socket
 import json
 from argparse import ArgumentParser
 from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
 from ldap3.protocol.formatters.validators import validate_sid, validate_guid
+from ldap3.core.exceptions import LDAPNoSuchObjectResult
 from binascii import hexlify, unhexlify
 from math import fabs
 import dns.resolver
@@ -17,12 +20,59 @@ from re import compile as re_compile, findall
 from datetime import timedelta, datetime
 from base64 import b64encode, b64decode
 
-# userAccountControl flags
+
+# DNS record types
+DNS_TYPES = {
+	"ZERO": 0x0000,
+	"A": 0x0001,
+	"NS": 0x0002,
+	"MD": 0x0003,
+	"MF": 0x0004,
+	"CNAME": 0x0005,
+	"SOA": 0x0006,
+	"MB": 0x0007,
+	"MG": 0x0008,
+	"MR": 0x0009,
+	"NULL": 0x000A,
+	"WKS": 0x000B,
+	"PTR": 0x000C,
+	"HINFO": 0x000D,
+	"MINFO": 0x000E,
+	"MX": 0x000F,
+	"TXT": 0x0010,
+	"RP": 0x0011,
+	"AFSDB": 0x0012,
+	"X25": 0x0013,
+	"ISDN": 0x0014,
+	"RT": 0x0015,
+	"SIG": 0x0018,
+	"KEY": 0x0019,
+	"AAAA": 0x001C,
+	"LOC": 0x001D,
+	"NXT": 0x001E,
+	"SRV": 0x0021,
+	"ATMA": 0x0022,
+	"NAPTR": 0x0023,
+	"DNAME": 0x0027,
+	"DS": 0x002B,
+	"RRSIG": 0x002E,
+	"NSEC": 0x002F,
+	"DNSKEY": 0x0030,
+	"DHCID": 0x0031,
+	"NSEC3": 0x0032,
+	"NSEC3PARAM": 0x0033,
+	"TLSA": 0x0034,
+	"ALL": 0x00FF,
+	"WINS": 0xFF01,
+	"WINSR": 0xFF02,
+}
 
 LOCKED_USERS = "(&(objectCategory=Person)(objectClass=User)(lockoutTime>=1))"
 
 
 GROUPS_FILTER = "(&(objectClass=group))"
+ZONES_FILTER = "(&(objectClass=dnsZone)(!(dc=RootDNSServers)))"
+ZONE_FILTER = "(&(objectClass=dnsNode))"
 USER_ALL_FILTER = "(&(objectCategory=Person)(objectClass=user))"
 USER_ENABLED_FILTER = "(&(objectCategory=Person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
 USER_DISABLED_FILTER = "(&(objectCategory=Person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=2))"
@@ -157,17 +207,14 @@ class ActiveDirectoryView(object):
 			print("[!] Unable to bind with provided information")
 			exit(1)
 
-		if base:
-			self.base_dn = base
-		else:
-			self.base_dn = ','.join(["dc=%s" % x for x in fqdn.split(".")])
+		self.base_dn = base or ','.join(["dc=%s" % x for x in fqdn.split(".")])
 		self.search_scope = SUBTREE
 
-	def query(self, ldapfilter, attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]):
+	def query(self, ldapfilter, attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES], base=None, scope=None):
 		entry_generator = self.ldap.extend.standard.paged_search(
-			search_base=self.base_dn,
+			search_base=base or self.base_dn,
 			search_filter=ldapfilter,
-			search_scope=self.search_scope,
+			search_scope=scope or self.search_scope,
 			attributes=attributes,
 			paged_size=PAGESIZE,
 			generator=True
@@ -268,6 +315,35 @@ class ActiveDirectoryView(object):
 				if len(guids) > 0:
 					print("[gPLink]")
 					print("* {}".format("\n* ".join([gpos[g] if g in gpos else g for g in guids])))
+
+	def list_zones(self):
+		if not self.verbose:
+			attributes = ["dc", "objectClass"]
+		else:
+			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+		results = self.query(ZONES_FILTER, attributes, base=','.join(["CN=MicrosoftDNS,DC=DomainDNSZones", self.base_dn]))
+		for result in results:
+			print(result["dc"])
+
+	def list_zone(self, zone):
+		try:
+			results = self.query(ZONE_FILTER, base=','.join(["DC=%s" % zone, "CN=MicrosoftDNS,DC=DomainDNSZones", self.base_dn]))
+			for result in results:
+				dnsrecord = result["dnsrecord"][0]
+				databytes = dnsrecord[0:4]
+				datalen, datatype = unpack("HH", databytes)
+				data = dnsrecord[24:24 + datalen]
+				for recordname, recordvalue in DNS_TYPES.items():
+					if recordvalue == datatype:
+						if recordname == "A":
+							target = socket.inet_ntoa(data)
+						else:
+							# how, ugly
+							data = data.decode('unicode-escape')
+							target = ''.join([c for c in data if ord(c) > 31 or ord(c) == 9])
+						print("%s IN %s %s" % (result["dc"], recordname, target))
+		except LDAPNoSuchObjectResult:
+			print("Zone %s does not exists" % zone)
 
 	def list_pso(self):
 		FILETIME_TIMESTAMP_FIELDS = {
@@ -448,6 +524,8 @@ if __name__ == "__main__":
 	xgroup = action.add_mutually_exclusive_group(required=True)
 	xgroup.add_argument("--groups", action="store_true", help="Lists all available groups")
 	xgroup.add_argument("--users", nargs='?', const="all", action="store", choices=["all", "enabled", "noexpire", "disabled", "locked"], help="Lists all available users")
+	xgroup.add_argument("--zones", action="store_true", help="Return configured DNS zones")
+	xgroup.add_argument("--zone", help="Return zone records")
 	xgroup.add_argument("--object", metavar="OBJECT", help="Return information on an object (group, computer, user, etc.)")
 	xgroup.add_argument("--computers", action="store_true", help="Lists all computers")
 	xgroup.add_argument("--sid", metavar="SID", help="Return the record associated to the SID")
@@ -496,6 +574,10 @@ if __name__ == "__main__":
 		ad.list_domain_policy()
 	elif args.gpo:
 		ad.list_gpo()
+	elif args.zones:
+		ad.list_zones()
+	elif args.zone:
+		ad.list_zone(args.zone)
 	elif args.ou:
 		ad.list_ou()
 	elif args.pso:
