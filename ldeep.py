@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from sys import exit
+import sys
 from struct import unpack
 import socket
 import json
@@ -155,6 +156,21 @@ DATETIME_FIELDS = [
 	"whenChanged",
 	"whenCreated"
 ]
+
+class Logger(object):
+
+	def __init__(self, outfile=None):
+		self.terminal = sys.stdout
+		self.log = open(outfile, 'w') if outfile else None
+
+	def write(self, message):
+		self.terminal.write(message)
+		if self.log:
+			self.log.write(message)
+
+	def flush(self):
+		pass
+
 
 
 class ResolverThread(object):
@@ -541,6 +557,7 @@ if __name__ == "__main__":
 
 	parser.add_argument("--resolve", action="store_true", required=False, help="Performs a resolution on all computer names, should be used with --computers")
 	parser.add_argument("--attr", required=False, help="Filters output of --search")
+	parser.add_argument("-o", "--output", required=False, help="File for saving results", default=None)
 
 	args = parser.parse_args()
 
@@ -553,6 +570,7 @@ if __name__ == "__main__":
 		print("[!] Lack of authentication options: either Kerberos or Username with Password (can be a NTLM hash).")
 		exit(1)
 
+	sys.stdout = Logger(args.output)
 	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged, args.base, method, args.verbose)
 	if args.groups:
 		ad.list_groups()
