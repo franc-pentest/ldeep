@@ -67,26 +67,49 @@ DNS_TYPES = {
 	"WINSR": 0xFF02,
 }
 
+USER_ACCOUNT_CONTROL = {
+	"SCRIPT": 0x0001,
+	"ACCOUNTDISABLE": 0x0002,
+	"HOMEDIR_REQUIRED": 0x0008,
+	"LOCKOUT": 0x0010,
+	"PASSWD_NOTREQD": 0x0020,
+	"PASSWD_CANT_CHANGE": 0x0040,
+	"ENCRYPTED_TEXT_PWD_ALLOWED": 0x0080,
+	"TEMP_DUPLICATE_ACCOUNT": 0x0100,
+	"NORMAL_ACCOUNT": 0x0200,
+	"INTERDOMAIN_TRUST_ACCOUNT": 0x0800,
+	"WORKSTATION_TRUST_ACCOUNT": 0x1000,
+	"SERVER_TRUST_ACCOUNT": 0x2000,
+	"DONT_EXPIRE_PASSWORD": 0x10000,
+	"MNS_LOGON_ACCOUNT": 0x20000,
+	"SMARTCARD_REQUIRED": 0x40000,
+	"TRUSTED_FOR_DELEGATION": 0x80000,
+	"NOT_DELEGATED": 0x100000,
+	"USE_DES_KEY_ONLY": 0x200000,
+	"DONT_REQ_PREAUTH": 0x400000,
+	"PASSWORD_EXPIRED": 0x800000,
+	"TRUSTED_TO_AUTH_FOR_DELEGATION": 0x1000000,
+	"PARTIAL_SECRETS_ACCOUNT": 0x04000000,
+}
+
 LOCKED_USERS = "(&(objectCategory=Person)(objectClass=User)(lockoutTime>=1))"
 
 
-GROUPS_FILTER = "(&(objectClass=group))"
+GROUPS_FILTER = "(objectClass=group)"
 ZONES_FILTER = "(&(objectClass=dnsZone)(!(dc=RootDNSServers)))"
-ZONE_FILTER = "(&(objectClass=dnsNode))"
+ZONE_FILTER = "(objectClass=dnsNode)"
 USER_ALL_FILTER = "(&(objectCategory=Person)(objectClass=user))"
-USER_ENABLED_FILTER = "(&(objectCategory=Person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:=2)))"
-USER_DISABLED_FILTER = "(&(objectCategory=Person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=2))"
-USER_DONT_EXPIRE_FILTER = "(&(objectCategory=Person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=65536))"
-COMPUTERS_FILTER = "(&(objectClass=computer))"
-GROUP_DN_FILTER = "(&(objectClass=group)(sAMAccountName=%s))"
-USERS_IN_GROUP_FILTER = "(&(|(objectCategory=user)(objectCategory=group))(memberOf=%s))"
-USER_IN_GROUPS_FILTER = "(&(sAMAccountName=%s))"
-DOMAIN_INFO_FILTER = "(&(objectClass=domain))"
-GPO_INFO_FILTER = "(&(objectCategory=groupPolicyContainer))"
-GPO_INFO_FILTER_BY_GUID = "(&(objectCategory=groupPolicyContainer){})"
-PSO_INFO_FILTER = "(&(objectClass=msDS-PasswordSettings))"
-TRUSTS_INFO_FILTER = "(&(objectCategory=trustedDomain))"
-OU_FILTER = "(&(objectClass=OrganizationalUnit))"
+USER_ACCOUNT_CONTROL_FILTER = "(&(objectCategory=Person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:={intval}))"
+USER_ACCOUNT_CONTROL_FILTER_NEG = "(&(objectCategory=Person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:={intval})))"
+COMPUTERS_FILTER = "(objectClass=computer)"
+GROUP_DN_FILTER = "(&(objectClass=group)(sAMAccountName={group}))"
+USERS_IN_GROUP_FILTER = "(&(|(objectCategory=user)(objectCategory=group))(memberOf={group}))"
+USER_IN_GROUPS_FILTER = "(sAMAccountName={username})"
+DOMAIN_INFO_FILTER = "(objectClass=domain)"
+GPO_INFO_FILTER = "(objectCategory=groupPolicyContainer)"
+PSO_INFO_FILTER = "(objectClass=msDS-PasswordSettings)"
+TRUSTS_INFO_FILTER = "(objectCategory=trustedDomain)"
+OU_FILTER = "(objectClass=OrganizationalUnit)"
 
 PAGESIZE = 1000
 
@@ -156,6 +179,7 @@ DATETIME_FIELDS = [
 	"whenCreated"
 ]
 
+
 class Logger(object):
 
 	def __init__(self, outfile=None, quiet=False):
@@ -173,7 +197,6 @@ class Logger(object):
 		if self.log:
 			self.log.flush()
 		pass
-
 
 
 class ResolverThread(object):
@@ -291,6 +314,13 @@ class ActiveDirectoryView(object):
 						val = "complexity disabled"
 
 				print("%s: %s" % (field, val))
+
+	def _resolve_userAccountControl(self, val):
+		result = []
+		for k, v in USER_ACCOUNT_CONTROL.items():
+			if v & val:
+				result.append(k)
+		return " | ".join(result)
 
 	def resolve_sid(self, sid):
 		# Local SID
@@ -441,30 +471,34 @@ class ActiveDirectoryView(object):
 		if filter_ == "all":
 			results = self.query(USER_ALL_FILTER)
 		elif filter_ == "enabled":
-			results = self.query(USER_ENABLED_FILTER)
+			results = self.query(USER_ACCOUNT_CONTROL_FILTER_NEG.format(intval=USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]))
 		elif filter_ == "disabled":
-			results = self.query(USER_DISABLED_FILTER)
-		elif filter_ == "noexpire":
-			results = self.query(USER_DONT_EXPIRE_FILTER)
+			results = self.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]))
+		elif filter_ == "locked":
+			results = self.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["LOCKOUT"]))
+		elif filter_ == "nopasswordexpire":
+			results = self.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]))
+		elif filter_ == "passwordexpired":
+			results = self.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["PASSWORD_EXPIRED"]))
 
 		for result in results:
 			self.display(result)
 
 	def list_membersof(self, group):
 		# retrieve group DN
-		results = self.query(GROUP_DN_FILTER % group, ["distinguishedName"])
+		results = self.query(GROUP_DN_FILTER.format(group=group), ["distinguishedName"])
 		if results:
 			group_dn = results[0]["distinguishedName"]
 		else:
 			print("[!] Group %s does not exists" % group)
 			exit(0)
-		results = self.query(USERS_IN_GROUP_FILTER % group_dn)
+		results = self.query(USERS_IN_GROUP_FILTER.format(group=group_dn))
 		for result in results:
 			self.display(result)
 
 	def list_membership(self, user):
 		# retrieve group DN
-		results = self.query(USER_IN_GROUPS_FILTER % user, ["memberOf"])
+		results = self.query(USER_IN_GROUPS_FILTER.format(username=user), ["memberOf"])
 		for result in results:
 			if "memberOf" in result:
 				for group_dn in result["memberOf"]:
@@ -507,7 +541,9 @@ class ActiveDirectoryView(object):
 						elif field in DATETIME_FIELDS and value != '0':
 							record[field][idx] = str(format_ad_timestamp(value))
 						elif isinstance(value, bytes):
-							record[field] = b64encode(value).decode("utf-8")
+							record[field][idx] = b64encode(value).decode("utf-8")
+						elif isinstance(value, int) and field == "userAccountControl":
+							record[field][idx] = self._resolve_userAccountControl(value)
 
 					if len(values) == 1:
 						record[field] = values[0]
@@ -520,6 +556,8 @@ class ActiveDirectoryView(object):
 						record[field] = str(format_ad_timestamp(value))
 					elif isinstance(value, bytes):
 						record[field] = b64encode(value).decode("utf-8")
+					elif isinstance(value, int) and field == "userAccountControl":
+						record[field] = self._resolve_userAccountControl(value)
 
 			print(json.dumps(dict(record), ensure_ascii=False, indent=2))
 		else:
@@ -547,7 +585,7 @@ if __name__ == "__main__":
 	xgroup = action.add_mutually_exclusive_group(required=True)
 	xgroup.add_argument("--all", action="store_true", help="Lists all things")
 	xgroup.add_argument("--groups", action="store_true", help="Lists all available groups")
-	xgroup.add_argument("--users", nargs='?', const="all", action="store", choices=["all", "enabled", "noexpire", "disabled", "locked"], help="Lists all available users")
+	xgroup.add_argument("--users", nargs='?', const="all", action="store", choices=["all", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired"], help="Lists all available users")
 	xgroup.add_argument("--zones", action="store_true", help="Return configured DNS zones")
 	xgroup.add_argument("--zone", help="Return zone records")
 	xgroup.add_argument("--object", metavar="OBJECT", help="Return information on an object (group, computer, user, etc.)")
@@ -587,10 +625,14 @@ if __name__ == "__main__":
 		ad.list_users("all")
 		sys.stdout = Logger("%s_enabled_users.lst" % args.output, quiet=True)
 		ad.list_users("enabled")
-		sys.stdout = Logger("%s_noexpire_users.lst" % args.output, quiet=True)
-		ad.list_users("noexpire")
 		sys.stdout = Logger("%s_disabled_users.lst" % args.output, quiet=True)
 		ad.list_users("disabled")
+		sys.stdout = Logger("%s_locked_users.lst" % args.output, quiet=True)
+		ad.list_users("locked")
+		sys.stdout = Logger("%s_nopasswordexpire_users.lst" % args.output, quiet=True)
+		ad.list_users("nopasswordexpire")
+		sys.stdout = Logger("%s_passwordexpired_users.lst" % args.output, quiet=True)
+		ad.list_users("passwordexpired")
 		sys.stdout = Logger("%s_groups.lst" % args.output, quiet=True)
 		ad.list_groups()
 		sys.stdout = Logger("%s_computers.lst" % args.output, quiet=True)
@@ -603,9 +645,8 @@ if __name__ == "__main__":
 		ad.list_pso()
 		sys.stdout = Logger("%s_trusts.lst" % args.output, quiet=True)
 		ad.list_trusts()
-		# implement "locked"
-		#sys.stdout = Logger("%s_locked_users.lst" % args.output)
-		#ad.list_users("locked")
+		sys.stdout = Logger("%s_domain_policy.lst" % args.output, quiet=True)
+		ad.list_domain_policy()
 		sys.exit(0)
 
 	sys.stdout = Logger(args.output)
