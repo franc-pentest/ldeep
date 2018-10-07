@@ -10,10 +10,12 @@ from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, Server, Connection
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
 from ldap3.protocol.formatters.validators import validate_sid, validate_guid
 from ldap3.core.exceptions import LDAPNoSuchObjectResult
+from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
 from binascii import hexlify, unhexlify
 from math import fabs
 import dns.resolver
 from multiprocessing.dummy import Pool as ThreadPool
+from termcolor import colored
 from tqdm import tqdm
 from pprint import pprint
 from re import compile as re_compile, findall
@@ -21,7 +23,7 @@ from datetime import timedelta, datetime
 from base64 import b64encode, b64decode
 
 
-# DNS record types
+# All stuff below will soon go to constants.py
 DNS_TYPES = {
 	"ZERO": 0x0000,
 	"A": 0x0001,
@@ -92,9 +94,7 @@ USER_ACCOUNT_CONTROL = {
 	"PARTIAL_SECRETS_ACCOUNT": 0x04000000,
 }
 
-LOCKED_USERS = "(&(objectCategory=Person)(objectClass=User)(lockoutTime>=1))"
-
-
+USER_LOCKED_FILTER = "(&(objectCategory=Person)(objectClass=user)(lockoutTime:1.2.840.113556.1.4.804:=4294967295))"
 GROUPS_FILTER = "(objectClass=group)"
 ZONES_FILTER = "(&(objectClass=dnsZone)(!(dc=RootDNSServers)))"
 ZONE_FILTER = "(objectClass=dnsNode)"
@@ -103,6 +103,7 @@ USER_ACCOUNT_CONTROL_FILTER = "(&(objectCategory=Person)(objectClass=user)(userA
 USER_ACCOUNT_CONTROL_FILTER_NEG = "(&(objectCategory=Person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:={intval})))"
 COMPUTERS_FILTER = "(objectClass=computer)"
 GROUP_DN_FILTER = "(&(objectClass=group)(sAMAccountName={group}))"
+USER_DN_FILTER = "(&(objectClass=user)(objectCategory=Person)(sAMAccountName={username}))"
 USERS_IN_GROUP_FILTER = "(&(|(objectCategory=user)(objectCategory=group))(memberOf={group}))"
 USER_IN_GROUPS_FILTER = "(sAMAccountName={username})"
 DOMAIN_INFO_FILTER = "(objectClass=domain)"
@@ -119,10 +120,6 @@ DOMAIN_PASSWORD_NO_CLEAR_CHANGE = 4
 DOMAIN_LOCKOUT_ADMINS = 8
 DOMAIN_PASSWORD_STORE_CLEARTEXT = 16
 DOMAIN_REFUSE_PASSWORD_CHANGE = 32
-
-
-# UTILS
-
 
 WELL_KNOWN_SIDs = {
 	"S-1-5-32-544"	: r"BUILTIN\Administrators",
@@ -199,6 +196,15 @@ class Logger(object):
 		pass
 
 
+# This will go to utils.py
+def info(content):
+	sys.__stderr__.write("%s\n" % colored("[+] " + content, "blue", attrs=["bold"]))
+
+def error(content):
+	sys.__stderr__.write("%s\n" % colored("[!] " + content, "red", attrs=["bold"]))
+	sys.exit(1)
+
+# this will go somewhere
 class ResolverThread(object):
 
 	def __init__(self, dns_server):
@@ -246,8 +252,7 @@ class ActiveDirectoryView(object):
 			self.ldap = Connection(server, user="%s\\%s" % (domain, username), password=password, authentication=NTLM)
 
 		if not self.ldap.bind():
-			print("[!] Unable to bind with provided information")
-			exit(1)
+			error("Unable to bind with provided information")
 
 		self.base_dn = base or ','.join(["dc=%s" % x for x in fqdn.split(".")])
 		self.search_scope = SUBTREE
@@ -331,7 +336,7 @@ class ActiveDirectoryView(object):
 			if results and len(results) > 0:
 				self.display(results[0])
 		else:
-			print("[!] Invalid SID")
+			error("Invalid SID")
 
 	def resolve_guid(self, guid):
 		if validate_guid(guid):
@@ -339,7 +344,7 @@ class ActiveDirectoryView(object):
 			if results and len(results) > 0:
 				self.display(results[0])
 		else:
-			print("[!] Invalid GUID")
+			error("Invalid GUID")
 
 	def get_gpo(self):
 		results = self.query(GPO_INFO_FILTER)
@@ -364,6 +369,20 @@ class ActiveDirectoryView(object):
 				if len(guids) > 0:
 					print("[gPLink]")
 					print("* {}".format("\n* ".join([gpos[g] if g in gpos else g for g in guids])))
+
+	def unlock(self, username):
+		results = self.query(USER_DN_FILTER.format(username=username))
+		if len(results) != 1:
+			error("No or more than 1 users found, exiting")
+		else:
+			user = results[0]
+			info("Found user %s at DN %s" % (username, user["dn"]))
+			unlock = ad_unlock_account(self.ldap, user["dn"])
+			# goddamn, return value is either True or str...
+			if isinstance(unlock, bool):
+				info("User %s unlocked" % username)
+			else:
+				error("Unable to unlock %s, check privileges" % username)
 
 	def list_zones(self):
 		if not self.verbose:
@@ -392,7 +411,7 @@ class ActiveDirectoryView(object):
 							target = ''.join([c for c in data if ord(c) > 31 or ord(c) == 9])
 						print("%s IN %s %s" % (result["dc"], recordname, target))
 		except LDAPNoSuchObjectResult:
-			print("Zone %s does not exists" % zone)
+			error("Zone %s does not exists" % zone)
 
 	def list_pso(self):
 		FILETIME_TIMESTAMP_FIELDS = {
@@ -475,7 +494,7 @@ class ActiveDirectoryView(object):
 		elif filter_ == "disabled":
 			results = self.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]))
 		elif filter_ == "locked":
-			results = self.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["LOCKOUT"]))
+			results = self.query(USER_LOCKED_FILTER)
 		elif filter_ == "nopasswordexpire":
 			results = self.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]))
 		elif filter_ == "passwordexpired":
@@ -490,7 +509,7 @@ class ActiveDirectoryView(object):
 		if results:
 			group_dn = results[0]["distinguishedName"]
 		else:
-			print("[!] Group %s does not exists" % group)
+			error("Group %s does not exists" % group)
 			exit(0)
 		results = self.query(USERS_IN_GROUP_FILTER.format(group=group_dn))
 		for result in results:
@@ -504,7 +523,7 @@ class ActiveDirectoryView(object):
 				for group_dn in result["memberOf"]:
 					print(group_dn)
 			else:
-				print("[-] No groups for user %s" % user)
+				error("No groups for user %s" % user)
 
 	def search(self, filter_, attr):
 		# custom search is custom, verbose on for printing
@@ -518,7 +537,8 @@ class ActiveDirectoryView(object):
 			for result in results:
 				self.display(result)
 		except Exception as e:
-			print(e)
+			# shit will be printed
+			error(e)
 
 	def resolve(self, dns_server):
 		pool = ThreadPool(20)
@@ -591,6 +611,7 @@ if __name__ == "__main__":
 	xgroup.add_argument("--object", metavar="OBJECT", help="Return information on an object (group, computer, user, etc.)")
 	xgroup.add_argument("--computers", action="store_true", help="Lists all computers")
 	xgroup.add_argument("--sid", metavar="SID", help="Return the record associated to the SID")
+	xgroup.add_argument("--unlock", metavar="USER", help="Unlock the given user")
 	xgroup.add_argument("--guid", metavar="GUID", help="Return the record associated to the GUID")
 	xgroup.add_argument("--domain_policy", action="store_true", help="Print the domain policy")
 	xgroup.add_argument("--gpo", action="store_true", help="List GPO GUID and their name")
@@ -613,14 +634,12 @@ if __name__ == "__main__":
 	elif args.username and args.password:
 		method = "NTLM"
 	else:
-		print("[!] Lack of authentication options: either Kerberos or Username with Password (can be a NTLM hash).")
-		exit(1)
+		error("Lack of authentication options: either Kerberos or Username with Password (can be a NTLM hash).")
 
 	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged, args.base, method, args.verbose)
 	if args.all:
 		if not args.output:
-			print("[!] --all cannot only be used with -o/--output")
-			sys.exit(0)
+			error("--all cannot only be used with -o/--output")
 		sys.stdout = Logger("%s_all_users.lst" % args.output, quiet=True)
 		ad.list_users("all")
 		sys.stdout = Logger("%s_enabled_users.lst" % args.output, quiet=True)
@@ -682,4 +701,5 @@ if __name__ == "__main__":
 		ad.list_trusts()
 	elif args.search:
 		ad.search(args.search, args.attr)
-
+	elif args.unlock:
+		ad.unlock(args.unlock)
