@@ -235,12 +235,11 @@ class ResolverThread(object):
 
 class ActiveDirectoryView(object):
 
-	def __init__(self, username, password, server, fqdn, dpaged, base, method="NTLM", verbose=False):
+	def __init__(self, username, password, server, fqdn, base, method="NTLM", verbose=False):
 		self.username = username
 		self.password = password
 		self.server = server
 		self.fqdn = fqdn
-		self.dpaged = dpaged
 		self.hostnames = []
 		self.verbose = verbose
 
@@ -595,7 +594,6 @@ if __name__ == "__main__":
 	parser.add_argument("-b", "--base", default="", help="LDAP base for query")
 	parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Results will contain full information")
 	parser.add_argument("--dns", help="An optional DNS server to use", default=False)
-	parser.add_argument("--dpaged", action="store_true", help="Disable paged search (in case of unwanted behavior)")
 
 	authentication = parser.add_argument_group("Authentication")
 	authentication.add_argument("-u", "--username", help="The username")
@@ -637,7 +635,7 @@ if __name__ == "__main__":
 	else:
 		error("Lack of authentication options: either Kerberos or Username with Password (can be a NTLM hash).")
 
-	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.dpaged, args.base, method, args.verbose)
+	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.base, method, args.verbose)
 	if args.all:
 		info("Getting all users")
 		sys.stdout = Logger("%s_all_users.lst" % args.all, quiet=True)
