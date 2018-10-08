@@ -167,7 +167,8 @@ FILETIME_FIELDS = [
 	"lastLogoff",
 	"lastLogonTimestamp",
 	"pwdLastSet",
-	"accountExpires"
+	"accountExpires",
+	"lockoutTime"
 ]
 
 DATETIME_FIELDS = [
