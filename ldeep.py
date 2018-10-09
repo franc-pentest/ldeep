@@ -19,9 +19,29 @@ from termcolor import colored
 from tqdm import tqdm
 from pprint import pprint
 from re import compile as re_compile, findall
-from datetime import timedelta, datetime
+import datetime
 from base64 import b64encode, b64decode
+import ldap3
 
+
+# define an ldap3-compliant formatter
+def format_userAccountControl(raw_value):
+	try:
+		val = int(raw_value)
+		result = []
+		for k, v in USER_ACCOUNT_CONTROL.items():
+			if v & val:
+				result.append(k)
+		return " | ".join(result)
+	except (TypeError, ValueError):  # expected exceptions↲
+		pass
+	except Exception:  # any other exception should be investigated, anyway the formatter return the raw_value
+		pass
+	return raw_value
+
+
+# add formater to standard ones
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (format_userAccountControl, None)
 
 # All stuff below will soon go to constants.py
 DNS_TYPES = {
@@ -248,8 +268,7 @@ class ActiveDirectoryView(object):
 			self.ldap = Connection(server, authentication=SASL, sasl_mechanism=KERBEROS)
 		elif method == "NTLM":
 			server = Server(self.server, get_info=ALL)
-			domain, _, _ = fqdn.partition(".")
-			self.ldap = Connection(server, user="%s\\%s" % (domain, username), password=password, authentication=NTLM)
+			self.ldap = Connection(server, user="%s\\%s" % (fqdn, username), password=password, authentication=NTLM, check_names=True)
 
 		if not self.ldap.bind():
 			error("Unable to bind with provided information")
@@ -320,12 +339,6 @@ class ActiveDirectoryView(object):
 
 				print("%s: %s" % (field, val))
 
-	def _resolve_userAccountControl(self, val):
-		result = []
-		for k, v in USER_ACCOUNT_CONTROL.items():
-			if v & val:
-				result.append(k)
-		return " | ".join(result)
 
 	def resolve_sid(self, sid):
 		# Local SID
@@ -552,34 +565,12 @@ class ActiveDirectoryView(object):
 			print("%s %s" % (computer["address"].ljust(20, " "), computer["hostname"]))
 
 	def display(self, record):
+		def default(o):
+			if type(o) is datetime.date or type(o) is datetime.datetime:
+				return o.isoformat()
+
 		if self.verbose:
-			for field, values in record.items():
-				if isinstance(values, list):
-					for idx, value in enumerate(values):
-						if field in FILETIME_FIELDS and value != '0':
-							record[field] = str(format_ad_timestamp(value))
-						elif field in DATETIME_FIELDS and value != '0':
-							record[field][idx] = str(format_ad_timestamp(value))
-						elif isinstance(value, bytes):
-							record[field][idx] = b64encode(value).decode("utf-8")
-						elif isinstance(value, int) and field == "userAccountControl":
-							record[field][idx] = self._resolve_userAccountControl(value)
-
-					if len(values) == 1:
-						record[field] = values[0]
-
-				else:
-					value = values
-					if field in FILETIME_FIELDS and value != '0':
-						record[field] = str(format_ad_timestamp(value))
-					elif field in DATETIME_FIELDS and value != '0':
-						record[field] = str(format_ad_timestamp(value))
-					elif isinstance(value, bytes):
-						record[field] = b64encode(value).decode("utf-8")
-					elif isinstance(value, int) and field == "userAccountControl":
-						record[field] = self._resolve_userAccountControl(value)
-
-			print(json.dumps(dict(record), ensure_ascii=False, indent=2))
+			print(json.dumps(dict(record), ensure_ascii=False, default=default, sort_keys=True, indent=2))
 		else:
 			if "group" in record["objectClass"]:
 				print(record["sAMAccountName"] + " (group)")
