@@ -24,7 +24,7 @@ from base64 import b64encode, b64decode
 import ldap3
 
 
-# define an ldap3-compliant formatter
+# define an ldap3-compliant formatters
 def format_userAccountControl(raw_value):
 	try:
 		val = int(raw_value)
@@ -40,8 +40,24 @@ def format_userAccountControl(raw_value):
 	return raw_value
 
 
+def format_dnsrecord(raw_value):
+	databytes = raw_value[0:4]
+	datalen, datatype = unpack("HH", databytes)
+	data = raw_value[24:24 + datalen]
+	for recordname, recordvalue in DNS_TYPES.items():
+		if recordvalue == datatype:
+			if recordname == "A":
+				target = socket.inet_ntoa(data)
+			else:
+				# how, ugly
+				data = data.decode('unicode-escape')
+				target = ''.join([c for c in data if ord(c) > 31 or ord(c) == 9])
+			return "%s %s" % (recordname, target)
+
+
 # add formater to standard ones
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (format_userAccountControl, None)
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
 
 # All stuff below will soon go to constants.py
 DNS_TYPES = {
@@ -404,25 +420,13 @@ class ActiveDirectoryView(object):
 			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
 		results = self.query(ZONES_FILTER, attributes, base=','.join(["CN=MicrosoftDNS,DC=DomainDNSZones", self.base_dn]))
 		for result in results:
-			print(result["dc"])
+			self.display(result)
 
 	def list_zone(self, zone):
 		try:
 			results = self.query(ZONE_FILTER, base=','.join(["DC=%s" % zone, "CN=MicrosoftDNS,DC=DomainDNSZones", self.base_dn]))
 			for result in results:
-				dnsrecord = result["dnsrecord"][0]
-				databytes = dnsrecord[0:4]
-				datalen, datatype = unpack("HH", databytes)
-				data = dnsrecord[24:24 + datalen]
-				for recordname, recordvalue in DNS_TYPES.items():
-					if recordvalue == datatype:
-						if recordname == "A":
-							target = socket.inet_ntoa(data)
-						else:
-							# how, ugly
-							data = data.decode('unicode-escape')
-							target = ''.join([c for c in data if ord(c) > 31 or ord(c) == 9])
-						print("%s IN %s %s" % (result["dc"], recordname, target))
+				self.display(result)
 		except LDAPNoSuchObjectResult:
 			error("Zone %s does not exists" % zone)
 
@@ -574,8 +578,12 @@ class ActiveDirectoryView(object):
 		else:
 			if "group" in record["objectClass"]:
 				print(record["sAMAccountName"] + " (group)")
-			if "user" in record["objectClass"]:
+			elif "user" in record["objectClass"]:
 				print(record["sAMAccountName"])
+			elif "dnsNode" in record["objectClass"]:
+				print("%s %s" % (record["dc"], " ".join(record["dnsRecord"])))
+			elif "dnsZone" in record["objectClass"]:
+				print(record["dc"])
 
 
 if __name__ == "__main__":
