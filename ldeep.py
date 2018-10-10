@@ -496,7 +496,7 @@ class ActiveDirectoryView(object):
 
 		results = self.query(GROUPS_FILTER, attributes)
 		for result in results:
-			self.display(result)
+			self.display(result, specify_group=False)
 
 	def list_users(self, filter_):
 		if not self.verbose:
