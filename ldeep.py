@@ -1,335 +1,136 @@
 #!/usr/bin/env python3
 
 from sys import exit
-import sys
-from struct import unpack
-import socket
-import json
 from argparse import ArgumentParser
-from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL
-from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
-from ldap3.protocol.formatters.validators import validate_sid, validate_guid
-from ldap3.core.exceptions import LDAPNoSuchObjectResult
-from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
-from binascii import hexlify, unhexlify
+from json import dump as json_dump
 from math import fabs
-import dns.resolver
-from multiprocessing.dummy import Pool as ThreadPool
-from termcolor import colored
-from tqdm import tqdm
-from pprint import pprint
-from re import compile as re_compile, findall
-import datetime
-from base64 import b64encode, b64decode
-import ldap3
+from re import compile as re_compile
+from datetime import date, datetime
+
+from ldirectory import ActiveDirectoryView, ALL
+from utils import error, info, Logger, resolve as utils_resolve
+from ldap_utils import *
+
+from command import Command
+
+import sys
 
 
-# define an ldap3-compliant formatters
-def format_userAccountControl(raw_value):
-	try:
-		val = int(raw_value)
-		result = []
-		for k, v in USER_ACCOUNT_CONTROL.items():
-			if v & val:
-				result.append(k)
-		return " | ".join(result)
-	except (TypeError, ValueError):  # expected exceptions↲
-		pass
-	except Exception:  # any other exception should be investigated, anyway the formatter return the raw_value
-		pass
-	return raw_value
+class Ldeep(Command):
 
-
-def format_dnsrecord(raw_value):
-	databytes = raw_value[0:4]
-	datalen, datatype = unpack("HH", databytes)
-	data = raw_value[24:24 + datalen]
-	for recordname, recordvalue in DNS_TYPES.items():
-		if recordvalue == datatype:
-			if recordname == "A":
-				target = socket.inet_ntoa(data)
-			else:
-				# how, ugly
-				data = data.decode('unicode-escape')
-				target = ''.join([c for c in data if ord(c) > 31 or ord(c) == 9])
-			return "%s %s" % (recordname, target)
-
-
-# add formater to standard ones
-ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (format_userAccountControl, None)
-ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
-
-# All stuff below will soon go to constants.py
-DNS_TYPES = {
-	"ZERO": 0x0000,
-	"A": 0x0001,
-	"NS": 0x0002,
-	"MD": 0x0003,
-	"MF": 0x0004,
-	"CNAME": 0x0005,
-	"SOA": 0x0006,
-	"MB": 0x0007,
-	"MG": 0x0008,
-	"MR": 0x0009,
-	"NULL": 0x000A,
-	"WKS": 0x000B,
-	"PTR": 0x000C,
-	"HINFO": 0x000D,
-	"MINFO": 0x000E,
-	"MX": 0x000F,
-	"TXT": 0x0010,
-	"RP": 0x0011,
-	"AFSDB": 0x0012,
-	"X25": 0x0013,
-	"ISDN": 0x0014,
-	"RT": 0x0015,
-	"SIG": 0x0018,
-	"KEY": 0x0019,
-	"AAAA": 0x001C,
-	"LOC": 0x001D,
-	"NXT": 0x001E,
-	"SRV": 0x0021,
-	"ATMA": 0x0022,
-	"NAPTR": 0x0023,
-	"DNAME": 0x0027,
-	"DS": 0x002B,
-	"RRSIG": 0x002E,
-	"NSEC": 0x002F,
-	"DNSKEY": 0x0030,
-	"DHCID": 0x0031,
-	"NSEC3": 0x0032,
-	"NSEC3PARAM": 0x0033,
-	"TLSA": 0x0034,
-	"ALL": 0x00FF,
-	"WINS": 0xFF01,
-	"WINSR": 0xFF02,
-}
-
-USER_ACCOUNT_CONTROL = {
-	"SCRIPT": 0x0001,
-	"ACCOUNTDISABLE": 0x0002,
-	"HOMEDIR_REQUIRED": 0x0008,
-	"LOCKOUT": 0x0010,
-	"PASSWD_NOTREQD": 0x0020,
-	"PASSWD_CANT_CHANGE": 0x0040,
-	"ENCRYPTED_TEXT_PWD_ALLOWED": 0x0080,
-	"TEMP_DUPLICATE_ACCOUNT": 0x0100,
-	"NORMAL_ACCOUNT": 0x0200,
-	"INTERDOMAIN_TRUST_ACCOUNT": 0x0800,
-	"WORKSTATION_TRUST_ACCOUNT": 0x1000,
-	"SERVER_TRUST_ACCOUNT": 0x2000,
-	"DONT_EXPIRE_PASSWORD": 0x10000,
-	"MNS_LOGON_ACCOUNT": 0x20000,
-	"SMARTCARD_REQUIRED": 0x40000,
-	"TRUSTED_FOR_DELEGATION": 0x80000,
-	"NOT_DELEGATED": 0x100000,
-	"USE_DES_KEY_ONLY": 0x200000,
-	"DONT_REQ_PREAUTH": 0x400000,
-	"PASSWORD_EXPIRED": 0x800000,
-	"TRUSTED_TO_AUTH_FOR_DELEGATION": 0x1000000,
-	"PARTIAL_SECRETS_ACCOUNT": 0x04000000,
-}
-
-USER_LOCKED_FILTER = "(&(objectCategory=Person)(objectClass=user)(lockoutTime:1.2.840.113556.1.4.804:=4294967295))"
-GROUPS_FILTER = "(objectClass=group)"
-ZONES_FILTER = "(&(objectClass=dnsZone)(!(dc=RootDNSServers)))"
-ZONE_FILTER = "(objectClass=dnsNode)"
-USER_ALL_FILTER = "(&(objectCategory=Person)(objectClass=user))"
-USER_ACCOUNT_CONTROL_FILTER = "(&(objectCategory=Person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:={intval}))"
-USER_ACCOUNT_CONTROL_FILTER_NEG = "(&(objectCategory=Person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:={intval})))"
-COMPUTERS_FILTER = "(objectClass=computer)"
-GROUP_DN_FILTER = "(&(objectClass=group)(sAMAccountName={group}))"
-USER_DN_FILTER = "(&(objectClass=user)(objectCategory=Person)(sAMAccountName={username}))"
-USERS_IN_GROUP_FILTER = "(&(|(objectCategory=user)(objectCategory=group))(memberOf={group}))"
-USER_IN_GROUPS_FILTER = "(sAMAccountName={username})"
-DOMAIN_INFO_FILTER = "(objectClass=domain)"
-GPO_INFO_FILTER = "(objectCategory=groupPolicyContainer)"
-PSO_INFO_FILTER = "(objectClass=msDS-PasswordSettings)"
-TRUSTS_INFO_FILTER = "(objectCategory=trustedDomain)"
-OU_FILTER = "(objectClass=OrganizationalUnit)"
-
-PAGESIZE = 1000
-
-DOMAIN_PASSWORD_COMPLEX = 1
-DOMAIN_PASSWORD_NO_ANON_CHANGE = 2
-DOMAIN_PASSWORD_NO_CLEAR_CHANGE = 4
-DOMAIN_LOCKOUT_ADMINS = 8
-DOMAIN_PASSWORD_STORE_CLEARTEXT = 16
-DOMAIN_REFUSE_PASSWORD_CHANGE = 32
-
-WELL_KNOWN_SIDs = {
-	"S-1-5-32-544"	: r"BUILTIN\Administrators",
-	"S-1-5-32-545"	: r"BUILTIN\Users",
-	"S-1-5-32-546"	: r"BUILTIN\Guests",
-	"S-1-5-32-547"	: r"BUILTIN\Power Users",
-	"S-1-5-32-548"	: r"BUILTIN\Account Operators",
-	"S-1-5-32-549"	: r"BUILTIN\Server Operators",
-	"S-1-5-32-550"	: r"BUILTIN\Print Operators",
-	"S-1-5-32-551"	: r"BUILTIN\Backup Operators",
-	"S-1-5-32-552"	: r"BUILTIN\Replicators",
-	"S-1-5-64-10"	: r"BUILTIN\NTLM Authentication",
-	"S-1-5-64-14"	: r"BUILTIN\SChannel Authentication",
-	"S-1-5-64-21"	: r"BUILTIN\Digest Authentication",
-	"S-1-16-4096"	: r"BUILTIN\Low Mandatory Level",
-	"S-1-16-8192"	: r"BUILTIN\Medium Mandatory Level",
-	"S-1-16-8448"	: r"BUILTIN\Medium Plus Mandatory Level",
-	"S-1-16-12288"	: r"BUILTIN\High Mandatory Level",
-	"S-1-16-16384"	: r"BUILTIN\System Mandatory Level",
-	"S-1-16-20480"	: r"BUILTIN\Protected Process Mandatory Level",
-	"S-1-16-28672"	: r"BUILTIN\Secure Process Mandatory Level",
-	"S-1-5-32-554"	: r"BUILTIN\Pre-Windows 2000 Compatible Access",
-	"S-1-5-32-555"	: r"BUILTIN\Remote Desktop Users",
-	"S-1-5-32-556"	: r"BUILTIN\Network Configuration Operators",
-	"S-1-5-32-557"	: r"BUILTIN\Incoming Forest Trust Builders",
-	"S-1-5-32-558"	: r"BUILTIN\Performance Monitor Users",
-	"S-1-5-32-559"	: r"BUILTIN\Performance Log Users",
-	"S-1-5-32-560"	: r"BUILTIN\Windows Authorization Access Group",
-	"S-1-5-32-561"	: r"BUILTIN\Terminal Server License Servers",
-	"S-1-5-32-562"	: r"BUILTIN\Distributed COM Users",
-	"S-1-5-32-569"	: r"BUILTIN\Cryptographic Operators",
-	"S-1-5-32-573"	: r"BUILTIN\Event Log Readers",
-	"S-1-5-32-574"	: r"BUILTIN\Certificate Service DCOM Access",
-	"S-1-5-32-575"	: r"BUILTIN\RDS Remote Access Servers",
-	"S-1-5-32-576"	: r"BUILTIN\RDS Endpoint Servers",
-	"S-1-5-32-577"	: r"BUILTIN\RDS Management Servers",
-	"S-1-5-32-578"	: r"BUILTIN\Hyper-V Administrators",
-	"S-1-5-32-579"	: r"BUILTIN\Access Control Assistance Operators",
-	"S-1-5-32-580"	: r"BUILTIN\Remote Management Users",
-}
-
-FILETIME_FIELDS = [
-	"badPasswordTime",
-	"lastLogon",
-	"lastLogoff",
-	"lastLogonTimestamp",
-	"pwdLastSet",
-	"accountExpires",
-	"lockoutTime"
-]
-
-DATETIME_FIELDS = [
-	"dSCorePropagationData",
-	"whenChanged",
-	"whenCreated"
-]
-
-
-class Logger(object):
-
-	def __init__(self, outfile=None, quiet=False):
-		self.quiet = quiet
-		self.terminal = sys.__stdout__
-		self.log = open(outfile, 'w') if outfile else None
-
-	def write(self, message):
-		if not self.quiet:
-			self.terminal.write(message)
-		if self.log:
-			self.log.write(message)
-
-	def flush(self):
-		if self.log:
-			self.log.flush()
-		pass
-
-
-# This will go to utils.py
-def info(content):
-	sys.__stderr__.write("%s\n" % colored("[+] " + content, "blue", attrs=["bold"]))
-
-def error(content):
-	sys.__stderr__.write("%s\n" % colored("[!] " + content, "red", attrs=["bold"]))
-	sys.exit(1)
-
-# this will go somewhere
-class ResolverThread(object):
-
-	def __init__(self, dns_server):
-		self.dns_server = dns_server
-		self.resolutions = []
-
-	def resolve(self, hostname):
-		if self.dns_server:
-			resolver = dns.resolver.Resolver()
-			resolver.nameservers = [self.dns_server]
-		else:
-			resolver = dns.resolver
+	def __init__(self, ldap_connection, format="json"):
 		try:
-			answers = resolver.query(hostname, 'A', tcp=True)
-			for rdata in answers:
-				if rdata.address:
-					self.resolutions.append({
-						"hostname": hostname,
-						"address": rdata.address
-					})
-					break
-			else:
-				pass
-		except Exception:
-			pass
+			self.ldap = ldap_connection
+		except ActiveDirectoryLdapException as e:
+			error(e)
 
+		if format == "json":
+			self.__display = self.__display_json
 
-class ActiveDirectoryView(object):
+	def display(self, records, verbose=False, specify_group=True):
+		def default(o):
+			if isinstance(o, date) or isinstance(o, datetime):
+				return o.isoformat()
 
-	def __init__(self, username, password, server, fqdn, base, method="NTLM", verbose=False):
-		self.username = username
-		self.password = password
-		self.server = server
-		self.fqdn = fqdn
-		self.hostnames = []
-		self.verbose = verbose
+		if verbose:
+			self.__display(list(map(dict, records)), default)
+		else:
+			for record in records:
+				if "group" in record["objectClass"]:
+					print(record["sAMAccountName"] + (" (group)" if specify_group else ""))
+				elif "user" in record["objectClass"]:
+					print(record["sAMAccountName"])
+				elif "dnsNode" in record["objectClass"]:
+					print("{dc} {rec}".format(dc=record["dc"], rec=" ".join(record["dnsRecord"])))
+				elif "dnsZone" in record["objectClass"]:
+					print(record["dc"])
+				elif "domain" in record["objectClass"]:
+					print(record["dn"])
 
-		if method == "Kerberos":
-			server = Server(self.server)
-			self.ldap = Connection(server, authentication=SASL, sasl_mechanism=KERBEROS)
-		elif method == "NTLM":
-			server = Server(self.server, get_info=ALL)
-			self.ldap = Connection(server, user="%s\\%s" % (fqdn, username), password=password, authentication=NTLM, check_names=True)
+	def __display_json(self, records, default):
+		json_dump(records, sys.stdout, ensure_ascii=False, default=default, sort_keys=True, indent=2)
 
-		if not self.ldap.bind():
-			error("Unable to bind with provided information")
+	# LISTERS #
 
-		self.base_dn = base or ','.join(["dc=%s" % x for x in fqdn.split(".")])
-		self.search_scope = SUBTREE
+	def list_users(self, kwargs):
+		"""
+		List users according to a filter.
 
-	def query(self, ldapfilter, attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES], base=None, scope=None):
-		entry_generator = self.ldap.extend.standard.paged_search(
-			search_base=base or self.base_dn,
-			search_filter=ldapfilter,
-			search_scope=scope or self.search_scope,
-			attributes=attributes,
-			paged_size=PAGESIZE,
-			generator=True
-		)
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+			@filter:list = ["all", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired"]
+		"""
+		verbose = "verbose" in kwargs and kwargs["verbose"]
+		filter_ = kwargs["filter"] if "filter" in kwargs else "all"
 
-		result_set = []
-		for entry in entry_generator:
-			if "dn" in entry:
-				d = entry["attributes"]
-				d["dn"] = entry["dn"]
-				result_set.append(d)
+		if verbose:
+			attributes = ALL
+		else:
+			attributes = ["samAccountName", "objectClass"]
 
-		return result_set
+		if filter_ == "all":
+			results = self.ldap.query(USER_ALL_FILTER, attributes)
+		elif filter_ == "enabled":
+			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER_NEG.format(intval=USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]), attributes)
+		elif filter_ == "disabled":
+			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]), attributes)
+		elif filter_ == "locked":
+			results = self.ldap.query(USER_LOCKED_FILTER, attributes)
+		elif filter_ == "nopasswordexpire":
+			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]), attributes)
+		elif filter_ == "passwordexpired":
+			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["PASSWORD_EXPIRED"]), attributes)
 
-	def get_object(self, ldap_object):
-		results = self.query("(&(cn=*{ldap_object}*))".format(ldap_object=ldap_object))
-		for result in results:
-			self.display(result)
+		self.display(results, verbose)
 
-	def list_computers(self, resolve, dns_server):
-		self.hostnames = []
-		results = self.query(COMPUTERS_FILTER, ["name"])
+	def list_groups(self, kwargs):
+		"""
+		List the groups.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+		"""
+		verbose = "verbose" in kwargs and kwargs["verbose"]
+
+		if not verbose:
+			attributes = ["samAccountName", "objectClass"]
+		else:
+			attributes = ALL
+
+		self.display(self.ldap.query(GROUPS_FILTER, attributes), verbose, specify_group=False)
+
+	def list_computers(self, kwargs):
+		"""
+		List the computer hostnames and resolve them if --resolve is specify.
+
+		Arguments:
+			@resolve:bool
+				A resolution on all computer names will be performed
+			@dns:string
+				An optional DNS server to use for the resolution
+		"""
+		resolve = "resolve" in kwargs and kwargs["resolve"]
+		dns = kwargs["dns"] if "dns" in kwargs else ""
+
+		hostnames = []
+		results = self.ldap.query(COMPUTERS_FILTER, ["name"])
 		for result in results:
 			computer_name = result["name"]
-			self.hostnames.append("%s.%s" % (computer_name, self.fqdn))
+			hostnames.append("{hostname}.{fqdn}".format(hostname=computer_name, fqdn=self.ldap.fqdn))
 			# print only if resolution was not mandated
 			if not resolve:
-				print("%s.%s" % (computer_name, self.fqdn))
+				print("{hostname}.{fqdn}".format(hostname=computer_name, fqdn=self.ldap.fqdn))
 		# do the resolution
 		if resolve:
-			self.resolve(dns_server)
+			for computer in utils_resolve(hostnames, dns):
+				print("{addr:20} {name}".format(addr=computer["address"], name=computer["hostname"]))
 
-	def list_domain_policy(self):
+	def list_domain_policy(self, kwargs):
+		"""
+		Return the domain policy.
+		"""
 		FILETIME_TIMESTAMP_FIELDS = {
 			"lockOutObservationWindow": (60, "mins"),
 			"lockoutDuration": (60, "mins"),
@@ -338,7 +139,7 @@ class ActiveDirectoryView(object):
 			"forceLogoff": (60, "mins")
 		}
 		FIELDS_TO_PRINT = ["dc", "distinguishedName", "lockOutObservationWindow", "lockoutDuration", "lockoutThreshold", "maxPwdAge", "minPwdAge", "minPwdLength", "pwdHistoryLength", "pwdProperties"]
-		policy = self.query(DOMAIN_INFO_FILTER)
+		policy = self.ldap.query(DOMAIN_INFO_FILTER)
 		if policy:
 			policy = policy[0]
 			for field in FIELDS_TO_PRINT:
@@ -355,42 +156,17 @@ class ActiveDirectoryView(object):
 
 				print("%s: %s" % (field, val))
 
-
-	def resolve_sid(self, sid):
-		# Local SID
-		if sid in WELL_KNOWN_SIDs:
-			print(WELL_KNOWN_SIDs[sid])
-		elif validate_sid(sid):
-			results = self.query("(&(ObjectSid={sid}))".format(sid=sid))
-			if results and len(results) > 0:
-				self.display(results[0])
-		else:
-			error("Invalid SID")
-
-	def resolve_guid(self, guid):
-		if validate_guid(guid):
-			results = self.query("(&(ObjectGUID={guid}))".format(guid=guid))
-			if results and len(results) > 0:
-				self.display(results[0])
-		else:
-			error("Invalid GUID")
-
-	def get_gpo(self):
-		results = self.query(GPO_INFO_FILTER)
-		gpos = {}
-		for result in results:
-			gpos[result["cn"]] = result["displayName"]
-		return gpos
-
-	def list_gpo(self):
-		gpos = self.get_gpo()
-		for k, v in gpos.items():
-			print("%s: %s" % (k, v))
-
-	def list_ou(self):
-		results = self.query(OU_FILTER)
+	def list_ou(self, kwargs):
+		"""
+		Return the list of organizational units with linked GPO.
+		"""
 		cn_re = re_compile("{[^}]+}")
-		gpos = self.get_gpo()
+		results = self.ldap.query(GPO_INFO_FILTER, ["cn", "displayName"])
+		gpos = {}
+		for gpo in results:
+			gpos[gpo["cn"]] = gpo["displayName"]
+
+		results = self.ldap.query(OU_FILTER)
 		for result in results:
 			print(result["distinguishedName"])
 			if "gPLink" in result:
@@ -399,38 +175,18 @@ class ActiveDirectoryView(object):
 					print("[gPLink]")
 					print("* {}".format("\n* ".join([gpos[g] if g in gpos else g for g in guids])))
 
-	def unlock(self, username):
-		results = self.query(USER_DN_FILTER.format(username=username))
-		if len(results) != 1:
-			error("No or more than 1 users found, exiting")
-		else:
-			user = results[0]
-			info("Found user %s at DN %s" % (username, user["dn"]))
-			unlock = ad_unlock_account(self.ldap, user["dn"])
-			# goddamn, return value is either True or str...
-			if isinstance(unlock, bool):
-				info("User %s unlocked" % username)
-			else:
-				error("Unable to unlock %s, check privileges" % username)
+	def list_gpo(self, kwargs):
+		"""
+		Return the list of Group policy objects.
+		"""
+		results = self.ldap.query(GPO_INFO_FILTER, ["cn", "displayName"])
+		for gpo in results:
+			print("{cn}: {name}".format(cn=gpo["cn"], name=gpo["displayName"]))
 
-	def list_zones(self):
-		if not self.verbose:
-			attributes = ["dc", "objectClass"]
-		else:
-			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
-		results = self.query(ZONES_FILTER, attributes, base=','.join(["CN=MicrosoftDNS,DC=DomainDNSZones", self.base_dn]))
-		for result in results:
-			self.display(result)
-
-	def list_zone(self, zone):
-		try:
-			results = self.query(ZONE_FILTER, base=','.join(["DC=%s" % zone, "CN=MicrosoftDNS,DC=DomainDNSZones", self.base_dn]))
-			for result in results:
-				self.display(result)
-		except LDAPNoSuchObjectResult:
-			error("Zone %s does not exists" % zone)
-
-	def list_pso(self):
+	def list_pso(self, kwargs):
+		"""
+		List the Password Settings Objects.
+		"""
 		FILETIME_TIMESTAMP_FIELDS = {
 			"msDS-LockoutObservationWindow": (60, "mins"),
 			"msDS-MinimumPasswordAge": (86400, "days"),
@@ -450,7 +206,7 @@ class ActiveDirectoryView(object):
 			"msDS-MinimumPasswordAge",
 			"msDS-MaximumPasswordAge",
 		]
-		psos = self.query(PSO_INFO_FILTER)
+		psos = self.ldap.query(PSO_INFO_FILTER)
 		for policy in psos:
 			for field in FIELDS_TO_PRINT:
 				if isinstance(policy[field], list):
@@ -458,12 +214,14 @@ class ActiveDirectoryView(object):
 
 				if field in FILETIME_TIMESTAMP_FIELDS.keys():
 					val = int((fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
-					val = "%d %s" % (val, FILETIME_TIMESTAMP_FIELDS[field][1])
-			print("%s: %s" % (field, val))
+					val = "{val} {typ}".format(val=val, typ=FILETIME_TIMESTAMP_FIELDS[field][1])
+			print("{field}: {val}".format(field=field, val=val))
 
-	def list_trusts(self):
-		# python3: no tested
-		results = self.query(TRUSTS_INFO_FILTER)
+	def list_trusts(self, kwargs):
+		"""
+		List the domain's trust relationships.
+		"""
+		results = self.ldap.query(TRUSTS_INFO_FILTER)
 		FIELDS_TO_PRINT = ["dn", "cn", "name", "trustDirection", "trustPartner", "trustType", "trustAttributes", "flatName"]
 		for result in results:
 			for field in FIELDS_TO_PRINT:
@@ -485,147 +243,224 @@ class ActiveDirectoryView(object):
 							val = "Windows domain running Active Directory"
 						elif int(val) == 0x00000003:
 							val = "Non Windows domain"
-					print("%s: %s" % (field, val))
+					print("{field}: {val}".format(field=field, val=val))
 			print("")
 
-	def list_groups(self):
-		if not self.verbose:
-			attributes = ["samAccountName", "objectClass"]
+	def list_zones(self, kwargs):
+		"""
+		List the DNS zones configured in the Active Directory.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+		"""
+		verbose = "verbose" in kwargs and kwargs["verbose"]
+
+		if not verbose:
+			attributes = ["dc", "objectClass"]
 		else:
-			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+			attributes = ALL
 
-		results = self.query(GROUPS_FILTER, attributes)
-		for result in results:
-			self.display(result, specify_group=False)
+		self.display(
+			self.ldap.query(
+				ZONES_FILTER,
+				attributes, base=','.join(["CN=MicrosoftDNS,DC=DomainDNSZones", self.ldap.base_dn])
+			),
+			verbose
+		)
 
-	def list_users(self, filter_):
-		if not self.verbose:
-			attributes = ["samAccountName", "objectClass"]
+	# GETTERS #
+
+	def get_zone(self, kwargs):
+		"""
+		Return the records of a DNS zone.
+
+		Arguments:
+			#dns_zone:string
+				DNS zone to retrieve records
+		"""
+		dns_zone = kwargs["dns_zone"]
+		try:
+			results = self.ldap.query(
+				ZONE_FILTER,
+				base=','.join(["DC={}".format(dns_zone), "CN=MicrosoftDNS,DC=DomainDNSZones", self.ldap.base_dn])
+			)
+		except ActiveDirectoryView.ActiveDirectoryLdapException as e:
+			error(str(e))
 		else:
-			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+			self.display(results)
 
-		if filter_ == "all":
-			results = self.query(USER_ALL_FILTER)
-		elif filter_ == "enabled":
-			results = self.query(USER_ACCOUNT_CONTROL_FILTER_NEG.format(intval=USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]))
-		elif filter_ == "disabled":
-			results = self.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]))
-		elif filter_ == "locked":
-			results = self.query(USER_LOCKED_FILTER)
-		elif filter_ == "nopasswordexpire":
-			results = self.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]))
-		elif filter_ == "passwordexpired":
-			results = self.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["PASSWORD_EXPIRED"]))
+	def get_membersof(self, kwargs):
+		"""
+		List the members of `group`.
 
-		for result in results:
-			self.display(result)
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+			#group:string
+				Group to list members
+		"""
+		group = kwargs["group"]
+		verbose = "verbose" in kwargs and kwargs["verbose"]
 
-	def list_membersof(self, group):
-		# retrieve group DN
-		results = self.query(GROUP_DN_FILTER.format(group=group), ["distinguishedName"])
+		results = self.ldap.query(GROUP_DN_FILTER.format(group=group), ["distinguishedName"])
 		if results:
 			group_dn = results[0]["distinguishedName"]
 		else:
-			error("Group %s does not exists" % group)
-			exit(0)
-		results = self.query(USERS_IN_GROUP_FILTER.format(group=group_dn))
-		for result in results:
-			self.display(result)
+			error("Group {group} does not exists".format(group=group))
 
-	def list_membership(self, user):
-		# retrieve group DN
-		results = self.query(USER_IN_GROUPS_FILTER.format(username=user), ["memberOf"])
+		results = self.ldap.query(USERS_IN_GROUP_FILTER.format(group=group_dn))
+		self.display(results, verbose)
+
+	def get_memberships(self, kwargs):
+		"""
+		List the group for which `users` belongs to.
+
+		Arguments:
+			#user:string
+				User to list memberships
+		"""
+		user = kwargs["user"]
+
+		results = self.ldap.query(USER_IN_GROUPS_FILTER.format(username=user), ["memberOf"])
 		for result in results:
 			if "memberOf" in result:
 				for group_dn in result["memberOf"]:
 					print(group_dn)
 			else:
-				error("No groups for user %s" % user)
+				error("No groups for user {}".format(user))
 
-	def search(self, filter_, attr):
-		# custom search is custom, verbose on for printing
-		# all attributes
-		self.verbose = True
+	def get_from_sid(self, kwargs):
+		"""
+		Return the object associated with the given `sid`.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+			#sid:string
+				SID to search for
+		"""
+		sid = kwargs["sid"]
+		verbose = "verbose" in kwargs and kwargs["verbose"]
+
+		try:
+			self.display(self.ldap.resolve_sid(sid), verbose)
+		except ActiveDirectoryView.ActiveDirectoryLdapInvalidSID:
+			error("Invalid SID")
+
+	def get_from_guid(self, kwargs):
+		"""
+		Return the object associated with the given `guid`.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+			#guid:string
+				GUID to search for
+		"""
+		guid = kwargs["guid"]
+		verbose = "verbose" in kwargs and kwargs["verbose"]
+
+		try:
+			self.display(self.ldap.resolve_guid(guid), verbose)
+		except ActiveDirectoryView.ActiveDirectoryLdapInvalidGUID:
+			error("Invalid GUID")
+
+	def get_object(self, kwargs):
+		"""
+		Return the records containing `object` in a CN.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+			#object:string
+				Pattern to look for in CNs
+		"""
+		cn = kwargs["object"]
+		verbose = "verbose" in kwargs and kwargs["verbose"]
+
+		results = self.ldap.query("(&(cn=*{ldap_object}*))".format(ldap_object=cn))
+		self.display(results, verbose)
+
+	def search(self, kwargs):
+		"""
+		Query the LDAP with `filter` and retrieve ALL or `attributes` if specified.
+
+		Arguments:
+			#filter:string
+			#attributes:string
+		"""
+		attr = kwargs["attributes"]
+		filter_ = kwargs["filter"]
+
 		try:
 			if attr:
-				results = self.query(filter_, [attr])
+				results = self.ldap.query(filter_, [attr])
 			else:
-				results = self.query(filter_)
-			for result in results:
-				self.display(result)
+				results = self.ldap.query(filter_)
+			self.display(results, True)
 		except Exception as e:
-			# shit will be printed
 			error(e)
 
-	def resolve(self, dns_server):
-		pool = ThreadPool(20)
-		resolver_thread = ResolverThread(dns_server)
-		with tqdm(total=len(self.hostnames)) as pbar:
-			for _ in pool.imap_unordered(resolver_thread.resolve, tqdm(self.hostnames, desc="Resolution", bar_format="{desc} {n_fmt}/{total_fmt} hostnames")):
-				pbar.update()
-		pool.close()
-		pool.join()
-		for computer in resolver_thread.resolutions:
-			print("%s %s" % (computer["address"].ljust(20, " "), computer["hostname"]))
+	def all(self, kwargs):
+		"""
+		Collect and store computers, domain_policy, zones, gpo, groups, ou, users, trusts, pso information
 
-	def display(self, record):
-		def default(o):
-			if type(o) is datetime.date or type(o) is datetime.datetime:
-				return o.isoformat()
+		Arguments:
+			#output:string
+				File prefix for the files that will be created during the execution
+		"""
+		output = kwargs["output"]
+		kwargs["verbose"] = False
 
-		if self.verbose:
-			print(json.dumps(dict(record), ensure_ascii=False, default=default, sort_keys=True, indent=2))
-		else:
-			if "group" in record["objectClass"]:
-				print(record["sAMAccountName"] + " (group)")
-			elif "user" in record["objectClass"]:
-				print(record["sAMAccountName"])
-			elif "dnsNode" in record["objectClass"]:
-				print("%s %s" % (record["dc"], " ".join(record["dnsRecord"])))
-			elif "dnsZone" in record["objectClass"]:
-				print(record["dc"])
+		for command, method in self.get_commands(prefix="list_"):
+			info("Retrieving {command} output".format(command=command))
+			sys.stdout = Logger("{output}_{command}.lst".format(output=output, command=command), quiet=True)
+			getattr(self, method)(kwargs)
+
+			if self.has_option(method, "@verbose:bool"):
+				info("Retrieving {command} verbose output".format(command=command))
+				sys.stdout = Logger("{output}_{command}.json".format(output=output, command=command), quiet=True)
+				kwargs["verbose"] = True
+				getattr(self, method)(kwargs)
 
 
 if __name__ == "__main__":
-	parser = ArgumentParser("LDEEP - Deep LDAP inspection")
+
+	parser = ArgumentParser()
 	parser.add_argument("-d", "--fqdn", help="The domain FQDN (ex : domain.local)", required=True)
 	parser.add_argument("-s", "--ldapserver", help="The LDAP path (ex : ldap://corp.contoso.com:389)", required=True)
 	parser.add_argument("-b", "--base", default="", help="LDAP base for query")
-	parser.add_argument("-v", "--verbose", action="store_true", default=False, help="Results will contain full information")
-	parser.add_argument("--dns", help="An optional DNS server to use", default=False)
+	parser.add_argument("-o", "--outfile", default="", help="Store the results in a file")
 
-	authentication = parser.add_argument_group("Authentication")
-	authentication.add_argument("-u", "--username", help="The username")
-	authentication.add_argument("-p", "--password", help="The password or the corresponding NTLM hash")
-	authentication.add_argument("-k", "--kerberos", action="store_true", help="For Kerberos authentication, ticket file should be pointed by KRB5NAME env variable")
+	ntlm = parser.add_argument_group("NTLM authentication")
+	ntlm.add_argument("-u", "--username", help="The username")
+	ntlm.add_argument("-p", "--password", help="The password or the corresponding NTLM hash")
 
-	action = parser.add_argument_group("Action (exclusive)")
-	xgroup = action.add_mutually_exclusive_group(required=True)
-	xgroup.add_argument("--all", metavar="OUTFILE", help="Lists all things to OUTFILE_thing.lst")
-	xgroup.add_argument("--groups", action="store_true", help="Lists all available groups")
-	xgroup.add_argument("--users", nargs='?', const="all", action="store", choices=["all", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired"], help="Lists all available users")
-	xgroup.add_argument("--zones", action="store_true", help="Return configured DNS zones")
-	xgroup.add_argument("--zone", help="Return zone records")
-	xgroup.add_argument("--object", metavar="OBJECT", help="Return information on an object (group, computer, user, etc.)")
-	xgroup.add_argument("--computers", action="store_true", help="Lists all computers")
-	xgroup.add_argument("--sid", metavar="SID", help="Return the record associated to the SID")
-	xgroup.add_argument("--unlock", metavar="USER", help="Unlock the given user")
-	xgroup.add_argument("--guid", metavar="GUID", help="Return the record associated to the GUID")
-	xgroup.add_argument("--domain_policy", action="store_true", help="Print the domain policy")
-	xgroup.add_argument("--gpo", action="store_true", help="List GPO GUID and their name")
-	xgroup.add_argument("--ou", action="store_true", help="List OU and resolve linked GPO")
-	xgroup.add_argument("--pso", action="store_true", help="Dump Password Setting Object (PSO) containers")
-	xgroup.add_argument("--trusts", action="store_true", help="List domain trusts")
-	xgroup.add_argument("--members", metavar="GROUP", help="Returns users in a specific group")
-	xgroup.add_argument("--membership", metavar="USER", help="Returns all groups the users in member of")
-	xgroup.add_argument("--search", help="Custom LDAP filter")
+	kerberos = parser.add_argument_group("Kerberos authentication")
+	kerberos.add_argument("-k", "--kerberos", action="store_true", help="For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable")
 
-	parser.add_argument("--resolve", action="store_true", required=False, help="Performs a resolution on all computer names, should be used with --computers")
-	parser.add_argument("--attr", required=False, help="Filters output of --search")
-	parser.add_argument("-o", "--output", required=False, help="File for saving results", default=None)
+	sub = parser.add_subparsers(title="commands", dest="command", description="available commands")
+
+	# Registering commands
+	commands = {}
+	for command, method in Ldeep.get_commands(prefix="list_"):
+		Ldeep.set_subparser_for(command, method, sub)
+		commands[command] = method
+
+	for command, method in Ldeep.get_commands(prefix="get_"):
+		Ldeep.set_subparser_for(command, method, sub)
+		commands[command] = method
+
+	Ldeep.set_subparser_for("search", "search", sub)
+	commands["search"] = "search"
+
+	Ldeep.set_subparser_for("all", "all", sub)
+	commands["all"] = "all"
 
 	args = parser.parse_args()
 
+	# Authentication
 	method = "NTLM"
 	if args.kerberos:
 		method = "Kerberos"
@@ -634,81 +469,11 @@ if __name__ == "__main__":
 	else:
 		error("Lack of authentication options: either Kerberos or Username with Password (can be a NTLM hash).")
 
-	ad = ActiveDirectoryView(args.username, args.password, args.ldapserver, args.fqdn, args.base, method, args.verbose)
-	if args.all:
-		info("Getting all users")
-		sys.stdout = Logger("%s_all_users.lst" % args.all, quiet=True)
-		ad.list_users("all")
-		info("Getting enabled users")
-		sys.stdout = Logger("%s_enabled_users.lst" % args.all, quiet=True)
-		ad.list_users("enabled")
-		info("Getting disabled users")
-		sys.stdout = Logger("%s_disabled_users.lst" % args.all, quiet=True)
-		ad.list_users("disabled")
-		info("Getting locked users")
-		sys.stdout = Logger("%s_locked_users.lst" % args.all, quiet=True)
-		ad.list_users("locked")
-		info("Getting users with no password expiry")
-		sys.stdout = Logger("%s_nopasswordexpire_users.lst" % args.all, quiet=True)
-		ad.list_users("nopasswordexpire")
-		info("Getting users with password expired")
-		sys.stdout = Logger("%s_passwordexpired_users.lst" % args.all, quiet=True)
-		ad.list_users("passwordexpired")
-		info("Getting groups")
-		sys.stdout = Logger("%s_groups.lst" % args.all, quiet=True)
-		ad.list_groups()
-		info("Getting computers")
-		sys.stdout = Logger("%s_computers.lst" % args.all, quiet=True)
-		ad.list_computers(args.resolve, args.dns)
-		info("Getting organizational units")
-		sys.stdout = Logger("%s_ou.lst" % args.all, quiet=True)
-		ad.list_ou()
-		info("Getting Group Policy Objects")
-		sys.stdout = Logger("%s_gpo.lst" % args.all, quiet=True)
-		ad.list_gpo()
-		info("Getting Password Security Objects")
-		sys.stdout = Logger("%s_pso.lst" % args.all, quiet=True)
-		ad.list_pso()
-		info("Getting domain trusts")
-		sys.stdout = Logger("%s_trusts.lst" % args.all, quiet=True)
-		ad.list_trusts()
-		info("Getting domain policy")
-		sys.stdout = Logger("%s_domain_policy.lst" % args.all, quiet=True)
-		ad.list_domain_policy()
-		sys.exit(0)
+	# Output
+	if args.outfile:
+		sys.stdout = Logger(args.outfile, quiet=False)
 
-	sys.stdout = Logger(args.output)
-	if args.groups:
-		ad.list_groups()
-	elif args.users:
-		ad.list_users(args.users)
-	elif args.members:
-		ad.list_membersof(args.members)
-	elif args.sid:
-		ad.resolve_sid(args.sid)
-	elif args.guid:
-		ad.resolve_guid(args.guid)
-	elif args.object:
-		ad.get_object(args.object)
-	elif args.membership:
-		ad.list_membership(args.membership)
-	elif args.computers:
-		ad.list_computers(args.resolve, args.dns)
-	elif args.domain_policy:
-		ad.list_domain_policy()
-	elif args.gpo:
-		ad.list_gpo()
-	elif args.zones:
-		ad.list_zones()
-	elif args.zone:
-		ad.list_zone(args.zone)
-	elif args.ou:
-		ad.list_ou()
-	elif args.pso:
-		ad.list_pso()
-	elif args.trusts:
-		ad.list_trusts()
-	elif args.search:
-		ad.search(args.search, args.attr)
-	elif args.unlock:
-		ad.unlock(args.unlock)
+	# main
+	ldap_connection = ActiveDirectoryView(args.ldapserver, args.fqdn, args.base, args.username, args.password, method)
+	ldeep = Ldeep(ldap_connection)
+	getattr(ldeep, commands[args.command])(vars(args))

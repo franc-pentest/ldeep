@@ -18,31 +18,61 @@ class Command():
 			Arguments:
 				@argumentName:argumentType
 				@argumentName:argumentType = value
+				#argumentName:argumentType
 			}}}
+
+		@ means an optional argument that is not required.
+		# means a positional argument (should have a value if it's a none required option).
 		"""
 		result = {}
 		lines = docstring.replace("\t", "").split("\n")
-		result["help_line"] = lines[1]
-		if len(lines) > 3:  # third line should be empty
-			if lines[3] == "Arguments:":
-				result["arguments"] = dict()
-				for arg in lines[4:]:
-					if arg.startswith('@'):
-						arg = arg[1:]
-						variable, _, values = arg.partition(' = ')
+		help_line = ""
+		arguments = {}
+
+		s_argument = False
+		while lines != []:
+			line = lines.pop(0).strip()
+
+			if line.strip() == "":
+				continue
+
+			else:
+				if not s_argument:
+					if line == "Arguments:":
+						s_argument = True
+					else:
+						help_line += " " + line
+				else:
+					if line[0] in ["@", "#"]:
+						opt = line[0]
+						arg = line[1:]
+						variable, _, values = arg.partition(" = ")
 						name, _, typ = variable.partition(':')
+
 						alias = name[0]
-						arg_dict = {
+						arguments[name] = {
 							"alias": "-{alias}".format(alias=alias),
 							"name": "--{name}".format(name=name),
-							"type": typ
+							"type": typ,
+							"help_line": "",
 						}
 						if values and typ in ["list"]:
-							arg_dict["values"] = literal_eval(values.strip())
-						result["arguments"][name] = arg_dict
-					elif arg:  # if no prefix is found, read the help line of the previous argument.
-						result["arguments"][name]["help_line"] = arg
-		return result
+							arguments[name]["values"] = literal_eval(values)
+						elif values and typ == "string":
+							arguments[name]["value"] = values
+
+						if opt == "#":
+							arguments[name]["pos"] = True
+						elif opt == "@":
+							arguments[name]["pos"] = False
+
+					elif line:  # if no prefix is found, read the help line of the previous argument.
+						if not arguments[name]["help_line"]:
+							arguments[name]["help_line"] = line
+						else:
+							arguments[name]["help_line"] += " " + line
+
+		return {"help_line": help_line.strip(), "arguments": arguments}
 
 	@classmethod
 	def get_commands(cls, prefix=""):
@@ -52,7 +82,7 @@ class Command():
 		@prefix: filter object methods to return
 		"""
 		for method, func in getmembers(cls):
-			if method.startswith(prefix):
+			if method.startswith(prefix) and method != "get_commands":
 				command = findall("{}_?(.*)".format(prefix), method)[0]
 				yield (command, method)
 
@@ -63,10 +93,20 @@ class Command():
 		c = subparser.add_parser(command, help=args_info["help_line"])
 
 		if "arguments" in args_info:
-			for label, dic in args_info["arguments"].items():
-				if dic["type"] == "bool":
-					c.add_argument(dic["alias"], dic["name"], action="store_true", default=False, help=dic["help_line"])
-				elif dic["type"] == "string":
-					c.add_argument(dic["alias"], dic["name"], default="", help=dic["help_line"])
-				elif dic["type"] == "list" and dic["values"]:
-					c.add_argument(label, choices=dic["values"], default=dic["values"][0], nargs="?")
+			for label, arg in args_info["arguments"].items():
+				if arg["pos"]:
+					if arg["type"] in ["string", "int"]:
+						c.add_argument(label, help=arg["help_line"])
+				else:
+					if arg["type"] == "bool":
+						c.add_argument(arg["alias"], arg["name"], action="store_true", default=False, help=arg["help_line"])
+					elif arg["type"] == "string":
+						c.add_argument(arg["alias"], arg["name"], default="", help=arg["help_line"])
+					elif arg["type"] == "list" and arg["values"]:
+						c.add_argument(label, choices=arg["values"], default=arg["values"][0], nargs="?", help=arg["help_line"])
+					elif arg["type"] in ["string", "int"] and arg["value"]:
+						c.add_argument(label, default=arg["value"][0], nargs="?", help=arg["help_line"])
+
+	def has_option(self, method, option):
+		return option in getattr(self, method).__doc__
+

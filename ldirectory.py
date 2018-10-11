@@ -1,13 +1,54 @@
 
+from struct import unpack
+from socket import inet_ntoa
+
 from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
 from ldap3.protocol.formatters.validators import validate_sid, validate_guid
-from ldap3.core.exceptions import LDAPNoSuchObjectResult
+from ldap3.core.exceptions import LDAPNoSuchObjectResult, LDAPOperationResult
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
+
+from ldap_utils import DNS_TYPES, USER_ACCOUNT_CONTROL, WELL_KNOWN_SIDs
 
 
 PAGE_SIZE = 1000
 ALL = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+
+
+# define an ldap3-compliant formatters
+def format_userAccountControl(raw_value):
+	try:
+		val = int(raw_value)
+		result = []
+		for k, v in USER_ACCOUNT_CONTROL.items():
+			if v & val:
+				result.append(k)
+		return " | ".join(result)
+	except (TypeError, ValueError):  # expected exceptions↲
+		pass
+	except Exception:  # any other exception should be investigated, anyway the formatter return the raw_value
+		pass
+	return raw_value
+
+
+def format_dnsrecord(raw_value):
+	databytes = raw_value[0:4]
+	datalen, datatype = unpack("HH", databytes)
+	data = raw_value[24:24 + datalen]
+	for recordname, recordvalue in DNS_TYPES.items():
+		if recordvalue == datatype:
+			if recordname == "A":
+				target = inet_ntoa(data)
+			else:
+				# how, ugly
+				data = data.decode('unicode-escape')
+				target = ''.join([c for c in data if ord(c) > 31 or ord(c) == 9])
+			return "%s %s" % (recordname, target)
+
+
+import ldap3
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (format_userAccountControl, None)
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
 
 
 class ActiveDirectoryView(object):
@@ -77,20 +118,26 @@ class ActiveDirectoryView(object):
 
 		@return a list of records.
 		"""
-		entry_generator = self.ldap.extend.standard.paged_search(
-			search_base=base or self.base_dn,
-			search_filter=ldapfilter,
-			search_scope=scope or self.search_scope,
-			attributes=attributes,
-			paged_size=PAGE_SIZE,
-			generator=True
-		)
 		result_set = []
-		for entry in entry_generator:
-			if "dn" in entry:
-				d = entry["attributes"]
-				d["dn"] = entry["dn"]
-				result_set.append(d)
+		try:
+			entry_generator = self.ldap.extend.standard.paged_search(
+				search_base=base or self.base_dn,
+				search_filter=ldapfilter,
+				search_scope=scope or self.search_scope,
+				attributes=attributes,
+				paged_size=PAGE_SIZE,
+				generator=True
+			)
+
+			for entry in entry_generator:
+				if "dn" in entry:
+					d = entry["attributes"]
+					d["dn"] = entry["dn"]
+					result_set.append(d)
+
+		except LDAPOperationResult as e:
+			raise self.ActiveDirectoryLdapException(e)
+
 		return result_set
 
 	def resolve_sid(self, sid):
@@ -109,10 +156,9 @@ class ActiveDirectoryView(object):
 			print(WELL_KNOWN_SIDs[sid])
 		elif validate_sid(sid):
 			results = self.query("(&(ObjectSid={sid}))".format(sid=sid))
-			if results and len(results) > 0:
-				self.display(results[0])
-		else:
-			raise ActiveDirectoryLdapInvalidSID("SID: {sid}".format(sid=sid))
+			if results:
+				return results
+		raise self.ActiveDirectoryLdapInvalidSID("SID: {sid}".format(sid=sid))
 
 	def resolve_guid(self, guid):
 		"""
@@ -126,12 +172,9 @@ class ActiveDirectoryView(object):
 		if validate_guid(guid):
 			results = self.query("(&(ObjectGUID={guid}))".format(guid=guid))
 			# Normally only one result should have been retrieved:
-			if len(results) == 0:
-				return results[0]
-			else:
-				return []
-		else:
-			raise ActiveDirectoryLdapInvalidGUID("GUID: {guid}".format(guid=guid))
+			if results:
+				return results
+		raise self.ActiveDirectoryLdapInvalidGUID("GUID: {guid}".format(guid=guid))
 
 	def unlock(self, username):
 		"""
