@@ -2,10 +2,7 @@
 
 from sys import exit, stdout
 from argparse import ArgumentParser
-from json import dumps as json_dumps
-from inspect import getmembers
-from re import compile as re_compile
-from ast import literal_eval
+from json import dump as json_dump
 from math import fabs
 
 from datetime import date, datetime
@@ -14,49 +11,10 @@ from ldirectory import ActiveDirectoryView, ALL
 from utils import error, info, Logger
 from ldap_utils import *
 
-
-LIST_COMMANDS_REGEX = re_compile("list_(.*)")
-
-
-def parse_docstring(docstring):
-	"""
-	Parse a docstring to extract help and argument to generate a subparsers with arguments.
-	The expected format is (triple quotes are replaced by { and }):
-
-		{{{
-		Help line
-
-		Arguments:
-			@argumentName:argumentType
-			@argumentName:argumentType = value
-		}}}
-	"""
-	result = {}
-	lines = docstring.replace("\t", "").split("\n")
-	result["help_line"] = lines[1]
-	if len(lines) > 3:  # third line should be empty
-		if lines[3] == "Arguments:":
-			result["arguments"] = dict()
-			for arg in lines[4:]:
-				if arg.startswith('@'):
-					arg = arg[1:]
-					variable, _, values = arg.partition(' = ')
-					name, _, typ = variable.partition(':')
-					alias = name[0]
-					arg_dict = {
-						"alias": "-{alias}".format(alias=alias),
-						"name": "--{name}".format(name=name),
-						"type": typ
-					}
-					if values and typ in ["list"]:
-						arg_dict["values"] = literal_eval(values.strip())
-					result["arguments"][name] = arg_dict
-				elif arg:  # if no prefix is found, read the help line of the previous argument.
-					result["arguments"][name]["help_line"] = arg
-	return result
+from command import Command
 
 
-class Ldeep():
+class Ldeep(Command):
 
 	def __init__(self, ldap_connection, format="json"):
 		try:
@@ -87,7 +45,7 @@ class Ldeep():
 					print(record["dc"])
 
 	def __display_json(self, records, default):
-		print(json_dumps(records, ensure_ascii=False, default=default, sort_keys=True, indent=2))
+		json_dump(records, stdout, ensure_ascii=False, default=default, sort_keys=True, indent=2)
 
 	def list_users(self, kwargs):
 		"""
@@ -213,28 +171,9 @@ if __name__ == "__main__":
 	sub = parser.add_subparsers(title="commands", dest="command", description="available commands")
 
 	commands = {}
-	# Enumeration of list_* and get_* (Not yet implemented) Ldeep's methods
-	# For each method, creation of a subparser with the options contained in the docstring
-	for name, func in getmembers(Ldeep):
-		if name.startswith("list_"):
-
-			command_name = LIST_COMMANDS_REGEX.findall(name)[0]
-			commands[command_name] = name
-			# Parsing of the docstring to retrieve help line and arguments
-			args_info = parse_docstring(func.__doc__)
-			c = sub.add_parser(command_name, help=args_info["help_line"])
-
-			if "arguments" in args_info:
-				for label, dic in args_info["arguments"].items():
-					if dic["type"] == "bool":
-						c.add_argument(dic["alias"], dic["name"], action="store_true", default=False, help=dic["help_line"])
-					elif dic["type"] == "string":
-						c.add_argument(dic["alias"], dic["name"], default="", help=dic["help_line"])
-					elif dic["type"] == "list" and dic["values"]:
-						c.add_argument(label, choices=dic["values"], default=dic["values"][0], nargs="?")
-
-		elif name.startswith("get_*"):
-			raise NotImplemented
+	for command, method in Ldeep.get_commands(prefix="list_"):
+		Ldeep.set_subparser_for(command, method, sub)
+		commands[command] = method
 
 	args = parser.parse_args()
 
