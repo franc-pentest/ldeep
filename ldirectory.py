@@ -7,6 +7,7 @@ from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
 
 
 PAGE_SIZE = 1000
+ALL = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
 
 
 class ActiveDirectoryView(object):

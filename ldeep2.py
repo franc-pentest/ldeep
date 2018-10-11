@@ -10,8 +10,7 @@ from math import fabs
 
 from datetime import date, datetime
 
-from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
-from ldirectory import ActiveDirectoryView
+from ldirectory import ActiveDirectoryView, ALL
 from utils import error, info, Logger
 from ldap_utils import *
 
@@ -52,6 +51,8 @@ def parse_docstring(docstring):
 					if values and typ in ["list"]:
 						arg_dict["values"] = literal_eval(values.strip())
 					result["arguments"][name] = arg_dict
+				elif arg:  # if no prefix is found, read the help line of the previous argument.
+					result["arguments"][name]["help_line"] = arg
 	return result
 
 
@@ -94,6 +95,7 @@ class Ldeep():
 
 		Arguments:
 			@verbose:bool
+				Results will contain full information
 			@filter:list = ["all", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired"]
 		"""
 		verbose = "verbose" in kwargs and kwargs["verbose"]
@@ -103,7 +105,7 @@ class Ldeep():
 		filter_ = kwargs["filter"]
 
 		if verbose:
-			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+			attributes = ALL
 		else:
 			attributes = ["samAccountName", "objectClass"]
 
@@ -128,15 +130,41 @@ class Ldeep():
 
 		Arguments:
 			@verbose:bool
+				Results will contain full information
 		"""
 		verbose = "verbose" in kwargs and kwargs["verbose"]
 
 		if not verbose:
 			attributes = ["samAccountName", "objectClass"]
 		else:
-			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+			attributes = ALL
 
 		self.display(self.ldap.query(GROUPS_FILTER, attributes), verbose, specify_group=False)
+
+	def list_computers(self, kwargs):
+		"""
+		List the computer hostnames and resolve them if --resolve is specify.
+
+		Arguments:
+			@resolve:bool
+				A resolution on all computer names will be performed
+			@dns:string
+				An optional DNS server to use for the resolution
+		"""
+		resolve = "resolve" in kwargs and kwargs["resolve"]
+		dns = kwargs["dns"] if "dns" in kwargs else ""
+
+		self.hostnames = []
+		results = self.ldap.query(COMPUTERS_FILTER, ["name"])
+		for result in results:
+			computer_name = result["name"]
+			self.hostnames.append("{hostname}.{fqdn}".format(hostname=computer_name, fqdn=self.ldap.fqdn))
+			# print only if resolution was not mandated
+			if not resolve:
+				print("{hostname}.{fqdn}".format(hostname=computer_name, fqdn=self.ldap.fqdn))
+		# do the resolution
+		# if resolve:
+		# 	self.resolve(dns_server)
 
 	def list_domain_policy(self, kwargs):
 		"""
@@ -170,11 +198,10 @@ class Ldeep():
 
 if __name__ == "__main__":
 
-	parser = ArgumentParser("LDEEP - Deep LDAP inspection")
+	parser = ArgumentParser()
 	parser.add_argument("-d", "--fqdn", help="The domain FQDN (ex : domain.local)", required=True)
 	parser.add_argument("-s", "--ldapserver", help="The LDAP path (ex : ldap://corp.contoso.com:389)", required=True)
 	parser.add_argument("-b", "--base", default="", help="LDAP base for query")
-	parser.add_argument("--dns", help="An optional DNS server to use", default=False)
 
 	ntlm = parser.add_argument_group("NTLM authentication")
 	ntlm.add_argument("-u", "--username", help="The username")
@@ -186,7 +213,8 @@ if __name__ == "__main__":
 	sub = parser.add_subparsers(title="commands", dest="command", description="available commands")
 
 	commands = {}
-	# Enumeration of list_* and get_* (Not yet implemented) methods
+	# Enumeration of list_* and get_* (Not yet implemented) Ldeep's methods
+	# For each method, creation of a subparser with the options contained in the docstring
 	for name, func in getmembers(Ldeep):
 		if name.startswith("list_"):
 
@@ -199,7 +227,9 @@ if __name__ == "__main__":
 			if "arguments" in args_info:
 				for label, dic in args_info["arguments"].items():
 					if dic["type"] == "bool":
-						c.add_argument(dic["alias"], dic["name"], action="store_true", default=False)
+						c.add_argument(dic["alias"], dic["name"], action="store_true", default=False, help=dic["help_line"])
+					elif dic["type"] == "string":
+						c.add_argument(dic["alias"], dic["name"], default="", help=dic["help_line"])
 					elif dic["type"] == "list" and dic["values"]:
 						c.add_argument(label, choices=dic["values"], default=dic["values"][0], nargs="?")
 
