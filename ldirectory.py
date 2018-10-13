@@ -93,7 +93,7 @@ class ActiveDirectoryView(object):
 			server = Server(self.server)
 			self.ldap = Connection(server, authentication=SASL, sasl_mechanism=KERBEROS)
 		elif method == "NTLM":
-			server = Server(self.server, get_info=ALL)
+			server = Server(self.server)
 			self.ldap = Connection(
 				server,
 				user="{domain}\\{username}".format(domain=fqdn, username=username),
@@ -153,7 +153,6 @@ class ActiveDirectoryView(object):
 		"""
 		if sid in WELL_KNOWN_SIDs:
 			return WELL_KNOWN_SIDs[sid]
-			print(WELL_KNOWN_SIDs[sid])
 		elif validate_sid(sid):
 			results = self.query("(&(ObjectSid={sid}))".format(sid=sid))
 			if results:

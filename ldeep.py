@@ -344,7 +344,11 @@ class Ldeep(Command):
 		verbose = "verbose" in kwargs and kwargs["verbose"]
 
 		try:
-			self.display(self.ldap.resolve_sid(sid), verbose)
+			result = self.ldap.resolve_sid(sid)
+			if isinstance(result, str):
+				print(result)
+			else:
+				self.display(result, verbose)
 		except ActiveDirectoryView.ActiveDirectoryLdapInvalidSID:
 			error("Invalid SID")
 

@@ -22,7 +22,7 @@ class Command():
 			}}}
 
 		@ means an optional argument that is not required.
-		# means a positional argument (should have a value if it's a none required option).
+		# means a positional argument (should have a value if it's a not required option).
 		"""
 		result = {}
 		lines = docstring.replace("\t", "").split("\n")
@@ -79,7 +79,7 @@ class Command():
 		"""
 		Iterator yielding object methods with
 
-		@prefix: filter object methods to return
+		:prefix: filter object methods to return
 		"""
 		for method, func in getmembers(cls):
 			if method.startswith(prefix) and method != "get_commands":
@@ -88,6 +88,13 @@ class Command():
 
 	@classmethod
 	def set_subparser_for(cls, command, method, subparser):
+		"""
+		Take a subparser as argument and add arguments corresponding to command in it.
+
+		:command: name to display in the help
+		:method: function name corresponding to the command
+		:subparser: subparser object to add argument(s) to
+		"""
 		func = getattr(cls, method)
 		args_info = cls.__parse_docstring(func.__doc__)
 		c = subparser.add_parser(command, help=args_info["help_line"])
@@ -109,4 +116,3 @@ class Command():
 
 	def has_option(self, method, option):
 		return option in getattr(self, method).__doc__
-
