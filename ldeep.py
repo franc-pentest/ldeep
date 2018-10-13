@@ -286,7 +286,7 @@ class Ldeep(Command):
 				base=','.join(["DC={}".format(dns_zone), "CN=MicrosoftDNS,DC=DomainDNSZones", self.ldap.base_dn])
 			)
 		except ActiveDirectoryView.ActiveDirectoryLdapException as e:
-			error(str(e))
+			error(e)
 		else:
 			self.display(results)
 
@@ -386,7 +386,9 @@ class Ldeep(Command):
 		results = self.ldap.query("(&(cn=*{ldap_object}*))".format(ldap_object=cn))
 		self.display(results, verbose)
 
-	def search(self, kwargs):
+	# MISC #
+
+	def misc_search(self, kwargs):
 		"""
 		Query the LDAP with `filter` and retrieve ALL or `attributes` if specified.
 
@@ -406,7 +408,7 @@ class Ldeep(Command):
 		except Exception as e:
 			error(e)
 
-	def all(self, kwargs):
+	def misc_all(self, kwargs):
 		"""
 		Collect and store computers, domain_policy, zones, gpo, groups, ou, users, trusts, pso information
 
@@ -427,6 +429,44 @@ class Ldeep(Command):
 				sys.stdout = Logger("{output}_{command}.json".format(output=output, command=command), quiet=True)
 				kwargs["verbose"] = True
 				getattr(self, method)(kwargs)
+
+	# ACTION #
+
+	def action_unlock(self, kwargs):
+		"""
+		Unlock `user`.
+
+		Arguments:
+			#user:string
+				User to unlock
+		"""
+		user = kwargs["user"]
+
+		if self.ldap.unlock(user):
+			info("User {username} unlocked (or was already unlocked)".format(username=user))
+		else:
+			error("Unable to unlock {username}, check privileges".format(username=user))
+
+	def action_modify_password(self, kwargs):
+		"""
+		Change `user`'s password.
+
+		Arguments:
+			#user:string
+				User to unlock
+			#newpassword:string
+				New password
+			@currpassword:string
+				Current password
+		"""
+		user = kwargs["user"]
+		curr = kwargs["currpassword"] if kwargs["currpassword"] else None
+		new = kwargs["newpassword"]
+
+		if self.ldap.modify_password(user, curr, new):
+			info("Password of {username} changed".format(username=user))
+		else:
+			error("Unable to change {username}'s password, check privileges or try with ldaps://".format(username=user))
 
 
 if __name__ == "__main__":
@@ -456,11 +496,13 @@ if __name__ == "__main__":
 		Ldeep.set_subparser_for(command, method, sub)
 		commands[command] = method
 
-	Ldeep.set_subparser_for("search", "search", sub)
-	commands["search"] = "search"
+	for command, method in Ldeep.get_commands(prefix="misc_"):
+		Ldeep.set_subparser_for(command, method, sub)
+		commands[command] = method
 
-	Ldeep.set_subparser_for("all", "all", sub)
-	commands["all"] = "all"
+	for command, method in Ldeep.get_commands(prefix="action_"):
+		Ldeep.set_subparser_for(command, method, sub)
+		commands[command] = method
 
 	args = parser.parse_args()
 
@@ -478,6 +520,10 @@ if __name__ == "__main__":
 		sys.stdout = Logger(args.outfile, quiet=False)
 
 	# main
-	ldap_connection = ActiveDirectoryView(args.ldapserver, args.fqdn, args.base, args.username, args.password, method)
+	try:
+		ldap_connection = ActiveDirectoryView(args.ldapserver, args.fqdn, args.base, args.username, args.password, method)
+	except ActiveDirectoryView.ActiveDirectoryLdapException as e:
+		error(e)
+
 	ldeep = Ldeep(ldap_connection)
 	getattr(ldeep, commands[args.command])(vars(args))

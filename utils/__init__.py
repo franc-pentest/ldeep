@@ -8,11 +8,11 @@ import dns.resolver
 
 
 def info(content):
-	__stderr__.write("%s\n" % colored("[+] " + content, "blue", attrs=["bold"]))
+	__stderr__.write("%s\n" % colored("[+] " + str(content), "blue", attrs=["bold"]))
 
 
 def error(content):
-	__stderr__.write("%s\n" % colored("[!] " + content, "red", attrs=["bold"]))
+	__stderr__.write("%s\n" % colored("[!] " + str(content), "red", attrs=["bold"]))
 	exit(1)
 
 

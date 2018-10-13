@@ -1,14 +1,18 @@
 
 from struct import unpack
 from socket import inet_ntoa
+from ssl import CERT_NONE
 
 from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
 from ldap3.protocol.formatters.validators import validate_sid, validate_guid
 from ldap3.core.exceptions import LDAPNoSuchObjectResult, LDAPOperationResult
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
+from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 
-from ldap.constants import DNS_TYPES, USER_ACCOUNT_CONTROL, WELL_KNOWN_SIDs
+import ldap3
+
+from ldap.constants import *
 
 
 PAGE_SIZE = 1000
@@ -46,7 +50,6 @@ def format_dnsrecord(raw_value):
 			return "%s %s" % (recordname, target)
 
 
-import ldap3
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (format_userAccountControl, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
 
@@ -89,11 +92,21 @@ class ActiveDirectoryView(object):
 		self.fqdn = fqdn
 		self.hostnames = []
 
-		if method == "Kerberos":
+		if self.server.startswith("ldaps"):
+			server = Server(
+				self.server,
+				port=636,
+				use_ssl=True,
+				allowed_referral_hosts=[('*', True)],
+				tls=ldap3.Tls(validate=CERT_NONE),
+				get_info=ldap3.NONE
+			)
+		else:
 			server = Server(self.server)
+
+		if method == "Kerberos":
 			self.ldap = Connection(server, authentication=SASL, sasl_mechanism=KERBEROS)
 		elif method == "NTLM":
-			server = Server(self.server)
 			self.ldap = Connection(
 				server,
 				user="{domain}\\{username}".format(domain=fqdn, username=username),
@@ -102,7 +115,7 @@ class ActiveDirectoryView(object):
 			)
 
 		if not self.ldap.bind():
-			raise ActiveDirectoryLdapException("Unable to bind with provided information")
+			raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
 
 		self.base_dn = base or ','.join(["dc={}".format(d) for d in fqdn.split(".")])
 		self.search_scope = SUBTREE
@@ -189,10 +202,24 @@ class ActiveDirectoryView(object):
 			raise ActiveDirectoryLdapException("Zero or non uniq result")
 		else:
 			user = results[0]
-			info("Found user %s at DN %s" % (username, user["dn"]))
 			unlock = ad_unlock_account(self.ldap, user["dn"])
 			# goddamn, return value is either True or str...
-			if isinstance(unlock, bool):
-				return True
-			else:
-				return False
+			return isinstance(unlock, bool)
+
+	def modify_password(self, username, oldpassword, newpassword):
+		"""
+		Change the password of `username`.
+
+		@username: the username associated to the account to modify its password.
+		@newpassword: the new password to apply.
+		@oldpassword: the old password.
+
+		@throw ActiveDirectoryLdapException if the account does not exist or the query returns more than one result.
+		@return True if the account was successfully unlock or False otherwise.
+		"""
+		results = self.query(USER_DN_FILTER.format(username=username))
+		if len(results) != 1:
+			raise ActiveDirectoryLdapException("Zero or non uniq result")
+		else:
+			user = results[0]
+			return ad_modify_password(self.ldap, user["dn"], newpassword, None)
