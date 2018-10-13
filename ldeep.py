@@ -7,11 +7,11 @@ from math import fabs
 from re import compile as re_compile
 from datetime import date, datetime
 
-from ldirectory import ActiveDirectoryView, ALL
-from utils import error, info, Logger, resolve as utils_resolve
-from ldap_utils import *
+from ldap.activedirectory import ActiveDirectoryView, ALL
+from ldap.constants import *
 
-from command import Command
+from utils import error, info, Logger, resolve as utils_resolve
+from utils.command import Command
 
 import sys
 

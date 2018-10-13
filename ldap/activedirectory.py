@@ -8,7 +8,7 @@ from ldap3.protocol.formatters.validators import validate_sid, validate_guid
 from ldap3.core.exceptions import LDAPNoSuchObjectResult, LDAPOperationResult
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
 
-from ldap_utils import DNS_TYPES, USER_ACCOUNT_CONTROL, WELL_KNOWN_SIDs
+from ldap.constants import DNS_TYPES, USER_ACCOUNT_CONTROL, WELL_KNOWN_SIDs
 
 
 PAGE_SIZE = 1000
