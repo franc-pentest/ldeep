@@ -394,13 +394,15 @@ class Ldeep(Command):
 
 		Arguments:
 			#filter:string
-			#attributes:string
+				LDAP filter to search for
+			#attributes:string = ALL
+				Comma separated list of attributes to display, ALL for every possible attribute
 		"""
 		attr = kwargs["attributes"]
 		filter_ = kwargs["filter"]
 
 		try:
-			if attr:
+			if attr and attr != "ALL":
 				results = self.ldap.query(filter_, [attr])
 			else:
 				results = self.ldap.query(filter_)
@@ -456,12 +458,14 @@ class Ldeep(Command):
 				User to unlock
 			#newpassword:string
 				New password
-			@currpassword:string
+			#currpassword:string = None
 				Current password
 		"""
 		user = kwargs["user"]
-		curr = kwargs["currpassword"] if kwargs["currpassword"] else None
 		new = kwargs["newpassword"]
+		curr = kwargs["currpassword"] if kwargs["currpassword"] else None
+		if curr == "None":
+			curr = None
 
 		if self.ldap.modify_password(user, curr, new):
 			info("Password of {username} changed".format(username=user))

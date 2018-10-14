@@ -30,7 +30,23 @@ def format_userAccountControl(raw_value):
 		return " | ".join(result)
 	except (TypeError, ValueError):  # expected exceptions↲
 		pass
-	except Exception:  # any other exception should be investigated, anyway the formatter return the raw_value
+	except Exception:  # any other exception should be investigated, anyway the formatters return the raw_value
+		pass
+	return raw_value
+
+
+# define an ldap3-compliant formatters
+def format_samAccountType(raw_value):
+	try:
+		val = int(raw_value)
+		result = []
+		for k, v in SAM_ACCOUNT_TYPE.items():
+			if v & val:
+				result.append(k)
+		return " | ".join(result)
+	except (TypeError, ValueError):  # expected exceptions↲
+		pass
+	except Exception:  # any other exception should be investigated, anyway the formatter returns the raw_value
 		pass
 	return raw_value
 
@@ -51,6 +67,7 @@ def format_dnsrecord(raw_value):
 
 
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (format_userAccountControl, None)
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.302"] = (format_samAccountType, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
 
 

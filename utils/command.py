@@ -19,6 +19,7 @@ class Command():
 				@argumentName:argumentType
 				@argumentName:argumentType = value
 				#argumentName:argumentType
+				#argumentName:argumentType = value
 			}}}
 
 		@ means an optional argument that is not required.
@@ -102,17 +103,19 @@ class Command():
 		if "arguments" in args_info:
 			for label, arg in args_info["arguments"].items():
 				if arg["pos"]:
-					if arg["type"] in ["string", "int"]:
+					if arg["type"] in ["string", "int"] and "value" in arg:
+						c.add_argument(label, nargs='?', default=arg["value"], help=arg["help_line"])
+					else:
 						c.add_argument(label, help=arg["help_line"])
 				else:
 					if arg["type"] == "bool":
 						c.add_argument(arg["alias"], arg["name"], action="store_true", default=False, help=arg["help_line"])
+					elif arg["type"] in ["string", "int"] and "value" in arg:
+						c.add_argument(label, default=arg["value"][0], nargs="?", help=arg["help_line"])
 					elif arg["type"] == "string":
 						c.add_argument(arg["alias"], arg["name"], default="", help=arg["help_line"])
-					elif arg["type"] == "list" and arg["values"]:
+					elif arg["type"] == "list" and "values" in arg:
 						c.add_argument(label, choices=arg["values"], default=arg["values"][0], nargs="?", help=arg["help_line"])
-					elif arg["type"] in ["string", "int"] and arg["value"]:
-						c.add_argument(label, default=arg["value"][0], nargs="?", help=arg["help_line"])
 
 	def has_option(self, method, option):
 		return option in getattr(self, method).__doc__
