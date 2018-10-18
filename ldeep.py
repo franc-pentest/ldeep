@@ -61,8 +61,8 @@ class Ldeep(Command):
 				Results will contain full information
 			@filter:list = ["all", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired"]
 		"""
-		verbose = "verbose" in kwargs and kwargs["verbose"]
-		filter_ = kwargs["filter"] if "filter" in kwargs else "all"
+		verbose = kwargs.get("verbose", False)
+		filter_ = kwargs.get("filter", "all")
 
 		if verbose:
 			attributes = ALL
@@ -92,7 +92,7 @@ class Ldeep(Command):
 			@verbose:bool
 				Results will contain full information
 		"""
-		verbose = "verbose" in kwargs and kwargs["verbose"]
+		verbose = kwargs.get("verbose", False)
 
 		if not verbose:
 			attributes = ["samAccountName", "objectClass"]
@@ -112,7 +112,7 @@ class Ldeep(Command):
 				An optional DNS server to use for the resolution
 		"""
 		resolve = "resolve" in kwargs and kwargs["resolve"]
-		dns = kwargs["dns"] if "dns" in kwargs else ""
+		dns = kwargs.get("dns", "")
 
 		hostnames = []
 		results = self.ldap.query(COMPUTERS_FILTER, ["name"])
@@ -254,7 +254,7 @@ class Ldeep(Command):
 			@verbose:bool
 				Results will contain full information
 		"""
-		verbose = "verbose" in kwargs and kwargs["verbose"]
+		verbose = kwargs.get("verbose", False)
 
 		if not verbose:
 			attributes = ["dc", "objectClass"]
@@ -301,7 +301,7 @@ class Ldeep(Command):
 				Group to list members
 		"""
 		group = kwargs["group"]
-		verbose = "verbose" in kwargs and kwargs["verbose"]
+		verbose = kwargs.get("verbose", False)
 
 		results = self.ldap.query(GROUP_DN_FILTER.format(group=group), ["distinguishedName"])
 		if results:
@@ -341,7 +341,7 @@ class Ldeep(Command):
 				SID to search for
 		"""
 		sid = kwargs["sid"]
-		verbose = "verbose" in kwargs and kwargs["verbose"]
+		verbose = kwargs.get("verbose", False)
 
 		try:
 			result = self.ldap.resolve_sid(sid)
@@ -363,7 +363,7 @@ class Ldeep(Command):
 				GUID to search for
 		"""
 		guid = kwargs["guid"]
-		verbose = "verbose" in kwargs and kwargs["verbose"]
+		verbose = kwargs.get("verbose", False)
 
 		try:
 			self.display(self.ldap.resolve_guid(guid), verbose)
@@ -380,10 +380,10 @@ class Ldeep(Command):
 			#object:string
 				Pattern to look for in CNs
 		"""
-		cn = kwargs["object"]
-		verbose = "verbose" in kwargs and kwargs["verbose"]
+		anr = kwargs["object"]
+		verbose = kwargs.get("verbose", False)
 
-		results = self.ldap.query("(&(cn=*{ldap_object}*))".format(ldap_object=cn))
+		results = self.ldap.query("(&(anr={ldap_object}))".format(ldap_object=anr))
 		self.display(results, verbose)
 
 	# MISC #
@@ -463,7 +463,7 @@ class Ldeep(Command):
 		"""
 		user = kwargs["user"]
 		new = kwargs["newpassword"]
-		curr = kwargs["currpassword"] if kwargs["currpassword"] else None
+		curr = kwargs.get("currpassword", None)
 		if curr == "None":
 			curr = None
 
