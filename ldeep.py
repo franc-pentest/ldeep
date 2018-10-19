@@ -59,7 +59,7 @@ class Ldeep(Command):
 		Arguments:
 			@verbose:bool
 				Results will contain full information
-			@filter:list = ["all", "spn", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired"]
+			@filter:list = ["all", "spn", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired", "nokrbpreauth"]
 		"""
 		verbose = kwargs.get("verbose", False)
 		filter_ = kwargs.get("filter", "all")
@@ -83,6 +83,8 @@ class Ldeep(Command):
 			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]), attributes)
 		elif filter_ == "passwordexpired":
 			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["PASSWORD_EXPIRED"]), attributes)
+		elif filter_ == "nokrbpreauth":
+			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["DONT_REQ_PREAUTH"]), attributes)
 
 		self.display(results, verbose)
 
