@@ -59,7 +59,7 @@ class Ldeep(Command):
 		Arguments:
 			@verbose:bool
 				Results will contain full information
-			@filter:list = ["all", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired"]
+			@filter:list = ["all", "spn", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired"]
 		"""
 		verbose = kwargs.get("verbose", False)
 		filter_ = kwargs.get("filter", "all")
@@ -71,6 +71,8 @@ class Ldeep(Command):
 
 		if filter_ == "all":
 			results = self.ldap.query(USER_ALL_FILTER, attributes)
+		elif filter_ == "spn":
+			results = self.ldap.query(USER_SPN_FILTER, attributes)
 		elif filter_ == "enabled":
 			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER_NEG.format(intval=USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]), attributes)
 		elif filter_ == "disabled":
