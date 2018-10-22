@@ -437,6 +437,7 @@ class Ldeep(Command):
 				sys.stdout = Logger("{output}_{command}.json".format(output=output, command=command), quiet=True)
 				kwargs["verbose"] = True
 				getattr(self, method)(kwargs)
+				kwargs["verbose"] = False
 
 	# ACTION #
 
