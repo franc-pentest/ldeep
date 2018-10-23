@@ -62,10 +62,21 @@ INSTALL
 
 	pip3 install ldeep
 
-====
-TODO
-====
+========
+Upcoming
+========
 
 * Proper DNS zone enumeration
 * Project tree
+* Python package
+* Useful Kerberos delegation information
 * Any ideas ?
+
+================
+Related projects
+================
+
+* https://github.com/SecureAuthCorp/impacket
+* https://github.com/ropnop/windapsearch
+* https://github.com/shellster/LDAPPER
+
