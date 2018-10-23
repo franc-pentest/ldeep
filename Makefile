@@ -9,7 +9,14 @@ $(EXEC): $(SRC)
 	pex -r requirements.txt --disable-cache -f dist/ -o $@ -e ldeep.__main__ ldeep
 
 release: $(SRC)
+	git tag $(cat VERSION)
+	git push $(cat VERSION)
 	python3 setup.py sdist
+	twine upload dist/*
+
+release-test: $(SRC)
+	python3 setup.py sdist
+	twine upload --repository testpypi dist/*
 
 clean:
 	@rm -rf build/ dist/
