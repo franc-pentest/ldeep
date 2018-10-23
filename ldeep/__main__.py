@@ -7,11 +7,11 @@ from math import fabs
 from re import compile as re_compile
 from datetime import date, datetime
 
-from ldap.activedirectory import ActiveDirectoryView, ALL
-from ldap.constants import *
+from ldeep.ldap.activedirectory import ActiveDirectoryView, ALL
+from ldeep.ldap.constants import *
 
-from utils import error, info, Logger, resolve as utils_resolve
-from utils.command import Command
+from ldeep.utils import error, info, Logger, resolve as utils_resolve
+from ldeep.utils.command import Command
 
 import sys
 
@@ -480,8 +480,7 @@ class Ldeep(Command):
 			error("Unable to change {username}'s password, check privileges or try with ldaps://".format(username=user))
 
 
-if __name__ == "__main__":
-
+def main():
 	parser = ArgumentParser()
 	parser.add_argument("-d", "--fqdn", help="The domain FQDN (ex : domain.local)", required=True)
 	parser.add_argument("-s", "--ldapserver", help="The LDAP path (ex : ldap://corp.contoso.com:389)", required=True)
@@ -538,3 +537,6 @@ if __name__ == "__main__":
 
 	ldeep = Ldeep(ldap_connection)
 	getattr(ldeep, commands[args.command])(vars(args))
+
+if __name__ == "__main__":
+	main()

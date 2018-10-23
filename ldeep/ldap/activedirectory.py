@@ -1,4 +1,3 @@
-
 from struct import unpack
 from socket import inet_ntoa
 from ssl import CERT_NONE
@@ -12,7 +11,7 @@ from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 
 import ldap3
 
-from ldap.constants import *
+from ldeep.ldap.constants import *
 
 
 PAGE_SIZE = 1000
