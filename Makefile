@@ -9,8 +9,8 @@ $(EXEC): $(SRC)
 	pex -r requirements.txt --disable-cache -f dist/ -o $@ -e ldeep.__main__ ldeep
 
 release: $(SRC)
-	git tag $(cat VERSION)
-	git push $(cat VERSION)
+	git tag $(shell cat VERSION)
+	git push $(shell cat VERSION)
 	python3 setup.py sdist
 	twine upload dist/*
 
