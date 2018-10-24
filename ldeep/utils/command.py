@@ -59,7 +59,7 @@ class Command():
 						}
 						if values and typ in ["list"]:
 							arguments[name]["values"] = literal_eval(values)
-						elif values and typ == "string":
+						elif values and typ in ["string", "int"]:
 							arguments[name]["value"] = values
 
 						if opt == "#":
@@ -111,8 +111,8 @@ class Command():
 					if arg["type"] == "bool":
 						c.add_argument(arg["alias"], arg["name"], action="store_true", default=False, help=arg["help_line"])
 					elif arg["type"] in ["string", "int"] and "value" in arg:
-						c.add_argument(label, default=arg["value"][0], nargs="?", help=arg["help_line"])
-					elif arg["type"] == "string":
+						c.add_argument(arg["alias"], arg["name"], default=arg["value"], help=arg["help_line"])
+					elif arg["type"] in ["string", "int"]:
 						c.add_argument(arg["alias"], arg["name"], default="", help=arg["help_line"])
 					elif arg["type"] == "list" and "values" in arg:
 						c.add_argument(label, choices=arg["values"], default=arg["values"][0], nargs="?", help=arg["help_line"])
