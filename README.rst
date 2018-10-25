@@ -4,7 +4,7 @@ LDEEP
 
 Help is self-explanatory. Let's check it out::
 
-	usage: ldeep.py [-h] -d FQDN -s LDAPSERVER [-b BASE] [-o OUTFILE]
+	usage: ldeep [-h] -d FQDN -s LDAPSERVER [-b BASE] [-o OUTFILE]
 					[-u USERNAME] [-p PASSWORD] [-k]
 					{computers,domain_policy,gpo,groups,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,zone,search,all}
 					...
@@ -61,6 +61,103 @@ INSTALL
 ``ldeep`` is Python3 only.::
 
 	pip3 install ldeep
+
+=====
+USAGE
+=====
+
+Listing users without verbosity::
+
+	$ ldeep -u Administrator -p 'password' -d winlab.local -s ldap://10.0.0.1 users
+	userspn2
+	userspn1
+	gobobo
+	test
+	krbtgt
+	DefaultAccount
+	Guest
+	Administrator
+
+
+Listing users with reversible password encryption enable and with verbosity::
+
+	$ ldeep -u Administrator -p 'password' -d winlab.local -s ldap://10.0.0.1 users reversible -v
+	[
+	  {
+	    "accountExpires": "9999-12-31T23:59:59.999999",
+	    "badPasswordTime": "1601-01-01T00:00:00+00:00",
+	    "badPwdCount": 0,
+	    "cn": "User SPN1",
+	    "codePage": 0,
+	    "countryCode": 0,
+	    "dSCorePropagationData": [
+	      "1601-01-01T00:00:00+00:00"
+	    ],
+	    "displayName": "User SPN1",
+	    "distinguishedName": "CN=User SPN1,CN=Users,DC=winlab,DC=local",
+	    "dn": "CN=User SPN1,CN=Users,DC=winlab,DC=local",
+	    "givenName": "User",
+	    "instanceType": 4,
+	    "lastLogoff": "1601-01-01T00:00:00+00:00",
+	    "lastLogon": "1601-01-01T00:00:00+00:00",
+	    "logonCount": 0,
+	    "msDS-SupportedEncryptionTypes": 0,
+	    "name": "User SPN1",
+	    "objectCategory": "CN=Person,CN=Schema,CN=Configuration,DC=winlab,DC=local",
+	    "objectClass": [
+	      "top",
+	      "person",
+	      "organizationalPerson",
+	      "user"
+	    ],
+	    "objectGUID": "{593cb08f-3cc5-431a-b3d7-9fbad4511b1e}",
+	    "objectSid": "S-1-5-21-3640577749-2924176383-3866485758-1112",
+	    "primaryGroupID": 513,
+	    "pwdLastSet": "2018-10-13T12:19:30.099674+00:00",
+	    "sAMAccountName": "userspn1",
+	    "sAMAccountType": "SAM_GROUP_OBJECT | SAM_NON_SECURITY_GROUP_OBJECT | SAM_ALIAS_OBJECT | SAM_NON_SECURITY_ALIAS_OBJECT | SAM_USER_OBJECT | SAM_NORMAL_USER_ACCOUNT | SAM_MACHINE_ACCOUNT | SAM_TRUST_ACCOUNT | SAM_ACCOUNT_TYPE_MAX",
+	    "servicePrincipalName": [
+	      "HOST/blah"
+	    ],
+	    "sn": "SPN1",
+	    "uSNChanged": 115207,
+	    "uSNCreated": 24598,
+	    "userAccountControl": "ENCRYPTED_TEXT_PWD_ALLOWED | NORMAL_ACCOUNT | DONT_REQ_PREAUTH",
+	    "userPrincipalName": "userspn1@winlab.local",
+	    "whenChanged": "2018-10-22T18:04:43+00:00",
+	    "whenCreated": "2018-10-13T12:19:30+00:00"
+	  }
+	]
+
+Listing GPOs::
+
+	$ ldeep -u Administrator -p 'password' -d winlab.local -s ldap://10.0.0.1 gpo
+	{6AC1786C-016F-11D2-945F-00C04fB984F9}: Default Domain Controllers Policy
+	{31B2F340-016D-11D2-945F-00C04FB984F9}: Default Domain Policy
+
+Getting all things::
+
+	$ ldeep -u Administrator -p 'password' -d winlab.local -s ldap://10.0.0.1 all /tmp/winlab.local_dump
+	[+] Retrieving computers output
+	[+] Retrieving domain_policy output
+	[+] Retrieving gpo output
+	[+] Retrieving groups output
+	[+] Retrieving groups verbose output
+	[+] Retrieving ou output
+	[+] Retrieving pso output
+	[+] Retrieving trusts output
+	[+] Retrieving users output
+	[+] Retrieving users verbose output
+	[+] Retrieving zones output
+	[+] Retrieving zones verbose output
+
+Using this last command line switch, you have persistent output in both verbose and non-verbose mode saved::
+
+	$ ls winlab.local_dump_*
+	winlab.local_dump_computers.lst      winlab.local_dump_groups.json  winlab.local_dump_pso.lst     winlab.local_dump_users.lst
+	winlab.local_dump_domain_policy.lst  winlab.local_dump_groups.lst   winlab.local_dump_trusts.lst  winlab.local_dump_zones.json
+	winlab.local_dump_gpo.lst            winlab.local_dump_ou.lst       winlab.local_dump_users.json  winlab.local_dump_zones.lst
+
 
 ========
 Upcoming
