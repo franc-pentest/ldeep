@@ -535,8 +535,11 @@ def main():
 	except ActiveDirectoryView.ActiveDirectoryLdapException as e:
 		error(e)
 
-	ldeep = Ldeep(ldap_connection)
-	getattr(ldeep, commands[args.command])(vars(args))
+	if args.command:
+		ldeep = Ldeep(ldap_connection)
+		getattr(ldeep, commands[args.command])(vars(args))
+	else:
+		parser.print_usage()
 
 
 if __name__ == "__main__":

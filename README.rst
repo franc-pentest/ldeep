@@ -167,7 +167,7 @@ Upcoming
 * Project tree
 * Python package
 * Useful Kerberos delegation information
-* Any ideas ?
+* Any ideas?
 
 ================
 Related projects
