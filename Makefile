@@ -10,7 +10,7 @@ $(EXEC): $(SRC)
 
 release: $(SRC)
 	git tag $(shell cat VERSION)
-	git push $(shell cat VERSION)
+	git push origin $(shell cat VERSION)
 	python3 setup.py sdist
 	twine upload dist/*
 
