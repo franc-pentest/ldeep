@@ -6,12 +6,12 @@ from json import dump as json_dump
 from math import fabs
 from re import compile as re_compile
 from datetime import date, datetime
+from commandparse import Command
 
 from ldeep.ldap.activedirectory import ActiveDirectoryView, ALL
 from ldeep.ldap.constants import *
 
 from ldeep.utils import error, info, Logger, resolve as utils_resolve
-from ldeep.utils.command import Command
 
 import sys
 
@@ -21,7 +21,7 @@ class Ldeep(Command):
 	def __init__(self, ldap_connection, format="json"):
 		try:
 			self.ldap = ldap_connection
-		except ActiveDirectoryLdapException as e:
+		except ActiveDirectoryView.ActiveDirectoryLdapException as e:
 			error(e)
 
 		if format == "json":
@@ -59,7 +59,7 @@ class Ldeep(Command):
 		Arguments:
 			@verbose:bool
 				Results will contain full information
-			@filter:list = ["all", "spn", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired", "nokrbpreauth", "reversible"]
+			@filter:string = ["all", "spn", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired", "nokrbpreauth", "reversible"]
 		"""
 		verbose = kwargs.get("verbose", False)
 		filter_ = kwargs.get("filter", "all")
@@ -87,6 +87,8 @@ class Ldeep(Command):
 			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["DONT_REQ_PREAUTH"]), attributes)
 		elif filter_ == "reversible":
 			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["ENCRYPTED_TEXT_PWD_ALLOWED"]), attributes)
+		else:
+			return None
 
 		self.display(results, verbose)
 
@@ -401,7 +403,7 @@ class Ldeep(Command):
 		Arguments:
 			#filter:string
 				LDAP filter to search for
-			#attributes:string = ALL
+			#attributes:string = 'ALL'
 				Comma separated list of attributes to display, ALL for every possible attribute
 		"""
 		attr = kwargs["attributes"]
@@ -429,15 +431,30 @@ class Ldeep(Command):
 
 		for command, method in self.get_commands(prefix="list_"):
 			info("Retrieving {command} output".format(command=command))
-			sys.stdout = Logger("{output}_{command}.lst".format(output=output, command=command), quiet=True)
-			getattr(self, method)(kwargs)
+			if self.has_option(method, "filter"):
+				filter_ = self.retrieve_default_val_for_arg(method, "filter")
+				for f in filter_:
+					sys.stdout = Logger("{output}_{command}_{filter}.lst".format(output=output, command=command, filter=f), quiet=True)
+					kwargs["filter"] = f
+					getattr(self, method)(kwargs)
 
-			if self.has_option(method, "@verbose:bool"):
-				info("Retrieving {command} verbose output".format(command=command))
-				sys.stdout = Logger("{output}_{command}.json".format(output=output, command=command), quiet=True)
-				kwargs["verbose"] = True
+					if self.has_option(method, "verbose"):
+						info("Retrieving {command} verbose output".format(command=command))
+						sys.stdout = Logger("{output}_{command}_{filter}.json".format(output=output, command=command, filter=f), quiet=True)
+						kwargs["verbose"] = True
+						getattr(self, method)(kwargs)
+						kwargs["verbose"] = False
+				kwargs["filter"] = None
+			else:
+				sys.stdout = Logger("{output}_{command}.lst".format(output=output, command=command), quiet=True)
 				getattr(self, method)(kwargs)
-				kwargs["verbose"] = False
+
+				if self.has_option(method, "verbose"):
+					info("Retrieving {command} verbose output".format(command=command))
+					sys.stdout = Logger("{output}_{command}.json".format(output=output, command=command), quiet=True)
+					kwargs["verbose"] = True
+					getattr(self, method)(kwargs)
+					kwargs["verbose"] = False
 
 	# ACTION #
 
@@ -537,7 +554,7 @@ def main():
 
 	if args.command:
 		ldeep = Ldeep(ldap_connection)
-		getattr(ldeep, commands[args.command])(vars(args))
+		ldeep.dispatch_command(commands, args)
 	else:
 		parser.print_usage()
 
