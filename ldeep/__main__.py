@@ -30,7 +30,6 @@ class Ldeep(Command):
 
 	def display(self, records, verbose=False, specify_group=True):
 		def default(o):
-			print(type(o))
 			if isinstance(o, date) or isinstance(o, datetime):
 				return o.isoformat()
 			elif isinstance(o, bytes):
