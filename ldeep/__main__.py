@@ -3,6 +3,7 @@
 from sys import exit
 from argparse import ArgumentParser
 from json import dump as json_dump
+import base64
 from math import fabs
 from re import compile as re_compile
 from datetime import date, datetime
@@ -29,8 +30,11 @@ class Ldeep(Command):
 
 	def display(self, records, verbose=False, specify_group=True):
 		def default(o):
+			print(type(o))
 			if isinstance(o, date) or isinstance(o, datetime):
 				return o.isoformat()
+			elif isinstance(o, bytes):
+				return base64.b64encode(o).decode('ascii')
 
 		if verbose:
 			self.__display(list(map(dict, records)), default)
@@ -230,7 +234,7 @@ class Ldeep(Command):
 		List the domain's trust relationships.
 		"""
 		results = self.ldap.query(TRUSTS_INFO_FILTER)
-		FIELDS_TO_PRINT = ["dn", "cn", "name", "trustDirection", "trustPartner", "trustType", "trustAttributes", "flatName"]
+		FIELDS_TO_PRINT = ["dn", "cn", "securityIdentifier", "name", "trustDirection", "trustPartner", "trustType", "trustAttributes", "flatName"]
 		for result in results:
 			for field in FIELDS_TO_PRINT:
 				if field in result:
@@ -511,6 +515,9 @@ def main():
 	kerberos = parser.add_argument_group("Kerberos authentication")
 	kerberos.add_argument("-k", "--kerberos", action="store_true", help="For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable")
 
+	anonymous = parser.add_argument_group("Anonymous authentication")
+	anonymous.add_argument("-a", "--anonymous", action="store_true", help="Perform anonymous binds")
+
 	sub = parser.add_subparsers(title="commands", dest="command", description="available commands")
 
 	# Registering commands
@@ -539,6 +546,8 @@ def main():
 		method = "Kerberos"
 	elif args.username and args.password:
 		method = "NTLM"
+	elif args.anonymous:
+		method = "anonymous"
 	else:
 		error("Lack of authentication options: either Kerberos or Username with Password (can be a NTLM hash).")
 

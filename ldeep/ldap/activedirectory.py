@@ -68,6 +68,7 @@ def format_dnsrecord(raw_value):
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (format_userAccountControl, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.302"] = (format_samAccountType, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.121"] = (format_sid, None)
 
 
 class ActiveDirectoryView(object):
@@ -98,7 +99,7 @@ class ActiveDirectoryView(object):
 		@base: Base for the LDAP queries.
 		@username: Username to use for the authentication (for NTLM authentication)
 		@password: Username to use for the authentication (for NTLM authentication)
-		@method: Either to use NTLM or Kerberos authentication.
+		@method: Either to use NTLM, Kerberos or anonymous authentication.
 
 		@throw ActiveDirectoryLdapException when the connection or the bind does not work.
 		"""
@@ -122,6 +123,8 @@ class ActiveDirectoryView(object):
 
 		if method == "Kerberos":
 			self.ldap = Connection(server, authentication=SASL, sasl_mechanism=KERBEROS)
+		if method == "anonymous":
+			self.ldap = Connection(server)
 		elif method == "NTLM":
 			self.ldap = Connection(
 				server,
