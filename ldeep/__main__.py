@@ -563,7 +563,7 @@ def main():
 
 	if args.command:
 		ldeep = Ldeep(ldap_connection)
-		ldeep.dispatch_command(commands, args)
+		ldeep.dispatch_command(commands, args.command, args)
 	else:
 		parser.print_usage()
 
