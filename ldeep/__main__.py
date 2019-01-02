@@ -159,11 +159,6 @@ class Ldeep(Command):
 				if field in FILETIME_TIMESTAMP_FIELDS.keys():
 					val = int((fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
 					val = "%d %s" % (val, FILETIME_TIMESTAMP_FIELDS[field][1])
-				elif field == "pwdProperties":
-					if int(val) == 1:
-						val = "complexity enabled"
-					elif int(val) == 2:
-						val = "complexity disabled"
 
 				print("%s: %s" % (field, val))
 
