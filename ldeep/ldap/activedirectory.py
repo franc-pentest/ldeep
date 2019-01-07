@@ -133,8 +133,7 @@ class ActiveDirectoryView(object):
 				port=636,
 				use_ssl=True,
 				allowed_referral_hosts=[('*', True)],
-				tls=ldap3.Tls(validate=CERT_NONE),
-				get_info=ldap3.NONE
+				tls=ldap3.Tls(validate=CERT_NONE)
 			)
 		else:
 			server = Server(self.server)
