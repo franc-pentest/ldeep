@@ -309,13 +309,14 @@ class Ldeep(Command):
 		group = kwargs["group"]
 		verbose = kwargs.get("verbose", False)
 
-		results = self.ldap.query(GROUP_DN_FILTER.format(group=group), ["distinguishedName"])
+		results = self.ldap.query(GROUP_DN_FILTER.format(group=group), ["distinguishedName", "objectSid"])
 		if results:
 			group_dn = results[0]["distinguishedName"]
 		else:
 			error("Group {group} does not exists".format(group=group))
 
-		results = self.ldap.query(USERS_IN_GROUP_FILTER.format(group=group_dn))
+		primary_group_id = results[0]["objectSid"].split('-')[-1]
+		results = self.ldap.query(USERS_IN_GROUP_FILTER.format(group=group_dn, primary_group_id=primary_group_id))
 		self.display(results, verbose)
 
 	def get_memberships(self, kwargs):

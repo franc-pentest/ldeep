@@ -104,7 +104,7 @@ USER_ACCOUNT_CONTROL_FILTER_NEG = "(&(objectCategory=Person)(objectClass=user)(!
 COMPUTERS_FILTER = "(objectClass=computer)"
 GROUP_DN_FILTER = "(&(objectClass=group)(sAMAccountName={group}))"
 USER_DN_FILTER = "(&(objectClass=user)(objectCategory=Person)(sAMAccountName={username}))"
-USERS_IN_GROUP_FILTER = "(&(|(objectCategory=user)(objectCategory=group))(memberOf={group}))"
+USERS_IN_GROUP_FILTER = "(&(|(objectCategory=user)(objectCategory=group))(|(primaryGroupID={primary_group_id})(memberOf={group})))"
 USER_IN_GROUPS_FILTER = "(sAMAccountName={username})"
 DOMAIN_INFO_FILTER = "(objectClass=domain)"
 GPO_INFO_FILTER = "(objectCategory=groupPolicyContainer)"
