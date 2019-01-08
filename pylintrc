@@ -1,0 +1,7 @@
+[FORMAT]
+max-line-length=120
+indent-string="\t"
+indent-after-paren=1
+
+[MESSAGES CONTROL]
+disable=W191,E501,E402,E731,C0103
