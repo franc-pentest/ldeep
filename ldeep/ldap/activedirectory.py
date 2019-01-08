@@ -82,11 +82,23 @@ def format_dnsrecord(raw_value):
 			return "%s %s" % (recordname, target)
 
 
+def format_ad_timedelta(raw_value):
+	"""
+	Convert a negative filetime value to an integer timedelta.
+	"""
+	if isinstance(raw_value, bytes):
+		raw_value = int(raw_value)
+	return raw_value
+
+
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (format_userAccountControl, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.302"] = (format_samAccountType, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.121"] = (format_sid, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.93"] = (format_pwdProperties, None)
+ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.60'] = (format_ad_timedelta, None)
+ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.74'] = (format_ad_timedelta, None)
+ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.78'] = (format_ad_timedelta, None)
 
 
 class ActiveDirectoryView(object):
