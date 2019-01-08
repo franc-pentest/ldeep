@@ -16,7 +16,6 @@ from ldeep.utils import error, info, Logger, resolve as utils_resolve
 
 import sys
 
-
 class Ldeep(Command):
 
 	def __init__(self, ldap_connection, format="json"):
@@ -391,6 +390,23 @@ class Ldeep(Command):
 
 		results = self.ldap.query("(&(anr={ldap_object}))".format(ldap_object=anr))
 		self.display(results, verbose)
+
+	def get_sddl(self, kwargs):
+		"""
+		Returns the SDDL of an object given it's CN.
+
+		Arguments:
+			@verbose:bool
+				Results will containe full information
+			#object:string
+				CN of object.
+		"""
+		anr = kwargs["object"]
+		verbose = kwargs.get("verbose", False)
+
+		results = self.ldap.get_sddl("(anr={ldap_object})".format(ldap_object=anr))
+
+		self.display(results, verbose, False)
 
 	# MISC #
 

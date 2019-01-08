@@ -12,6 +12,7 @@ from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 import ldap3
 
 from ldeep.ldap.constants import *
+from ldeep.utils.sddl import parse_ntSecurityDescriptor
 
 
 PAGE_SIZE = 1000
@@ -81,6 +82,13 @@ def format_dnsrecord(raw_value):
 				target = ''.join([c for c in data if ord(c) > 31 or ord(c) == 9])
 			return "%s %s" % (recordname, target)
 
+def format_ad_timedelta(raw_value):
+	"""
+	Convert a negative filetime value to an integer timedelta.
+	"""
+	if isinstance(raw_value, bytes):
+		raw_value = int(raw_value)
+	return raw_value
 
 def format_ad_timedelta(raw_value):
 	"""
@@ -96,10 +104,11 @@ ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.302"] 
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.121"] = (format_sid, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.93"] = (format_pwdProperties, None)
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
 ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.60'] = (format_ad_timedelta, None)
 ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.74'] = (format_ad_timedelta, None)
 ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.78'] = (format_ad_timedelta, None)
-
+ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.2.281'] = (parse_ntSecurityDescriptor, None)
 
 class ActiveDirectoryView(object):
 	"""
@@ -235,6 +244,41 @@ class ActiveDirectoryView(object):
 			if results:
 				return results
 		raise self.ActiveDirectoryLdapInvalidGUID("GUID: {guid}".format(guid=guid))
+
+	def get_sddl(self, ldapfilter, base=None, scope=None):
+		"""
+		Perform a query to the LDAP server and return the results.
+
+		@ldapfiler: The LDAP filter to query (see RFC 2254).
+		@attributes: List of attributes to retrieved with the query.
+		@base: Base to use during the request.
+		@scope: Scope to use during the request.
+
+		@return a list of records.
+		"""
+		result_set = []
+		try:
+			result = self.ldap.search(
+				search_base=base or self.base_dn,
+				search_filter=ldapfilter,
+				search_scope=scope or self.search_scope,
+				attributes=['ntSecurityDescriptor'],
+				controls=[('1.2.840.113556.1.4.801', True, b'\x30\x03\x02\x01\x07')]
+			)
+
+			if not result:
+				raise self.ActiveDirectoryLdapException()
+			else:
+				for entry in self.ldap.response:
+					if "dn" in entry:
+						d = entry["attributes"]
+						d["dn"] = entry["dn"]
+						result_set.append(d)
+
+		except LDAPOperationResult as e:
+			raise self.ActiveDirectoryLdapException(e)
+
+		return result_set
 
 	def unlock(self, username):
 		"""
