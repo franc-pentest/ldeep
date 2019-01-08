@@ -110,7 +110,7 @@ DOMAIN_INFO_FILTER = "(objectClass=domain)"
 GPO_INFO_FILTER = "(objectCategory=groupPolicyContainer)"
 PSO_INFO_FILTER = "(objectClass=msDS-PasswordSettings)"
 TRUSTS_INFO_FILTER = "(objectCategory=trustedDomain)"
-OU_FILTER = "(objectClass=OrganizationalUnit)"
+OU_FILTER = "(|(objectClass=OrganizationalUnit)(objectClass=domain))"
 
 WELL_KNOWN_SIDs = {
 	"S-1-5-32-544"	: r"BUILTIN\Administrators",
