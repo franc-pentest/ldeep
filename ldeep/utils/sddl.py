@@ -100,7 +100,7 @@ def parse_aces(input_buffer, count):
 
 			ace['SID'] = format_sid(input_buffer[offset:ace['Size']])
 
-		ace['SID'] = format_sid(input_buffer[8:ace['Size']])
+		ace['SID'] = format_sid(input_buffer[offset:ace['Size']])
 
 		input_buffer = input_buffer[ace['Size']:]
 
