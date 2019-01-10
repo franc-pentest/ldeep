@@ -527,26 +527,7 @@ def main():
 	anonymous = parser.add_argument_group("Anonymous authentication")
 	anonymous.add_argument("-a", "--anonymous", action="store_true", help="Perform anonymous binds")
 
-	sub = parser.add_subparsers(title="commands", dest="command", description="available commands")
-
-	# Registering commands
-	commands = {}
-	for command, method in Ldeep.get_commands(prefix="list_"):
-		Ldeep.set_subparser_for(command, method, sub)
-		commands[command] = method
-
-	for command, method in Ldeep.get_commands(prefix="get_"):
-		Ldeep.set_subparser_for(command, method, sub)
-		commands[command] = method
-
-	for command, method in Ldeep.get_commands(prefix="misc_"):
-		Ldeep.set_subparser_for(command, method, sub)
-		commands[command] = method
-
-	for command, method in Ldeep.get_commands(prefix="action_"):
-		Ldeep.set_subparser_for(command, method, sub)
-		commands[command] = method
-
+	Ldeep.add_subparsers(parser, ["list_", "get_", "misc_", "action_"], title="commands", description="available commands")
 	args = parser.parse_args()
 
 	# Authentication
@@ -570,11 +551,8 @@ def main():
 	except ActiveDirectoryView.ActiveDirectoryLdapException as e:
 		error(e)
 
-	if args.command:
-		ldeep = Ldeep(ldap_connection)
-		ldeep.dispatch_command(commands, args.command, args)
-	else:
-		parser.print_usage()
+	ldeep = Ldeep(ldap_connection)
+	ldeep.dispatch_command(args)
 
 
 if __name__ == "__main__":
