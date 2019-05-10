@@ -112,6 +112,23 @@ class Ldeep(Command):
 
 		self.display(self.ldap.query(GROUPS_FILTER, attributes), verbose, specify_group=False)
 
+	def list_machines(self, kwargs):
+		"""
+		List the machine accounts.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+		"""
+		verbose = kwargs.get("verbose", False)
+
+		if not verbose:
+			attributes = ["samAccountName", "objectClass"]
+		else:
+			attributes = ALL
+
+		self.display(self.ldap.query(COMPUTERS_FILTER, attributes), verbose, specify_group=False)
+
 	def list_computers(self, kwargs):
 		"""
 		List the computer hostnames and resolve them if --resolve is specify.
