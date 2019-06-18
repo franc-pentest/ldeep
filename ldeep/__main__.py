@@ -6,7 +6,7 @@ from json import dump as json_dump
 import base64
 from math import fabs
 from re import compile as re_compile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from commandparse import Command
 
 from ldeep.ldap.activedirectory import ActiveDirectoryView, ALL
@@ -173,8 +173,11 @@ class Ldeep(Command):
 			for field in FIELDS_TO_PRINT:
 				val = policy[field]
 
-				if field in FILETIME_TIMESTAMP_FIELDS.keys():
+				if field == "lockOutObservationWindow" and isinstance(val, timedelta):
+					val = int(val.total_seconds()) / 60
+				elif field in FILETIME_TIMESTAMP_FIELDS.keys() and type(val) == int:
 					val = int((fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
+				if field in FILETIME_TIMESTAMP_FIELDS.keys():
 					val = "%d %s" % (val, FILETIME_TIMESTAMP_FIELDS[field][1])
 
 				print("%s: %s" % (field, val))
