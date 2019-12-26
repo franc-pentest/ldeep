@@ -40,7 +40,10 @@ class Ldeep(Command):
 		else:
 			for record in records:
 				if "group" in record["objectClass"]:
-					print(record["sAMAccountName"] + (" (group)" if specify_group else ""))
+					if isinstance(record["sAMAccountName"], list):
+						print(record["sAMAccountName"][0] + (" (group)" if specify_group else ""))
+					else:
+						print(record["sAMAccountName"] + (" (group)" if specify_group else ""))
 				elif "user" in record["objectClass"]:
 					print(record["sAMAccountName"])
 				elif "dnsNode" in record["objectClass"]:
@@ -171,7 +174,10 @@ class Ldeep(Command):
 		if policy:
 			policy = policy[0]
 			for field in FIELDS_TO_PRINT:
-				val = policy[field]
+				if isinstance(policy[field], list) and field in FILETIME_TIMESTAMP_FIELDS:
+					val = int(policy[field][0])
+				else:
+					val = policy[field]
 
 				if field == "lockOutObservationWindow" and isinstance(val, timedelta):
 					val = int(val.total_seconds()) / 60
@@ -196,7 +202,10 @@ class Ldeep(Command):
 		for result in results:
 			print(result["distinguishedName"])
 			if "gPLink" in result:
-				guids = cn_re.findall(result["gPLink"])
+				if isinstance(result["gPLink"], list):
+					guids = cn_re.findall(result["gPLink"][0])
+				else:
+					guids = cn_re.findall(result["gPLink"])
 				if len(guids) > 0:
 					print("[gPLink]")
 					print("* {}".format("\n* ".join([gpos[g] if g in gpos else g for g in guids])))
