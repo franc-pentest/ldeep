@@ -205,6 +205,8 @@ class ActiveDirectoryView(object):
 					d["dn"] = entry["dn"]
 					result_set.append(d)
 
+		except LDAPNoSuchObjectResult:
+			return []
 		except LDAPOperationResult as e:
 			raise self.ActiveDirectoryLdapException(e)
 
