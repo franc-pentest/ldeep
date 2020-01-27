@@ -579,7 +579,7 @@ def main():
 	method = "NTLM"
 	if args.kerberos:
 		method = "Kerberos"
-	elif args.username and args.password:
+	elif args.username:
 		method = "NTLM"
 	elif args.anonymous:
 		method = "anonymous"
