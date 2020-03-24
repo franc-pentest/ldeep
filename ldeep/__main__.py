@@ -469,7 +469,7 @@ class Ldeep(Command):
 
 		try:
 			if attr and attr != "ALL":
-				results = self.ldap.query(filter_, [attr])
+				results = self.ldap.query(filter_, attr.split(","))
 			else:
 				results = self.ldap.query(filter_)
 			self.display(results, True)
