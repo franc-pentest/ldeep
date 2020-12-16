@@ -365,8 +365,7 @@ class Ldeep(Command):
 						if group_dn not in already_treated:
 							print("{g:>{width}}".format(g=group_dn, width=leading_sp + len(group_dn)))
 							already_treated.add(group_dn)
-							treated = lookup_groups(group_dn, leading_sp + 4, already_treated)
-							return treated
+							lookup_groups(group_dn, leading_sp + 4, already_treated)
 
 			return already_treated
 
