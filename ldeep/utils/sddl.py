@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+A module used to handle binary ntSecurityDescriptor from Active Directory LDAP.
+"""
+
 from struct import unpack
 
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid
@@ -52,14 +56,31 @@ def parse_ntSecurityDescriptor(input_buffer):
 
 
 def resolve_flags(bfr, flags):
+	"""
+	Helper to resolve flag values and names.
+
+	Arguments:
+		#bfr:integer
+			The buffer containing flags.
+		#flags:dict
+			The dictionary of flag names and values.
+	"""
 	return {k: v & bfr != 0 for k, v in flags.items()}
 
 
 def parse_sddl_type(typeflags):
+	"""
+	Parses SDDL Type flags.
+	"""
 	return resolve_flags(typeflags, SDDLTypeFlags)
 
 
 def parse_acl(input_buffer):
+	"""
+	Parses ACL from SDDL.
+
+	Returns a list of ACEs.
+	"""
 	out = dict()
 	fields = ('Revision', 'Size', 'Num ACEs')
 
@@ -71,6 +92,9 @@ def parse_acl(input_buffer):
 
 
 def parse_aces(input_buffer, count):
+	"""
+	Parses the list of ACEs.
+	"""
 	out = []
 	while len(out) < count:
 		ace = dict()
@@ -133,6 +157,9 @@ ACEAccessFlags = {
 
 
 def parse_ace_access(input_buffer):
+	"""
+	Parses access flags in an ACE.
+	"""
 	return resolve_flags(input_buffer, ACEAccessFlags)
 
 
@@ -143,6 +170,9 @@ ACEObjectFlags = {
 
 
 def parse_ace_object_flags(input_buffer):
+	"""
+	Parses flags in an ACE containing an object.
+	"""
 	return resolve_flags(input_buffer, ACEObjectFlags)
 
 
@@ -171,4 +201,7 @@ ACEType = {
 
 
 def parse_sddl_dacl_ace_type(ace_type):
+	"""
+	Parses the type of an ACE.
+	"""
 	return ACEType[ace_type]
