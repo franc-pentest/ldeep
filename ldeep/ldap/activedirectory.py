@@ -171,7 +171,7 @@ class ActiveDirectoryView(object):
 				authentication=NTLM, check_names=True
 			)
 		if not self.ldap.bind():
-			raise self.ActiveDirectoryLdapException("Unable to bind with provided information {}\\{}:{}".format(fqdn, username, password))
+			raise self.ActiveDirectoryLdapException("Unable to bind with provided information {}/{}:{}".format(fqdn, username, password))
 
 		if not "." in fqdn:
 			self.base_dn = base or "".join(["dc={}".format(d) for d in self.ldap.request['base'].split("DC=")[1:]])
