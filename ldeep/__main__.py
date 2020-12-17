@@ -237,11 +237,13 @@ class Ldeep(Command):
 			for field in FIELDS_TO_PRINT:
 				if isinstance(policy[field], list):
 					val = policy[field][0]
+				else:
+					val = policy[field]
 
 				if field in FILETIME_TIMESTAMP_FIELDS.keys():
 					val = int((fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
 					val = "{val} {typ}".format(val=val, typ=FILETIME_TIMESTAMP_FIELDS[field][1])
-			print("{field}: {val}".format(field=field, val=val))
+				print("{field}: {val}".format(field=field, val=val))
 
 	def list_trusts(self, kwargs):
 		"""
@@ -346,14 +348,36 @@ class Ldeep(Command):
 		Arguments:
 			#user:string
 				User to list memberships
+			@recursive:bool
+				List recursively the groups
 		"""
 		user = kwargs["user"]
+		recursive = kwargs.get("recursive", False)
+
+		already_printed = set()
+
+		def lookup_groups(dn, leading_sp, already_treated):
+			groups = []
+			results = self.ldap.query("(distinguishedName={})".format(dn), ["memberOf"])
+			for result in results:
+				if "memberOf" in result:
+					for group_dn in result["memberOf"]:
+						if group_dn not in already_treated:
+							print("{g:>{width}}".format(g=group_dn, width=leading_sp + len(group_dn)))
+							already_treated.add(group_dn)
+							lookup_groups(group_dn, leading_sp + 4, already_treated)
+
+			return already_treated
 
 		results = self.ldap.query(USER_IN_GROUPS_FILTER.format(username=user), ["memberOf"])
 		for result in results:
 			if "memberOf" in result:
 				for group_dn in result["memberOf"]:
 					print(group_dn)
+					if recursive:
+						already_printed.add(group_dn)
+						s = lookup_groups(group_dn, 4, already_printed)
+						already_printed.union(s)
 			else:
 				error("No groups for user {}".format(user))
 
@@ -444,7 +468,7 @@ class Ldeep(Command):
 
 		try:
 			if attr and attr != "ALL":
-				results = self.ldap.query(filter_, [attr])
+				results = self.ldap.query(filter_, attr.split(","))
 			else:
 				results = self.ldap.query(filter_)
 			self.display(results, True)
@@ -554,7 +578,7 @@ def main():
 	method = "NTLM"
 	if args.kerberos:
 		method = "Kerberos"
-	elif args.username and args.password:
+	elif args.username:
 		method = "NTLM"
 	elif args.anonymous:
 		method = "anonymous"
