@@ -113,6 +113,7 @@ CACHE
 -----
 
 ::
+   
    usage: __main__.py cache [-h] [-d DIR] -p PREFIX
                          {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,m                         embersof,object,sddl,zone}
                          ...
