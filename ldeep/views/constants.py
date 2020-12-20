@@ -93,25 +93,6 @@ PWD_PROPERTIES = {
 	"DOMAIN_REFUSE_PASSWORD_CHANGE": 0x20
 }
 
-USER_LOCKED_FILTER = "(&(objectCategory=Person)(objectClass=user)(lockoutTime:1.2.840.113556.1.4.804:=4294967295))"
-GROUPS_FILTER = "(objectClass=group)"
-ZONES_FILTER = "(&(objectClass=dnsZone)(!(dc=RootDNSServers)))"
-ZONE_FILTER = "(objectClass=dnsNode)"
-USER_ALL_FILTER = "(&(objectCategory=Person)(objectClass=user))"
-USER_SPN_FILTER = "(&(objectCategory=Person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt)))"
-USER_ACCOUNT_CONTROL_FILTER = "(&(objectCategory=Person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:={intval}))"
-USER_ACCOUNT_CONTROL_FILTER_NEG = "(&(objectCategory=Person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:={intval})))"
-COMPUTERS_FILTER = "(objectClass=computer)"
-GROUP_DN_FILTER = "(&(objectClass=group)(sAMAccountName={group}))"
-USER_DN_FILTER = "(&(objectClass=user)(objectCategory=Person)(sAMAccountName={username}))"
-USERS_IN_GROUP_FILTER = "(&(|(objectCategory=user)(objectCategory=group))(|(primaryGroupID={primary_group_id})(memberOf={group})))"
-USER_IN_GROUPS_FILTER = "(sAMAccountName={username})"
-DOMAIN_INFO_FILTER = "(objectClass=domain)"
-GPO_INFO_FILTER = "(objectCategory=groupPolicyContainer)"
-PSO_INFO_FILTER = "(objectClass=msDS-PasswordSettings)"
-TRUSTS_INFO_FILTER = "(objectCategory=trustedDomain)"
-OU_FILTER = "(|(objectClass=OrganizationalUnit)(objectClass=domain))"
-
 WELL_KNOWN_SIDs = {
 	"S-1-5-32-544"	: r"BUILTIN\Administrators",
 	"S-1-5-32-545"	: r"BUILTIN\Users",

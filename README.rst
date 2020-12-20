@@ -4,55 +4,148 @@ LDEEP
 
 Help is self-explanatory. Let's check it out::
 
-	usage: ldeep [-h] -d FQDN -s LDAPSERVER [-b BASE] [-o OUTFILE]
-					[-u USERNAME] [-p PASSWORD] [-k]
-					{computers,domain_policy,gpo,groups,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,zone,search,all}
-					...
+  $ ldeep -h                                                             
+  usage: __main__.py [-h] [-o OUTFILE] {ldap,cache} ...
 
-	optional arguments:
-	  -h, --help            show this help message and exit
-	  -d FQDN, --fqdn FQDN  The domain FQDN (ex : domain.local)
-	  -s LDAPSERVER, --ldapserver LDAPSERVER
-							The LDAP path (ex : ldap://corp.contoso.com:389)
-	  -b BASE, --base BASE  LDAP base for query
-	  -o OUTFILE, --outfile OUTFILE
-							Store the results in a file
+  optional arguments:
+      -h, --help            show this help message and exit
+      -o OUTFILE, --outfile OUTFILE
+                        Store the results in a file
+			
+  Media:
+      Available media
 
-	NTLM authentication:
-	  -u USERNAME, --username USERNAME
-							The username
-	  -p PASSWORD, --password PASSWORD
-							The password or the corresponding NTLM hash
+      {ldap,cache}          Medium to query
 
-	Kerberos authentication:
-	  -k, --kerberos        For Kerberos authentication, ticket file should be
-							pointed by $KRB5NAME env variable
 
-	commands:
-	  available commands
+Ldeep can either run against an Active Directory LDAP server or locally on saved files::
 
-	  {computers,domain_policy,gpo,groups,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,zone,search,all}
-		computers           List the computer hostnames and resolve them if
-							--resolve is specify.
-		domain_policy       Return the domain policy.
-		gpo                 Return the list of Group policy objects.
-		groups              List the groups.
-		ou                  Return the list of organizational units with linked
-							GPO.
-		pso                 List the Password Settings Objects.
-		trusts              List the domain's trust relationships.
-		users               List users according to a filter.
-		zones               List the DNS zones configured in the Active Directory.
-		from_guid           Return the object associated with the given `guid`.
-		from_sid            Return the object associated with the given `sid`.
-		memberships         List the group for which `users` belongs to.
-		membersof           List the members of `group`.
-		object              Return the records containing `object` in a CN.
-		zone                Return the records of a DNS zone.
-		search              Query the LDAP with `filter` and retrieve ALL or
-							`attributes` if specified.
-		all                 Collect and store computers, domain_policy, zones,
-							gpo, groups, ou, users, trusts, pso information
+  $ ldeep ldap -u Administrator -p 'password' -d winlab -s ldap://10.0.0.1 all backup/winlab
+  [+] Retrieving computers output
+  [+] Retrieving domain_policy output
+  [+] Retrieving gpo output
+  [+] Retrieving groups output
+  [+] Retrieving groups verbose output
+  [+] Retrieving machines output
+  [+] Retrieving machines verbose output
+  [+] Retrieving ou output
+  [+] Retrieving pso output
+  [+] Retrieving trusts output
+  [+] Retrieving users output
+  [+] Retrieving users verbose output
+  [+] Retrieving users verbose output
+  [+] Retrieving users verbose output
+  [+] Retrieving users verbose output
+  [+] Retrieving users verbose output
+  [+] Retrieving users verbose output
+  [+] Retrieving users verbose output
+  [+] Retrieving users verbose output
+  [+] Retrieving users verbose output
+  [+] Retrieving zones output
+  [+] Retrieving zones verbose output
+
+  $ ldeep cache -d backup -p winlab users
+  Administrator
+  [...]
+
+These two modes have different options:
+
+LDAP
+----
+
+::
+
+   $ ldeep ldap -h                                                        
+   usage: __main__.py ldap [-h] [-d DOMAIN] [-s LDAPSERVER] [-b BASE]
+                           [-u USERNAME] [-p PASSWORD] [-k] [-a]
+                           {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,search,modify_password,unlock}
+                           ...
+
+   optional arguments:
+       -h, --help            show this help message and exit
+       -d DOMAIN, --domain DOMAIN
+                             The domain as NetBIOS or FQDN
+       -s LDAPSERVER, --ldapserver LDAPSERVER
+                             The LDAP path (ex : ldap://corp.contoso.com:389)
+       -b BASE, --base BASE  LDAP base for query (by default, this value is pulled
+                             from remote Ldap)
+
+   NTLM authentication:
+       -u USERNAME, --username USERNAME
+                             The username
+       -p PASSWORD, --password PASSWORD
+                             The password or the corresponding NTLM hash
+
+   Kerberos authentication:
+       -k, --kerberos        For Kerberos authentication, ticket file should be
+                             pointed by $KRB5NAME env variable
+
+   Anonymous authentication:
+   -a, --anonymous           Perform anonymous binds
+
+   commands:
+       available commands
+
+       {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,search,modify_password,unlock}
+       computers           List the computer hostnames and resolve them if --resolve is specify.
+       domain_policy       Return the domain policy.
+       gpo                 Return the list of Group policy objects.
+       groups              List the groups.
+       machines            List the machine accounts.
+       ou                  Return the list of organizational units with linked GPO.
+       pso                 List the Password Settings Objects.
+       trusts              List the domain's trust relationships.
+       users               List users according to a filter.
+       zones               List the DNS zones configured in the Active Directory.
+       from_guid           Return the object associated with the given `guid`.
+       from_sid            Return the object associated with the given `sid`.
+       memberships         List the group for which `users` belongs to.    
+       membersof           List the members of `group`.
+       object              Return the records containing `object` in a CN.
+       sddl                Returns the SDDL of an object given it's CN.
+       zone                Return the records of a DNS zone.
+       all                 Collect and store computers, domain_policy, zones, gpo, groups, ou, users, trusts, pso information
+       search              Query the LDAP with `filter` and retrieve ALL or `attributes` if specified.
+       modify_password     Change `user`'s password.
+       unlock              Unlock `user`.
+
+CACHE
+-----
+
+::
+   usage: __main__.py cache [-h] [-d DIR] -p PREFIX
+                         {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,m                         embersof,object,sddl,zone}
+                         ...
+
+   optional arguments:
+     -h, --help            show this help message and exit
+     -d DIR, --dir DIR     Use saved JSON files in specified directory as cache
+     -p PREFIX, --prefix PREFIX
+                           Prefix of ldeep saved files
+   
+   commands:
+     available commands
+   
+     {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone}
+       computers           List the computer hostnames and resolve them if --resolve is specify.
+       domain_policy       Return the domain policy.
+       gpo                 Return the list of Group policy objects.
+       groups              List the groups.
+       machines            List the machine accounts.
+       ou                  Return the list of organizational units with linked GPO.
+       pso                 List the Password Settings Objects.
+       trusts              List the domain's trust relationships.
+       users               List users according to a filter.
+       zones               List the DNS zones configured in the Active Directory.
+       from_guid           Return the object associated with the given `guid`.
+       from_sid            Return the object associated with the given `sid`.
+       memberships         List the group for which `users` belongs to.
+       membersof           List the members of `group`.
+       object              Return the records containing `object` in a CN.
+       sddl                Returns the SDDL of an object given it's CN.
+       zone                Return the records of a DNS zone.
+   
+  
 
 =======
 INSTALL
@@ -68,7 +161,7 @@ USAGE
 
 Listing users without verbosity::
 
-	$ ldeep -u Administrator -p 'password' -d winlab.local -s ldap://10.0.0.1 users
+	$ ldeep ldap -u Administrator -p 'password' -d winlab.local -s ldap://10.0.0.1 users
 	userspn2
 	userspn1
 	gobobo
@@ -81,7 +174,7 @@ Listing users without verbosity::
 
 Listing users with reversible password encryption enable and with verbosity::
 
-	$ ldeep -u Administrator -p 'password' -d winlab.local -s ldap://10.0.0.1 users reversible -v
+	$ ldeep ldap -u Administrator -p 'password' -d winlab.local -s ldap://10.0.0.1 users reversible -v
 	[
 	  {
 	    "accountExpires": "9999-12-31T23:59:59.999999",
@@ -137,7 +230,7 @@ Listing GPOs::
 
 Getting all things::
 
-	$ ldeep -u Administrator -p 'password' -d winlab.local -s ldap://10.0.0.1 all /tmp/winlab.local_dump
+	$ ldeep ldap -u Administrator -p 'password' -d winlab.local -s ldap://10.0.0.1 all /tmp/winlab.local_dump
 	[+] Retrieving computers output
 	[+] Retrieving domain_policy output
 	[+] Retrieving gpo output
@@ -158,6 +251,7 @@ Using this last command line switch, you have persistent output in both verbose 
 	winlab.local_dump_domain_policy.lst  winlab.local_dump_groups.lst   winlab.local_dump_trusts.lst  winlab.local_dump_zones.json
 	winlab.local_dump_gpo.lst            winlab.local_dump_ou.lst       winlab.local_dump_users.json  winlab.local_dump_zones.lst
 
+The the cache mode can be used to query some other information.
 
 ========
 Upcoming

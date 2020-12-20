@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 
 from sys import exit
+from os import path
 from argparse import ArgumentParser
-from json import dump as json_dump
+from json import dump as json_dump, load as json_load
 import base64
 from math import fabs
 from re import compile as re_compile
 from datetime import date, datetime, timedelta
 from commandparse import Command
 
-from ldeep.ldap.activedirectory import ActiveDirectoryView, ALL
-from ldeep.ldap.constants import *
+from ldeep.views.activedirectory import ALL, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
+from ldeep.views.constants import USER_ACCOUNT_CONTROL
+from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
+from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 
 from ldeep.utils import error, info, Logger, resolve as utils_resolve
 
@@ -19,12 +22,8 @@ import sys
 
 class Ldeep(Command):
 
-	def __init__(self, ldap_connection, format="json"):
-		try:
-			self.ldap = ldap_connection
-		except ActiveDirectoryView.ActiveDirectoryLdapException as e:
-			error(e)
-
+	def __init__(self, query_engine, format="json"):
+		self.engine = query_engine
 		if format == "json":
 			self.__display = self.__display_json
 
@@ -39,7 +38,9 @@ class Ldeep(Command):
 			self.__display(list(map(dict, records)), default)
 		else:
 			for record in records:
-				if "group" in record["objectClass"]:
+				if "objectClass" not in record:
+					print(record)
+				elif "group" in record["objectClass"]:
 					print(record["sAMAccountName"] + (" (group)" if specify_group else ""))
 				elif "user" in record["objectClass"]:
 					print(record["sAMAccountName"])
@@ -68,28 +69,28 @@ class Ldeep(Command):
 		filter_ = kwargs.get("filter", "all")
 
 		if verbose:
-			attributes = ALL
+			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
 		else:
 			attributes = ["samAccountName", "objectClass"]
 
 		if filter_ == "all":
-			results = self.ldap.query(USER_ALL_FILTER, attributes)
+			results = self.engine.query(self.engine.USER_ALL_FILTER(), attributes)
 		elif filter_ == "spn":
-			results = self.ldap.query(USER_SPN_FILTER, attributes)
+			results = self.engine.query(self.engine.USER_SPN_FILTER(), attributes)
 		elif filter_ == "enabled":
-			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER_NEG.format(intval=USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]), attributes)
+			results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER_NEG(USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]), attributes)
 		elif filter_ == "disabled":
-			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]), attributes)
+			results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]), attributes)
 		elif filter_ == "locked":
-			results = self.ldap.query(USER_LOCKED_FILTER, attributes)
+			results = self.engine.query(self.engine.USER_LOCKED_FILTER(), attributes)
 		elif filter_ == "nopasswordexpire":
-			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]), attributes)
+			results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]), attributes)
 		elif filter_ == "passwordexpired":
-			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["PASSWORD_EXPIRED"]), attributes)
+			results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["PASSWORD_EXPIRED"]), attributes)
 		elif filter_ == "nokrbpreauth":
-			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["DONT_REQ_PREAUTH"]), attributes)
+			results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["DONT_REQ_PREAUTH"]), attributes)
 		elif filter_ == "reversible":
-			results = self.ldap.query(USER_ACCOUNT_CONTROL_FILTER.format(intval=USER_ACCOUNT_CONTROL["ENCRYPTED_TEXT_PWD_ALLOWED"]), attributes)
+			results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["ENCRYPTED_TEXT_PWD_ALLOWED"]), attributes)
 		else:
 			return None
 
@@ -108,9 +109,9 @@ class Ldeep(Command):
 		if not verbose:
 			attributes = ["samAccountName", "objectClass"]
 		else:
-			attributes = ALL
+			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
 
-		self.display(self.ldap.query(GROUPS_FILTER, attributes), verbose, specify_group=False)
+		self.display(self.engine.query(self.engine.GROUPS_FILTER(), attributes), verbose, specify_group=False)
 
 	def list_machines(self, kwargs):
 		"""
@@ -121,13 +122,12 @@ class Ldeep(Command):
 				Results will contain full information
 		"""
 		verbose = kwargs.get("verbose", False)
-
 		if not verbose:
 			attributes = ["samAccountName", "objectClass"]
 		else:
-			attributes = ALL
+			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
 
-		self.display(self.ldap.query(COMPUTERS_FILTER, attributes), verbose, specify_group=False)
+		self.display(self.engine.query(self.engine.COMPUTERS_FILTER(), attributes), verbose, specify_group=False)
 
 	def list_computers(self, kwargs):
 		"""
@@ -143,13 +143,17 @@ class Ldeep(Command):
 		dns = kwargs.get("dns", "")
 
 		hostnames = []
-		results = self.ldap.query(COMPUTERS_FILTER, ["name"])
+		results = self.engine.query(self.engine.COMPUTERS_FILTER(), ["name"])
 		for result in results:
-			computer_name = result["name"]
-			hostnames.append("{hostname}.{fqdn}".format(hostname=computer_name, fqdn=self.ldap.fqdn))
+			if isinstance(result, dict):
+				computer_name = result["name"]
+			else:
+				computer_name = result["name"][:-1]  # removing trailing $ sign
+				
+			hostnames.append(f"{computer_name}.{self.engine.fqdn}")
 			# print only if resolution was not mandated
 			if not resolve:
-				print("{hostname}.{fqdn}".format(hostname=computer_name, fqdn=self.ldap.fqdn))
+				print(f"{computer_name}.{self.engine.fqdn}")
 		# do the resolution
 		if resolve:
 			for computer in utils_resolve(hostnames, dns):
@@ -167,7 +171,7 @@ class Ldeep(Command):
 			"forceLogoff": (60, "mins")
 		}
 		FIELDS_TO_PRINT = ["dc", "distinguishedName", "lockOutObservationWindow", "lockoutDuration", "lockoutThreshold", "maxPwdAge", "minPwdAge", "minPwdLength", "pwdHistoryLength", "pwdProperties"]
-		policy = self.ldap.query(DOMAIN_INFO_FILTER)
+		policy = self.engine.query(self.engine.DOMAIN_INFO_FILTER())
 		if policy:
 			policy = policy[0]
 			for field in FIELDS_TO_PRINT:
@@ -187,12 +191,12 @@ class Ldeep(Command):
 		Return the list of organizational units with linked GPO.
 		"""
 		cn_re = re_compile("{[^}]+}")
-		results = self.ldap.query(GPO_INFO_FILTER, ["cn", "displayName"])
+		results = self.engine.query(self.engine.GPO_INFO_FILTER(), ["cn", "displayName"])
 		gpos = {}
 		for gpo in results:
 			gpos[gpo["cn"]] = gpo["displayName"]
 
-		results = self.ldap.query(OU_FILTER)
+		results = self.engine.query(self.engine.OU_FILTER())
 		for result in results:
 			print(result["distinguishedName"])
 			if "gPLink" in result:
@@ -205,7 +209,7 @@ class Ldeep(Command):
 		"""
 		Return the list of Group policy objects.
 		"""
-		results = self.ldap.query(GPO_INFO_FILTER, ["cn", "displayName"])
+		results = self.engine.query(self.engine.GPO_INFO_FILTER(), ["cn", "displayName"])
 		for gpo in results:
 			print("{cn}: {name}".format(cn=gpo["cn"], name=gpo["displayName"]))
 
@@ -232,7 +236,7 @@ class Ldeep(Command):
 			"msDS-MinimumPasswordAge",
 			"msDS-MaximumPasswordAge",
 		]
-		psos = self.ldap.query(PSO_INFO_FILTER)
+		psos = self.engine.query(self.engine.PSO_INFO_FILTER())
 		for policy in psos:
 			for field in FIELDS_TO_PRINT:
 				if isinstance(policy[field], list):
@@ -249,7 +253,7 @@ class Ldeep(Command):
 		"""
 		List the domain's trust relationships.
 		"""
-		results = self.ldap.query(TRUSTS_INFO_FILTER)
+		results = self.engine.query(self.engine.TRUSTS_INFO_FILTER())
 		FIELDS_TO_PRINT = ["dn", "cn", "securityIdentifier", "name", "trustDirection", "trustPartner", "trustType", "trustAttributes", "flatName"]
 		for result in results:
 			for field in FIELDS_TO_PRINT:
@@ -287,12 +291,12 @@ class Ldeep(Command):
 		if not verbose:
 			attributes = ["dc", "objectClass"]
 		else:
-			attributes = ALL
+			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
 
 		self.display(
-			self.ldap.query(
-				ZONES_FILTER,
-				attributes, base=','.join(["CN=MicrosoftDNS,DC=DomainDNSZones", self.ldap.base_dn])
+			self.engine.query(
+				self.engine.ZONES_FILTER(),
+				attributes, base=','.join(["CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn])
 			),
 			verbose
 		)
@@ -309,9 +313,9 @@ class Ldeep(Command):
 		"""
 		dns_zone = kwargs["dns_zone"]
 		try:
-			results = self.ldap.query(
-				ZONE_FILTER,
-				base=','.join(["DC={}".format(dns_zone), "CN=MicrosoftDNS,DC=DomainDNSZones", self.ldap.base_dn])
+			results = self.engine.query(
+				self.engine.ZONE_FILTER(),
+				base=','.join([f"DC={dns_zone}", "CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn])
 			)
 		except ActiveDirectoryView.ActiveDirectoryLdapException as e:
 			error(e)
@@ -331,14 +335,14 @@ class Ldeep(Command):
 		group = kwargs["group"]
 		verbose = kwargs.get("verbose", False)
 
-		results = self.ldap.query(GROUP_DN_FILTER.format(group=group), ["distinguishedName", "objectSid"])
+		results = self.engine.query(self.engine.GROUP_DN_FILTER(group), ["distinguishedName", "objectSid"])
 		if results:
 			group_dn = results[0]["distinguishedName"]
 		else:
 			error("Group {group} does not exists".format(group=group))
 
 		primary_group_id = results[0]["objectSid"].split('-')[-1]
-		results = self.ldap.query(USERS_IN_GROUP_FILTER.format(group=group_dn, primary_group_id=primary_group_id))
+		results = self.engine.query(self.engine.USERS_IN_GROUP_FILTER(primary_group_id, group_dn))
 		self.display(results, verbose)
 
 	def get_memberships(self, kwargs):
@@ -358,7 +362,9 @@ class Ldeep(Command):
 
 		def lookup_groups(dn, leading_sp, already_treated):
 			groups = []
-			results = self.ldap.query("(distinguishedName={})".format(dn), ["memberOf"])
+			# FIXME
+			# results = self.engine.query("(distinguishedName={})".format(dn), ["memberOf"])
+			results = self.engine.query(self.engine.DISTINGUISHED_NAME(dn), ["memberOf"])
 			for result in results:
 				if "memberOf" in result:
 					for group_dn in result["memberOf"]:
@@ -369,7 +375,7 @@ class Ldeep(Command):
 
 			return already_treated
 
-		results = self.ldap.query(USER_IN_GROUPS_FILTER.format(username=user), ["memberOf"])
+		results = self.engine.query(self.engine.USER_IN_GROUPS_FILTER(user), ["memberOf"])
 		for result in results:
 			if "memberOf" in result:
 				for group_dn in result["memberOf"]:
@@ -395,7 +401,7 @@ class Ldeep(Command):
 		verbose = kwargs.get("verbose", False)
 
 		try:
-			result = self.ldap.resolve_sid(sid)
+			result = self.engine.resolve_sid(sid)
 			if isinstance(result, str):
 				print(result)
 			else:
@@ -417,7 +423,7 @@ class Ldeep(Command):
 		verbose = kwargs.get("verbose", False)
 
 		try:
-			self.display(self.ldap.resolve_guid(guid), verbose)
+			self.display(self.engine.resolve_guid(guid), verbose)
 		except ActiveDirectoryView.ActiveDirectoryLdapInvalidGUID:
 			error("Invalid GUID")
 
@@ -433,8 +439,8 @@ class Ldeep(Command):
 		"""
 		anr = kwargs["object"]
 		verbose = kwargs.get("verbose", False)
-
-		results = self.ldap.query("(&(anr={ldap_object}))".format(ldap_object=anr))
+		
+		results = self.engine.query(self.engine.ANR(anr))
 		self.display(results, verbose)
 
 	def get_sddl(self, kwargs):
@@ -447,7 +453,7 @@ class Ldeep(Command):
 		"""
 		anr = kwargs["object"]
 
-		results = self.ldap.get_sddl("(anr={ldap_object})".format(ldap_object=anr))
+		results = self.engine.get_sddl("(anr={ldap_object})".format(object=anr))
 
 		self.display(results, True, False)
 
@@ -468,9 +474,9 @@ class Ldeep(Command):
 
 		try:
 			if attr and attr != "ALL":
-				results = self.ldap.query(filter_, attr.split(","))
+				results = self.engine.query(filter_, attr.split(","))
 			else:
-				results = self.ldap.query(filter_)
+				results = self.engine.query(filter_)
 			self.display(results, True)
 		except Exception as e:
 			error(e)
@@ -525,7 +531,7 @@ class Ldeep(Command):
 		"""
 		user = kwargs["user"]
 
-		if self.ldap.unlock(user):
+		if self.engine.unlock(user):
 			info("User {username} unlocked (or was already unlocked)".format(username=user))
 		else:
 			error("Unable to unlock {username}, check privileges".format(username=user))
@@ -548,56 +554,80 @@ class Ldeep(Command):
 		if curr == "None":
 			curr = None
 
-		if self.ldap.modify_password(user, curr, new):
+		if self.engine.modify_password(user, curr, new):
 			info("Password of {username} changed".format(username=user))
 		else:
 			error("Unable to change {username}'s password, check privileges or try with ldaps://".format(username=user))
 
 
+
 def main():
 	parser = ArgumentParser()
-	parser.add_argument("-d", "--fqdn", help="The domain FQDN (ex : domain.local)", required=True)
-	parser.add_argument("-s", "--ldapserver", help="The LDAP path (ex : ldap://corp.contoso.com:389)", required=True)
-	parser.add_argument("-b", "--base", default="", help="LDAP base for query")
 	parser.add_argument("-o", "--outfile", default="", help="Store the results in a file")
+	
+	sub = parser.add_subparsers(title="Media", description="Available media", help="Medium to query")
 
-	ntlm = parser.add_argument_group("NTLM authentication")
+	ldap = sub.add_parser("ldap")
+	cache = sub.add_parser("cache")
+	
+	ldap.add_argument("-d", "--domain", help="The domain as NetBIOS or FQDN")
+	ldap.add_argument("-s", "--ldapserver", help="The LDAP path (ex : ldap://corp.contoso.com:389)")
+	ldap.add_argument("-b", "--base", default="", help="LDAP base for query (by default, this value is pulled from remote Ldap)")
+	
+	cache.add_argument("-d", "--dir", default=".", type=str, help="Use saved JSON files in specified directory as cache")
+	cache.add_argument("-p", "--prefix", required=True, type=str, help="Prefix of ldeep saved files")
+
+	ntlm = ldap.add_argument_group("NTLM authentication")
 	ntlm.add_argument("-u", "--username", help="The username")
 	ntlm.add_argument("-p", "--password", help="The password or the corresponding NTLM hash")
 
-	kerberos = parser.add_argument_group("Kerberos authentication")
+	kerberos = ldap.add_argument_group("Kerberos authentication")
 	kerberos.add_argument("-k", "--kerberos", action="store_true", help="For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable")
 
-	anonymous = parser.add_argument_group("Anonymous authentication")
+	anonymous = ldap.add_argument_group("Anonymous authentication")
 	anonymous.add_argument("-a", "--anonymous", action="store_true", help="Perform anonymous binds")
 
-	Ldeep.add_subparsers(parser, ["list_", "get_", "misc_", "action_"], title="commands", description="available commands")
+	Ldeep.add_subparsers(ldap, ["list_", "get_", "misc_", "action_"], title="commands", description="available commands")
+	Ldeep.add_subparsers(cache, ["list_", "get_"], title="commands", description="available commands")
+	
 	args = parser.parse_args()
-
-	# Authentication
-	method = "NTLM"
-	if args.kerberos:
-		method = "Kerberos"
-	elif args.username:
-		method = "NTLM"
-	elif args.anonymous:
-		method = "anonymous"
-	else:
-		error("Lack of authentication options: either Kerberos or Username with Password (can be a NTLM hash).")
 
 	# Output
 	if args.outfile:
 		sys.stdout = Logger(args.outfile, quiet=False)
 
+	cache = "prefix" in args  # figuring out whether we use the cache or not
+
 	# main
+	if cache:
+		if not path.exists(args.dir):
+			error("cache directory doesn't exist")
+		query_engine = CacheActiveDirectoryView(args.dir, args.prefix)
+
+	else:
+		try:
+			# Authentication
+			method = "NTLM"
+			if args.kerberos:
+				method = "Kerberos"
+			elif args.username:
+				method = "NTLM"
+			elif args.anonymous:
+				method = "anonymous"
+			else:
+				error("Lack of authentication options: either Kerberos or Username with Password (can be a NTLM hash).")
+				
+			query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, method)
+			
+		except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
+			error(e)
+
+	ldeep = Ldeep(query_engine)
+
 	try:
-		ldap_connection = ActiveDirectoryView(args.ldapserver, args.fqdn, args.base, args.username, args.password, method)
-	except ActiveDirectoryView.ActiveDirectoryLdapException as e:
+		ldeep.dispatch_command(args)
+	except CacheActiveDirectoryView.CacheActiveDirectoryException as e:
 		error(e)
-
-	ldeep = Ldeep(ldap_connection)
-	ldeep.dispatch_command(args)
-
 
 if __name__ == "__main__":
 	main()

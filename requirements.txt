@@ -2,4 +2,4 @@ dnspython>=1.15.0
 ldap3>=2.5.1
 tqdm>=4.26.0
 termcolor
-commandparse>=1.0.8
+commandparse>=1.0.9
