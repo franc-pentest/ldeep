@@ -5,17 +5,20 @@ LDEEP
 Help is self-explanatory. Let's check it out::
 
   $ ldeep -h                                                             
-  usage: __main__.py [-h] [-o OUTFILE] {ldap,cache} ...
+  usage: ldeep [-h] [-o OUTFILE] {ldap,cache} ...
 
   optional arguments:
       -h, --help            show this help message and exit
       -o OUTFILE, --outfile OUTFILE
                         Store the results in a file
-			
-  Media:
-      Available media
+      --security_desc   Enable the retrieval of security descriptors in ldeep
+                        results
 
-      {ldap,cache}          Medium to query
+			
+  Modes:
+      Available modes
+
+      {ldap,cache}          Mode to query
 
 
 Ldeep can either run against an Active Directory LDAP server or locally on saved files::
@@ -56,7 +59,7 @@ LDAP
 ::
 
    $ ldeep ldap -h                                                        
-   usage: __main__.py ldap [-h] [-d DOMAIN] [-s LDAPSERVER] [-b BASE]
+   usage: ldeep ldap [-h] [-d DOMAIN] [-s LDAPSERVER] [-b BASE]
                            [-u USERNAME] [-p PASSWORD] [-k] [-a]
                            {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,search,modify_password,unlock}
                            ...
@@ -114,7 +117,7 @@ CACHE
 
 ::
    
-   usage: __main__.py cache [-h] [-d DIR] -p PREFIX
+   usage: ldeep cache [-h] [-d DIR] -p PREFIX
                          {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,m                         embersof,object,sddl,zone}
                          ...
 

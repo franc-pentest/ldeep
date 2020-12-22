@@ -1,7 +1,6 @@
-
 from os import path
 from json import load as json_load
-from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES
+from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES, validate_guid, validate_sid
 from ldeep.views.constants import WELL_KNOWN_SIDs
 
 
@@ -12,42 +11,49 @@ def eq(x, y):
 	else:
 		return x == y
 
+# respect the ANR field
+def eq_anr(record, value):
+	keys = ["displayName", "givenName", "legacyExchangeDN", "physicalDeliveryOfficeName", "proxyAddresses", "Name", "sAMAccountName", "sn"]
+	for k in keys:
+		if k in record and record[k].lower().startswith(value.lower()):
+			return True
 
 class CacheActiveDirectoryView(ActiveDirectoryView):
 
-	# Constant functions (s -> self but we don't need it)
-	USER_LOCKED_FILTER = lambda s: {"files": ["users_locked"]}
-	GROUPS_FILTER = lambda s: {"files": ["groups"]}
-	USER_ALL_FILTER = lambda s: {"files": ["users_all"]}
-	USERS_SPN_FILTER = lambda s: {"files": ["users_spn"]}
-	COMPUTERS_FILTER = lambda s: {"files": ["machines"]}
-	ANR = lambda s, u: {"files": ["users_all", "groups", "machines"], "filter": lambda x: eq(x["sAMAccountName"], u)}
-	GROUP_DN_FILTER = lambda s, g: {"fmt": "json", "files": ["groups"], "filter": lambda x: eq(x["sAMAccountName"], g)}
-	USERS_IN_GROUP_FILTER = lambda s, p, g: {
+	# Constant functions (first arg -> self but we don't need it)
+	USER_LOCKED_FILTER = lambda _: {"files": ["users_locked"]}
+	GROUPS_FILTER = lambda _: {"files": ["groups"]}
+	USER_ALL_FILTER = lambda _: {"files": ["users_all"]}
+	USER_SPN_FILTER = lambda _: {"files": ["users_spn"]}
+	COMPUTERS_FILTER = lambda _: {"files": ["machines"]}
+	ANR = lambda _, u: {"files": ["users_all", "groups", "machines"], "filter": lambda record: eq_anr(record, u)}
+	GROUP_DN_FILTER = lambda _, g: {"fmt": "json", "files": ["groups"], "filter": lambda x: eq(x["sAMAccountName"], g)}
+	USERS_IN_GROUP_FILTER = lambda _, p, g: {
+		"fmt": "json",
 		"files": ["users_all", "groups"],
 		"filter": lambda x: ("primaryGroupID" in x and eq(p, x["primaryGroupID"])) or ("memberOf" in x and g in x["memberOf"])
 	}
-	USER_IN_GROUPS_FILTER = lambda s, u: {
+	USER_IN_GROUPS_FILTER = lambda _, u: {
 		"fmt": "json",
-		"files": ["users_all", "machines"],
+		"files": ["users_all", "groups", "machines"],
 		"filter": lambda x: eq(x["sAMAccountName"], u)
 	}
-	DISTINGUISHED_NAME = lambda s, n: {
+	DISTINGUISHED_NAME = lambda _, n: {
 		"fmt": "json",
 		"files": ["users_all", "groups", "machines"],
 		"filter": lambda x: eq(x["distinguishedName"], n)
 	}
 	# Not implemented:
-	DOMAIN_INFO_FILTER = lambda s: None
-	GPO_INFO_FILTER = lambda s: None
-	OU_FILTER = lambda s: None
-	PSO_INFO_FILTER = lambda s: None
-	TRUSTS_INFO_FILTER = lambda s: None
-	ZONES_FILTER = lambda s: None
-	ZONE_FILTER = lambda s: None
-	USER_ACCOUNT_CONTROL_FILTER = lambda s: None
-	USER_ACCOUNT_CONTROL_FILTER_NEG = lambda s: None
-	USER_LOCKED_FILTER = lambda s: None
+	DOMAIN_INFO_FILTER = lambda _: None
+	GPO_INFO_FILTER = lambda _: None
+	OU_FILTER = lambda _: None
+	PSO_INFO_FILTER = lambda _: None
+	TRUSTS_INFO_FILTER = lambda _: None
+	ZONES_FILTER = lambda _: None
+	ZONE_FILTER = lambda _: None
+	USER_ACCOUNT_CONTROL_FILTER = lambda _, __: None
+	USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: None
+	USER_LOCKED_FILTER = lambda _: None
 
 	class CacheActiveDirectoryException(Exception):
 		pass
@@ -67,7 +73,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 			raise CacheActiveDirectoryDirNotFoundException(f"{cache_dir} doesn't exist.")
 		self.path = cache_dir
 		self.prefix = prefix
-		self.domain, self.base_dn = self.__get_domain_info()
+		self.fqdn, self.base_dn = self.__get_domain_info()
 		self.attributes = ALL
 
 	def set_all_attributes(self, attributes=ALL):
@@ -104,10 +110,10 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 						del obj[k]
 					else:
 						scrub_json_from_key(obj[k], func)
-		
+
 		# Process unimplemented queries
 		if cachefilter is None:
-			raise self.OfflineActiveDirectoryCacheException("Cache query not supported.")
+			raise self.CacheActiveDirectoryException("Cache query not supported.")
 
 		# Get format of cache files to use: either `lst` or `json`
 		if "fmt" in cachefilter:
@@ -118,7 +124,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 			fmt = "lst"
 
 		data = []
-		# For each file, retrieve result based on a filter
+		# For each file, retrieve result based on an optional filter
 		for fil in cachefilter["files"]:
 			filename = "{prefix}_{file}.{ext}".format(
 						prefix=self.prefix,
@@ -126,20 +132,30 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 						ext=fmt)
 
 			with open(path.join(self.path, filename)) as fp:
+				# Two cases
+				# all attributes are required thus we parse the JSON file
 				if fmt == "json":
 					json = json_load(fp)
 					
 					if "ntSecurityDescriptor" not in self.attributes:
 						scrub_json_from_key(json, lambda x: x == "nTSecurityDescriptor")
-						
+
 					if "filter" in cachefilter:
 						for record in json:
 							if cachefilter["filter"](record):
 								data.append(record)
 					else:
-						data += json								
+						data += json
+						
+				# we use the lst file
 				else:
-					data += map(lambda x: x.strip(), fp.readlines())
+					if "filter" in cachefilter:
+						for line in fp:
+							x = {"sAMAccountName": line.strip()}  # a little hacky :)
+							if cachefilter["filter"](x):
+								data += [line.strip()]
+					else:
+						data += map(lambda x: x.strip(), fp.readlines())
 		return data
 
 	def resolve_sid(self, sid):
@@ -157,6 +173,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 			return WELL_KNOWN_SIDs[sid]
 		elif validate_sid(sid):
 			results = self.query({
+				"fmt": "json",
 				"files": ["users_all", "groups", "machines"],
 				"filter": lambda x: x["objectSid"] == sid
 			})
@@ -175,12 +192,16 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 		"""
 		if validate_guid(guid):
 			results = self.query({
+				"fmt": "json",
 				"files": ["users_all", "groups", "machines"],
 				"filter": lambda x: x["objectGUID"] == guid
 			})
 			if results:
 				return results
 		raise self.ActiveDirectoryInvalidGUID(f"GUID: {guid}")
+
+	def get_sddl(self, *kwargs):
+		raise NotImplementedError
 
 	def __get_domain_info(self):
 		"""

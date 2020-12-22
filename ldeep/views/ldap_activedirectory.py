@@ -4,14 +4,13 @@ from ssl import CERT_NONE
 
 from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
-from ldap3.protocol.formatters.validators import validate_sid, validate_guid
 from ldap3.core.exceptions import LDAPNoSuchObjectResult, LDAPOperationResult, LDAPSocketOpenError
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
 from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 
 import ldap3
 
-from ldeep.views.activedirectory import ActiveDirectoryView, ALL
+from ldeep.views.activedirectory import ActiveDirectoryView, ALL, validate_sid, validate_guid
 from ldeep.views.constants import *
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 

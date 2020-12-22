@@ -10,7 +10,7 @@ from re import compile as re_compile
 from datetime import date, datetime, timedelta
 from commandparse import Command
 
-from ldeep.views.activedirectory import ALL, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
+from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
 from ldeep.views.constants import USER_ACCOUNT_CONTROL, LDAP_SERVER_SD_FLAGS_OID_SEC_DESC
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
@@ -149,7 +149,7 @@ class Ldeep(Command):
 			if isinstance(result, dict):
 				computer_name = result["name"]
 			else:
-				computer_name = result["name"][:-1]  # removing trailing $ sign
+				computer_name = result[:-1]  # removing trailing $ sign
 				
 			hostnames.append(f"{computer_name}.{self.engine.fqdn}")
 			# print only if resolution was not mandated
@@ -318,7 +318,7 @@ class Ldeep(Command):
 				self.engine.ZONE_FILTER(),
 				base=','.join([f"DC={dns_zone}", "CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn])
 			)
-		except ActiveDirectoryView.ActiveDirectoryLdapException as e:
+		except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
 			error(e)
 		else:
 			self.display(results)
@@ -348,23 +348,21 @@ class Ldeep(Command):
 
 	def get_memberships(self, kwargs):
 		"""
-		List the group for which `users` belongs to.
+		List the group for which `account` belongs to.
 
 		Arguments:
-			#user:string
+			#account:string
 				User to list memberships
 			@recursive:bool
 				List recursively the groups
 		"""
-		user = kwargs["user"]
+		account = kwargs["account"]
 		recursive = kwargs.get("recursive", False)
 
 		already_printed = set()
 
 		def lookup_groups(dn, leading_sp, already_treated):
 			groups = []
-			# FIXME
-			# results = self.engine.query("(distinguishedName={})".format(dn), ["memberOf"])
 			results = self.engine.query(self.engine.DISTINGUISHED_NAME(dn), ["memberOf"])
 			for result in results:
 				if "memberOf" in result:
@@ -376,7 +374,7 @@ class Ldeep(Command):
 
 			return already_treated
 
-		results = self.engine.query(self.engine.USER_IN_GROUPS_FILTER(user), ["memberOf"])
+		results = self.engine.query(self.engine.USER_IN_GROUPS_FILTER(account), ["memberOf"])
 		for result in results:
 			if "memberOf" in result:
 				for group_dn in result["memberOf"]:
@@ -386,7 +384,7 @@ class Ldeep(Command):
 						s = lookup_groups(group_dn, 4, already_printed)
 						already_printed.union(s)
 			else:
-				error("No groups for user {}".format(user))
+				error(f"Account {account} doesn't belong to any group")
 
 	def get_from_sid(self, kwargs):
 		"""
@@ -407,7 +405,7 @@ class Ldeep(Command):
 				print(result)
 			else:
 				self.display(result, verbose)
-		except ActiveDirectoryView.ActiveDirectoryLdapInvalidSID:
+		except ActiveDirectoryView.ActiveDirectoryInvalidSID:
 			error("Invalid SID")
 
 	def get_from_guid(self, kwargs):
@@ -440,8 +438,12 @@ class Ldeep(Command):
 		"""
 		anr = kwargs["object"]
 		verbose = kwargs.get("verbose", False)
-		
-		results = self.engine.query(self.engine.ANR(anr))
+
+		if verbose:
+			attributes = ALL
+		else:
+			attributes = ["cn"]
+		results = self.engine.query(self.engine.ANR(anr), attributes)
 		self.display(results, verbose)
 
 	def get_sddl(self, kwargs):
@@ -454,7 +456,7 @@ class Ldeep(Command):
 		"""
 		anr = kwargs["object"]
 
-		results = self.engine.get_sddl("(anr={ldap_object})".format(object=anr))
+		results = self.engine.get_sddl(f"(anr={anr})")
 
 		self.display(results, True, False)
 
@@ -570,8 +572,8 @@ def main():
 	sub = parser.add_subparsers(title="Mode", dest="mode", description="Available modes", help="Backend engine to retrieve data")
 	sub.required = True
 
-	ldap = sub.add_parser("ldap")
-	cache = sub.add_parser("cache")
+	ldap = sub.add_parser("ldap", description="LDAP mode")
+	cache = sub.add_parser("cache", description="Cache mode")
 	
 	ldap.add_argument("-d", "--domain", required=True, help="The domain as NetBIOS or FQDN")
 	ldap.add_argument("-s", "--ldapserver", required=True, help="The LDAP path (ex : ldap://corp.contoso.com:389)")
@@ -590,8 +592,8 @@ def main():
 	anonymous = ldap.add_argument_group("Anonymous authentication")
 	anonymous.add_argument("-a", "--anonymous", action="store_true", help="Perform anonymous binds")
 
-	Ldeep.add_subparsers(ldap, ["list_", "get_", "misc_", "action_"], title="commands", description="available commands")
-	Ldeep.add_subparsers(cache, ["list_", "get_"], title="commands", description="available commands")
+	Ldeep.add_subparsers(ldap, "ldap", ["list_", "get_", "misc_", "action_"], title="commands", description="available commands")
+	Ldeep.add_subparsers(cache, "cache", ["list_", "get_"], title="commands", description="available commands")
 	
 	args = parser.parse_args()
 
@@ -639,8 +641,8 @@ def main():
 		ldeep.dispatch_command(args)
 	except CacheActiveDirectoryView.CacheActiveDirectoryException as e:
 		error(e)
-	except Exception as e:
-		error(e)
+	except NotImplementedError:
+		error("Feature not yet available")
 
 if __name__ == "__main__":
 	main()
