@@ -149,3 +149,4 @@ DATETIME_FIELDS = [
 	"whenCreated"
 ]
 
+LDAP_SERVER_SD_FLAGS_OID_SEC_DESC = [('1.2.840.113556.1.4.801', True, b'\x30\x03\x02\x01\x07')]

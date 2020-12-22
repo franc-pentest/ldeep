@@ -2,10 +2,10 @@ from struct import unpack
 from socket import inet_ntoa
 from ssl import CERT_NONE
 
-from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, Server, Connection, SASL, KERBEROS, NTLM, SUBTREE
+from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
 from ldap3.protocol.formatters.validators import validate_sid, validate_guid
-from ldap3.core.exceptions import LDAPNoSuchObjectResult, LDAPOperationResult
+from ldap3.core.exceptions import LDAPNoSuchObjectResult, LDAPOperationResult, LDAPSocketOpenError
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
 from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 
@@ -161,6 +161,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		self.server = server
 		self.domain = domain
 		self.hostnames = []
+		
+		self.set_controls()
+		self.set_all_attributes()
 
 		if self.server.startswith("ldaps"):
 			server = Server(
@@ -168,11 +171,11 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 				port=636,
 				use_ssl=True,
 				allowed_referral_hosts=[('*', True)],
-				get_info=ALL,
+				get_info=LDAP3_ALL,
 				tls=ldap3.Tls(validate=CERT_NONE)
 			)
 		else:
-			server = Server(self.server, get_info=ALL)
+			server = Server(self.server, get_info=LDAP3_ALL)
 
 		if method == "Kerberos":
 			self.ldap = Connection(server, authentication=SASL, sasl_mechanism=KERBEROS)
@@ -186,14 +189,26 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 				authentication=NTLM, check_names=True
 			)
 
-		if not self.ldap.bind():
-			raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
+		try:
+			if not self.ldap.bind():
+				raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
+		except LDAPSocketOpenError:
+			raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}")
 
 		self.base_dn = base or server.info.other["rootDomainNamingContext"][0]
 		self.fqdn = ".".join(map(lambda x: x.replace("DC=", ''), self.base_dn.split(',')))
 		self.search_scope = SUBTREE
+
+	def set_controls(self, controls=[]):
+		self.controls = controls
+
+	def set_all_attributes(self, attributes=ALL):
+		self.attributes = attributes
+
+	def all_attributes(self):
+		return self.attributes
 	
-	def query(self, ldapfilter, attributes=[ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES], base=None, scope=None):
+	def query(self, ldapfilter, attributes=[], base=None, scope=None):
 		"""
 		Perform a query to the LDAP server and return the results.
 
@@ -204,6 +219,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
 		@return a list of records.
 		"""
+		attributes = self.attributes if attributes == [] else attributes
 		result_set = []
 		try:
 			entry_generator = self.ldap.extend.standard.paged_search(
@@ -211,6 +227,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 				search_filter=ldapfilter,
 				search_scope=scope or self.search_scope,
 				attributes=attributes,
+				controls=self.controls,
 				paged_size=PAGE_SIZE,
 				generator=True
 			)

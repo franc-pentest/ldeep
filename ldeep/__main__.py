@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 from commandparse import Command
 
 from ldeep.views.activedirectory import ALL, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
-from ldeep.views.constants import USER_ACCOUNT_CONTROL
+from ldeep.views.constants import USER_ACCOUNT_CONTROL, LDAP_SERVER_SD_FLAGS_OID_SEC_DESC
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 
@@ -65,11 +65,11 @@ class Ldeep(Command):
 				Results will contain full information
 			@filter:string = ["all", "spn", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired", "nokrbpreauth", "reversible"]
 		"""
-		verbose = kwargs.get("verbose", False)
-		filter_ = kwargs.get("filter", "all")
+		verbose	 = kwargs.get("verbose", False)
+		filter_	 = kwargs.get("filter", "all")
 
 		if verbose:
-			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+			attributes = self.engine.all_attributes()
 		else:
 			attributes = ["samAccountName", "objectClass"]
 
@@ -104,12 +104,12 @@ class Ldeep(Command):
 			@verbose:bool
 				Results will contain full information
 		"""
-		verbose = kwargs.get("verbose", False)
+		verbose	 = kwargs.get("verbose", False)
 
-		if not verbose:
-			attributes = ["samAccountName", "objectClass"]
+		if verbose:
+			attributes = self.engine.all_attributes()
 		else:
-			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+			attributes = ["samAccountName", "objectClass"]			
 
 		self.display(self.engine.query(self.engine.GROUPS_FILTER(), attributes), verbose, specify_group=False)
 
@@ -121,11 +121,12 @@ class Ldeep(Command):
 			@verbose:bool
 				Results will contain full information
 		"""
-		verbose = kwargs.get("verbose", False)
-		if not verbose:
-			attributes = ["samAccountName", "objectClass"]
+		verbose  = kwargs.get("verbose", False)
+
+		if verbose:
+			attributes = self.engine.all_attributes()
 		else:
-			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+			attributes = ["samAccountName", "objectClass"]
 
 		self.display(self.engine.query(self.engine.COMPUTERS_FILTER(), attributes), verbose, specify_group=False)
 
@@ -291,7 +292,7 @@ class Ldeep(Command):
 		if not verbose:
 			attributes = ["dc", "objectClass"]
 		else:
-			attributes = [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES]
+			attributes = ALL
 
 		self.display(
 			self.engine.query(
@@ -564,14 +565,16 @@ class Ldeep(Command):
 def main():
 	parser = ArgumentParser()
 	parser.add_argument("-o", "--outfile", default="", help="Store the results in a file")
+	parser.add_argument("--security_desc", action="store_true", help="Enable the retrieval of security descriptors in ldeep results")
 	
-	sub = parser.add_subparsers(title="Media", description="Available media", help="Medium to query")
+	sub = parser.add_subparsers(title="Mode", dest="mode", description="Available modes", help="Backend engine to retrieve data")
+	sub.required = True
 
 	ldap = sub.add_parser("ldap")
 	cache = sub.add_parser("cache")
 	
-	ldap.add_argument("-d", "--domain", help="The domain as NetBIOS or FQDN")
-	ldap.add_argument("-s", "--ldapserver", help="The LDAP path (ex : ldap://corp.contoso.com:389)")
+	ldap.add_argument("-d", "--domain", required=True, help="The domain as NetBIOS or FQDN")
+	ldap.add_argument("-s", "--ldapserver", required=True, help="The LDAP path (ex : ldap://corp.contoso.com:389)")
 	ldap.add_argument("-b", "--base", default="", help="LDAP base for query (by default, this value is pulled from remote Ldap)")
 	
 	cache.add_argument("-d", "--dir", default=".", type=str, help="Use saved JSON files in specified directory as cache")
@@ -600,9 +603,10 @@ def main():
 
 	# main
 	if cache:
-		if not path.exists(args.dir):
-			error("cache directory doesn't exist")
-		query_engine = CacheActiveDirectoryView(args.dir, args.prefix)
+		try:
+			query_engine = CacheActiveDirectoryView(args.dir, args.prefix)
+		except CacheActiveDirectoryView.CacheActiveDirectoryDirNotFoundException as e:
+			error(e)
 
 	else:
 		try:
@@ -615,18 +619,27 @@ def main():
 			elif args.anonymous:
 				method = "anonymous"
 			else:
-				error("Lack of authentication options: either Kerberos or Username with Password (can be a NTLM hash).")
+				error("Lack of authentication options: either Kerberos, Username with Password (can be a NTLM hash) or Anonymous.")
 				
 			query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, method)
+
 			
 		except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
 			error(e)
+
+	# If `security_desc` are requested, enable LDAP Security Descriptor flags and modify the default attributes
+	# In cache mode, the security_desc corresponding JSON field will be kept
+	if args.security_desc:
+		query_engine.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
+		query_engine.set_all_attributes([ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, "ntSecurityDescriptor"])
 
 	ldeep = Ldeep(query_engine)
 
 	try:
 		ldeep.dispatch_command(args)
 	except CacheActiveDirectoryView.CacheActiveDirectoryException as e:
+		error(e)
+	except Exception as e:
 		error(e)
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 
 from os import path
 from json import load as json_load
-from ldeep.views.activedirectory import ActiveDirectoryView, ALL
+from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES
 from ldeep.views.constants import WELL_KNOWN_SIDs
 
 
@@ -52,6 +52,9 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 	class CacheActiveDirectoryException(Exception):
 		pass
 
+	class CacheActiveDirectoryDirNotFoundException(Exception):
+		pass
+
 	def __init__(self, cache_dir=".", prefix="ldeep_"):
 		"""
 		CacheActiveDirectoryView constructor.
@@ -60,11 +63,23 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 		@cache_dir: directory containing ldeep files
 		@prefix: prefix of the files
 		"""
+		if not path.exists(cache_dir):
+			raise CacheActiveDirectoryDirNotFoundException(f"{cache_dir} doesn't exist.")
 		self.path = cache_dir
 		self.prefix = prefix
 		self.domain, self.base_dn = self.__get_domain_info()
+		self.attributes = ALL
 
-	def query(self, cachefilter, attributes=ALL, base=None, scope=None, **filter_args):
+	def set_all_attributes(self, attributes=ALL):
+		self.attributes = attributes
+
+	def all_attributes(self):
+		return self.attributes
+
+	def set_controls(self, controls):
+		pass
+
+	def query(self, cachefilter, attributes=[], base=None, scope=None, **filter_args):
 		"""
 		Perform a query to cache files.
 
@@ -75,6 +90,20 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 
 		@return a list of records.
 		"""
+
+		def scrub_json_from_key(obj, func):
+			if isinstance(obj, dict):
+				for key in list(obj.keys()):
+					if func(key):
+						del obj[key]
+					else:
+						scrub_json_from_key(obj[key], func)
+			elif isinstance(obj, list):
+				for k in reversed(range(len(obj))):
+					if func(obj[k]):
+						del obj[k]
+					else:
+						scrub_json_from_key(obj[k], func)
 		
 		# Process unimplemented queries
 		if cachefilter is None:
@@ -83,7 +112,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 		# Get format of cache files to use: either `lst` or `json`
 		if "fmt" in cachefilter:
 			fmt = cachefilter["fmt"]
-		elif attributes == ALL:
+		elif ALL_ATTRIBUTES in attributes:
 			fmt = "json"
 		else:
 			fmt = "lst"
@@ -99,6 +128,10 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 			with open(path.join(self.path, filename)) as fp:
 				if fmt == "json":
 					json = json_load(fp)
+					
+					if "ntSecurityDescriptor" not in self.attributes:
+						scrub_json_from_key(json, lambda x: x == "nTSecurityDescriptor")
+						
 					if "filter" in cachefilter:
 						for record in json:
 							if cachefilter["filter"](record):
