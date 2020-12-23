@@ -4,6 +4,10 @@ from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES
 from ldeep.views.constants import WELL_KNOWN_SIDs
 
 
+class UnexpectedFormatException(Exception):
+	pass
+
+
 # case insenitive equal when x and y are str instances
 def eq(x, y):
 	if isinstance(x, str) and isinstance(y, str):
@@ -13,9 +17,22 @@ def eq(x, y):
 
 # respect the ANR field
 def eq_anr(record, value):
+
+	def fmap(f, obj):
+		if isinstance(obj, dict):
+			return any(fmap(f, sub) for sub in obj.values())
+		elif isinstance(obj, list):
+			return any(fmap(f, k) for k in obj)
+		elif isinstance(obj, str):
+			return f(obj)
+		else:
+			raise UnexpectedFormatException(f"Unexpected value, expected: dict, list or str, obtained: {type(obj)}.")
+	
+	validate = lambda x: x.lower().startswith(value.lower())
+	
 	keys = ["displayName", "givenName", "legacyExchangeDN", "physicalDeliveryOfficeName", "proxyAddresses", "Name", "sAMAccountName", "sn"]
 	for k in keys:
-		if k in record and record[k].lower().startswith(value.lower()):
+		if k in record and fmap(validate, record[k]):
 			return True
 
 class CacheActiveDirectoryView(ActiveDirectoryView):

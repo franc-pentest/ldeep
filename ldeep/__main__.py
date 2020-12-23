@@ -146,7 +146,7 @@ class Ldeep(Command):
 		hostnames = []
 		results = self.engine.query(self.engine.COMPUTERS_FILTER(), ["name"])
 		for result in results:
-			if isinstance(result, dict):
+			if "name" in result:  # ugly 
 				computer_name = result["name"]
 			else:
 				computer_name = result[:-1]  # removing trailing $ sign
