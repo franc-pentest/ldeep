@@ -192,9 +192,11 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 				authentication=NTLM, check_names=True
 			)
 		elif method == "SIMPLE":
+			if "." in domain:
+				domain = domain.split(".")[0]
 			self.ldap = Connection(
 				server,
-				user=f"{username}",
+				user=f"{domain}\\{username}",
 				password=password,
 				authentication=SIMPLE, check_names=True
 			)
