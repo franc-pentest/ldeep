@@ -584,7 +584,8 @@ def main():
 
 	ntlm = ldap.add_argument_group("NTLM authentication")
 	ntlm.add_argument("-u", "--username", help="The username")
-	ntlm.add_argument("-p", "--password", help="The password or the corresponding NTLM hash")
+	ntlm.add_argument("-p", "--password", help="The password used for the authentication")
+	ntlm.add_argument("-H", "--ntlm", help="The NTLM hash used for authentication, ex: aad3b435b51404eeaad3b435b51404ee:a2d4623d306be8e06dbc4e2e8b78353a")
 
 	kerberos = ldap.add_argument_group("Kerberos authentication")
 	kerberos.add_argument("-k", "--kerberos", action="store_true", help="For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable")
@@ -617,13 +618,16 @@ def main():
 			if args.kerberos:
 				method = "Kerberos"
 			elif args.username:
-				method = "NTLM"
+				if args.password:
+					method = "SIMPLE"
+				else:
+					method = "NTLM"
 			elif args.anonymous:
 				method = "anonymous"
 			else:
 				error("Lack of authentication options: either Kerberos, Username with Password (can be a NTLM hash) or Anonymous.")
-				
-			query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, method)
+
+			query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, method)
 
 			
 		except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
