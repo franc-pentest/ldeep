@@ -3,6 +3,7 @@ from socket import inet_ntoa
 from ssl import CERT_NONE
 
 from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL
+from ldap3 import SIMPLE
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
 from ldap3.core.exceptions import LDAPNoSuchObjectResult, LDAPOperationResult, LDAPSocketOpenError
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
@@ -138,26 +139,29 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 	class ActiveDirectoryLdapException(Exception):
 		pass
 
-	def __init__(self, server, domain="", base="", username="", password="", method="NTLM"):
+	def __init__(self, server, domain="", base="", username="", password="", ntlm="", method="NTLM"):
 		"""
 		LdapActiveDirectoryView constructor.
 		Initialize the connection with the LDAP server.
 
-		Two authentication modes:
+		Three authentication modes:
 			* Kerberos (ldap3 will automatically retrieve the $KRB5CCNAME env variable)
-			* NTLM (username + password or NTLM hash)
+			* SIMPLE (username + password)
+			* NTLM (username + NTLM hash)
 
 		@server: Server to connect and perform LDAP query to.
 		@domain: Fully qualified domain name of the Active Directory domain.
 		@base: Base for the LDAP queries.
-		@username: Username to use for the authentication (for NTLM authentication)
-		@password: Username to use for the authentication (for NTLM authentication)
+		@username: Username to use for the authentication
+		@password: Password to use for the authentication (for SIMPLE authentication)
+		@ntlm: NTLM hash to use for the authentication (for NTLM authentication)
 		@method: Either to use NTLM, Kerberos or anonymous authentication.
 
 		@throw ActiveDirectoryLdapException when the connection or the bind does not work.
 		"""
 		self.username = username
 		self.password = password
+		self.ntlm = ntlm
 		self.server = server
 		self.domain = domain
 		self.hostnames = []
@@ -185,8 +189,17 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 			self.ldap = Connection(
 				server,
 				user=f"{domain}\\{username}",
-				password=password,
+				password=ntlm,
 				authentication=NTLM, check_names=True
+			)
+		elif method == "SIMPLE":
+			if "." in domain:
+				domain = domain.split(".")[0]
+			self.ldap = Connection(
+				server,
+				user=f"{domain}\\{username}",
+				password=password,
+				authentication=SIMPLE, check_names=True
 			)
 
 		try:
