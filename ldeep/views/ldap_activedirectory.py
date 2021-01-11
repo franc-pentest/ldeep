@@ -194,7 +194,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 			)
 		elif method == "SIMPLE":
 			if "." in domain:
-				domain = domain.split(".")[0]
+				domain, _, _ = domain.partition(".")
 			self.ldap = Connection(
 				server,
 				user=f"{domain}\\{username}",
@@ -257,7 +257,13 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		return result_set
 
 	def get_domain_sid(self):
+		"""
+		Return the current domain SID by issueing a LDAP request.
+
+		@return the domain sid or None if a problem occurred.
+		"""
 		results = self.query(self.DOMAIN_INFO_FILTER(), ["ObjectSid"])
+		return None
 		if results:
 			return results[0]["objectSid"]
 		return None

@@ -394,7 +394,8 @@ class Ldeep(Command):
 			if "primaryGroupID" in result:
 				pid = result["primaryGroupID"]
 				results = self.engine.query(self.engine.PRIMARY_GROUP_ID(pid))
-				print(results[0]["dn"])
+				if results:
+					print(results[0]["dn"])
 
 	def get_from_sid(self, kwargs):
 		"""
