@@ -60,6 +60,11 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 		"files": ["users_all", "groups", "machines"],
 		"filter": lambda x: eq(x["distinguishedName"], n)
 	}
+	PRIMARY_GROUP_ID = lambda _, i: {
+		"fmt": "json",
+		"files": ["users_all", "groups", "machines"],
+		"filter": lambda x: x["objectSid"].endswith(f"-{i}")
+	}
 	# Not implemented:
 	DOMAIN_INFO_FILTER = lambda _: None
 	GPO_INFO_FILTER = lambda _: None

@@ -10,6 +10,8 @@ from re import compile as re_compile
 from datetime import date, datetime, timedelta
 from commandparse import Command
 
+from pyasn1.error import PyAsn1UnicodeDecodeError
+
 from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
 from ldeep.views.constants import USER_ACCOUNT_CONTROL, LDAP_SERVER_SD_FLAGS_OID_SEC_DESC
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
@@ -363,7 +365,7 @@ class Ldeep(Command):
 
 		def lookup_groups(dn, leading_sp, already_treated):
 			groups = []
-			results = self.engine.query(self.engine.DISTINGUISHED_NAME(dn), ["memberOf"])
+			results = self.engine.query(self.engine.DISTINGUISHED_NAME(dn), ["memberOf", "primaryGroupID"])
 			for result in results:
 				if "memberOf" in result:
 					for group_dn in result["memberOf"]:
@@ -371,10 +373,15 @@ class Ldeep(Command):
 							print("{g:>{width}}".format(g=group_dn, width=leading_sp + len(group_dn)))
 							already_treated.add(group_dn)
 							lookup_groups(group_dn, leading_sp + 4, already_treated)
+							
+				if "primaryGroupID" in result:
+					pid = result["primaryGroupID"]
+					results = self.engine.query(self.engine.PRIMARY_GROUP_ID(pid))
+					already_treated.add(results[0]["dn"])
 
 			return already_treated
 
-		results = self.engine.query(self.engine.USER_IN_GROUPS_FILTER(account), ["memberOf"])
+		results = self.engine.query(self.engine.USER_IN_GROUPS_FILTER(account), ["memberOf", "primaryGroupID"])
 		for result in results:
 			if "memberOf" in result:
 				for group_dn in result["memberOf"]:
@@ -383,8 +390,11 @@ class Ldeep(Command):
 						already_printed.add(group_dn)
 						s = lookup_groups(group_dn, 4, already_printed)
 						already_printed.union(s)
-			else:
-				error(f"Account {account} doesn't belong to any group")
+
+			if "primaryGroupID" in result:
+				pid = result["primaryGroupID"]
+				results = self.engine.query(self.engine.PRIMARY_GROUP_ID(pid))
+				print(results[0]["dn"])
 
 	def get_from_sid(self, kwargs):
 		"""
@@ -442,7 +452,7 @@ class Ldeep(Command):
 		if verbose:
 			attributes = ALL
 		else:
-			attributes = ["cn"]
+			attributes = ["sAMAccountName", "objectClass"]
 		results = self.engine.query(self.engine.ANR(anr), attributes)
 		self.display(results, verbose)
 
@@ -481,8 +491,13 @@ class Ldeep(Command):
 			else:
 				results = self.engine.query(filter_)
 			self.display(results, True)
+		except PyAsn1UnicodeDecodeError as e:
+			error("Decoding error with the filter")
 		except Exception as e:
-			error(e)
+			if e.__str__() == "":
+				error("An exception occurred with the provided filter")
+			else:
+				error(e)
 
 	def misc_all(self, kwargs):
 		"""

@@ -113,26 +113,27 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 	"""
 
 	# Constant functions
-	USER_LOCKED_FILTER = lambda s: "(&(objectCategory=Person)(objectClass=user)(lockoutTime:1.2.840.113556.1.4.804:=4294967295))"
-	GROUPS_FILTER = lambda s: "(objectClass=group)"
-	ZONES_FILTER = lambda s: "(&(objectClass=dnsZone)(!(dc=RootDNSServers)))"
-	ZONE_FILTER = lambda s: "(objectClass=dnsNode)"
-	USER_ALL_FILTER = lambda s: "(&(objectCategory=Person)(objectClass=user))"
-	USER_SPN_FILTER = lambda s: "(&(objectCategory=Person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt)))"
-	USER_ACCOUNT_CONTROL_FILTER = lambda s, n: f"(&(objectCategory=Person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:={n}))"
-	USER_ACCOUNT_CONTROL_FILTER_NEG = lambda s, n: f"(&(objectCategory=Person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:={n})))"
-	ANR = lambda s, u: "(anr={u})"
-	DISTINGUISHED_NAME = lambda s, n: f"(distinguishedName={n})"
-	COMPUTERS_FILTER = lambda s: "(objectClass=computer)"
-	GROUP_DN_FILTER = lambda s, g: f"(&(objectClass=group)(sAMAccountName={g}))"
-	USER_DN_FILTER = lambda s, u: "(&(objectClass=user)(objectCategory=Person)(sAMAccountName={u}))"
-	USERS_IN_GROUP_FILTER = lambda s, p, g: f"(&(|(objectCategory=user)(objectCategory=group))(|(primaryGroupID={p})(memberOf={g})))"
-	USER_IN_GROUPS_FILTER = lambda s, u: f"(sAMAccountName={u})"
-	DOMAIN_INFO_FILTER = lambda s: "(objectClass=domain)"
-	GPO_INFO_FILTER = lambda s: "(objectCategory=groupPolicyContainer)"
-	PSO_INFO_FILTER = lambda s: "(objectClass=msDS-PasswordSettings)"
-	TRUSTS_INFO_FILTER = lambda s: "(objectCategory=trustedDomain)"
-	OU_FILTER = lambda s: "(|(objectClass=OrganizationalUnit)(objectClass=domain))"
+	USER_LOCKED_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user)(lockoutTime:1.2.840.113556.1.4.804:=4294967295))"
+	GROUPS_FILTER = lambda _: "(objectClass=group)"
+	ZONES_FILTER = lambda _: "(&(objectClass=dnsZone)(!(dc=RootDNSServers)))"
+	ZONE_FILTER = lambda _: "(objectClass=dnsNode)"
+	USER_ALL_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user))"
+	USER_SPN_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt)))"
+	USER_ACCOUNT_CONTROL_FILTER = lambda _, n: f"(&(objectCategory=Person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:={n}))"
+	USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, n: f"(&(objectCategory=Person)(objectClass=user)(!(userAccountControl:1.2.840.113556.1.4.803:={n})))"
+	ANR = lambda _, u: f"(anr={u})"
+	DISTINGUISHED_NAME = lambda _, n: f"(distinguishedName={n})"
+	COMPUTERS_FILTER = lambda _: "(objectClass=computer)"
+	GROUP_DN_FILTER = lambda _, g: f"(&(objectClass=group)(sAMAccountName={g}))"
+	USER_DN_FILTER = lambda _, u: "(&(objectClass=user)(objectCategory=Person)(sAMAccountName={u}))"
+	USERS_IN_GROUP_FILTER = lambda _, p, g: f"(&(|(objectCategory=user)(objectCategory=group))(|(primaryGroupID={p})(memberOf={g})))"
+	USER_IN_GROUPS_FILTER = lambda _, u: f"(sAMAccountName={u})"
+	PRIMARY_GROUP_ID = lambda s, i: f"(objectSid={s.get_domain_sid()}-{i})"
+	DOMAIN_INFO_FILTER = lambda _: "(objectClass=domain)"
+	GPO_INFO_FILTER = lambda _: "(objectCategory=groupPolicyContainer)"
+	PSO_INFO_FILTER = lambda _: "(objectClass=msDS-PasswordSettings)"
+	TRUSTS_INFO_FILTER = lambda _: "(objectCategory=trustedDomain)"
+	OU_FILTER = lambda _: "(|(objectClass=OrganizationalUnit)(objectClass=domain))"
 
 	class ActiveDirectoryLdapException(Exception):
 		pass
@@ -241,6 +242,13 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 			raise self.ActiveDirectoryLdapException(e)
 
 		return result_set
+
+	def get_domain_sid(self):
+		results = self.query(self.DOMAIN_INFO_FILTER(), ["ObjectSid"])
+		if results:
+			return results[0]["objectSid"]
+		return None
+						
 
 	def resolve_sid(self, sid):
 		"""
