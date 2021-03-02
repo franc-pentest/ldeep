@@ -208,7 +208,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		except LDAPSocketOpenError:
 			raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}")
 
-		self.base_dn = base or server.info.other["rootDomainNamingContext"][0]
+		self.base_dn = base or server.info.other["defaultNamingContext"][0]
 		self.fqdn = ".".join(map(lambda x: x.replace("DC=", ''), self.base_dn.split(',')))
 		self.search_scope = SUBTREE
 
