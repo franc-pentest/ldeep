@@ -162,6 +162,27 @@ class Ldeep(Command):
 			for computer in utils_resolve(hostnames, dns):
 				print("{addr:20} {name}".format(addr=computer["address"], name=computer["hostname"]))
 
+	def list_gmsa(self, kwargs):
+		"""
+		List the gmsa accounts.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+		"""
+		verbose  = kwargs.get("verbose", False)
+
+		if verbose:
+			attributes = self.engine.all_attributes()
+		else:
+			attributes = ["samAccountName", "objectClass", "msDS-ManagedPassword"]
+
+		#breakpoint()
+		self.engine.ldap.start_tls()
+		debug = self.engine.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes)
+		print(debug)
+		self.display(self.engine.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes), verbose, specify_group=False)
+
 	def list_domain_policy(self, kwargs):
 		"""
 		Return the domain policy.
