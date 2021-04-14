@@ -20,7 +20,7 @@ from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 
 from ldeep.utils import error, info, Logger, resolve as utils_resolve
-from utils.structure import Structure
+from ldeep.utils.structure import Structure
 
 import sys
 
