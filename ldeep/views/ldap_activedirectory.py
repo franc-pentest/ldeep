@@ -348,7 +348,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		@throw ActiveDirectoryLdapException if the account does not exist or the query returns more than one result.
 		@return True if the account was successfully unlock or False otherwise.
 		"""
-		results = self.query(USER_DN_FILTER.format(username=username))
+		results = self.query(USER_DN_FILTER(username))
 		if len(results) != 1:
 			raise ActiveDirectoryLdapException("Zero or non uniq result")
 		else:
@@ -368,7 +368,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		@throw ActiveDirectoryLdapException if the account does not exist or the query returns more than one result.
 		@return True if the account was successfully unlock or False otherwise.
 		"""
-		results = self.query(USER_DN_FILTER.format(username=username))
+		results = self.query(USER_DN_FILTER(username))
 		if len(results) != 1:
 			raise ActiveDirectoryLdapException("Zero or non uniq result")
 		else:
