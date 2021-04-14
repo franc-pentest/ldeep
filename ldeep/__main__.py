@@ -5,10 +5,12 @@ from os import path
 from argparse import ArgumentParser
 from json import dump as json_dump, load as json_load
 import base64
+import binascii
 from math import fabs
 from re import compile as re_compile
 from datetime import date, datetime, timedelta
 from commandparse import Command
+from Cryptodome.Hash import MD4
 
 from pyasn1.error import PyAsn1UnicodeDecodeError
 
@@ -18,6 +20,7 @@ from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 
 from ldeep.utils import error, info, Logger, resolve as utils_resolve
+from utils.structure import Structure
 
 import sys
 
@@ -164,24 +167,26 @@ class Ldeep(Command):
 
 	def list_gmsa(self, kwargs):
 		"""
-		List the gmsa accounts.
-
-		Arguments:
-			@verbose:bool
-				Results will contain full information
+		List the gmsa accounts and retrieve NT hash if possible.
 		"""
-		verbose  = kwargs.get("verbose", False)
 
-		if verbose:
-			attributes = self.engine.all_attributes()
-		else:
-			attributes = ["samAccountName", "objectClass", "msDS-ManagedPassword"]
+		attributes = ["samAccountName", "objectClass", "msDS-ManagedPassword"]
 
-		#breakpoint()
 		self.engine.ldap.start_tls()
-		debug = self.engine.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes)
-		print(debug)
-		self.display(self.engine.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes), verbose, specify_group=False)
+		entries = self.engine.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes)
+		for entry in entries:
+			try:
+				sam = entry['sAMAccountName']
+				data = entry['msDS-ManagedPassword']
+				blob = MSDS_MANAGEDPASSWORD_BLOB()
+				blob.fromString(data)
+				hash = MD4.new ()
+				hash.update (blob['CurrentPassword'][:-2])
+				passwd = binascii.hexlify(hash.digest()).decode("utf-8")
+				userpass = sam + ':::' + passwd
+				print(userpass)
+			except:
+				print(sam)
 
 	def list_domain_policy(self, kwargs):
 		"""
@@ -599,7 +604,38 @@ class Ldeep(Command):
 		else:
 			error("Unable to change {username}'s password, check privileges or try with ldaps://".format(username=user))
 
+class MSDS_MANAGEDPASSWORD_BLOB(Structure):
+	structure = (
+		('Version','<H'),
+		('Reserved','<H'),
+		('Length','<L'),
+		('CurrentPasswordOffset','<H'),
+		('PreviousPasswordOffset','<H'),
+		('QueryPasswordIntervalOffset','<H'),
+		('UnchangedPasswordIntervalOffset','<H'),
+		('CurrentPassword',':'),
+		('PreviousPassword',':'),
+		('QueryPasswordInterval',':'),
+		('UnchangedPasswordInterval',':'),
+	)
 
+	def __init__(self, data = None):
+		Structure.__init__(self, data = data)
+
+	def fromString(self, data):
+		Structure.fromString(self,data)
+
+		if self['PreviousPasswordOffset'] == 0:
+			endData = self['QueryPasswordIntervalOffset']
+		else:
+			endData = self['PreviousPasswordOffset']
+
+		self['CurrentPassword'] = self.rawData[self['CurrentPasswordOffset']:][:endData - self['CurrentPasswordOffset']]
+		if self['PreviousPasswordOffset'] != 0:
+			self['PreviousPassword'] = self.rawData[self['PreviousPasswordOffset']:][:self['QueryPasswordIntervalOffset']-self['PreviousPasswordOffset']]
+
+		self['QueryPasswordInterval'] = self.rawData[self['QueryPasswordIntervalOffset']:][:self['UnchangedPasswordIntervalOffset']-self['QueryPasswordIntervalOffset']]
+		self['UnchangedPasswordInterval'] = self.rawData[self['UnchangedPasswordIntervalOffset']:]
 
 def main():
 	parser = ArgumentParser()
