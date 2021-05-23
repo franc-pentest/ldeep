@@ -64,6 +64,21 @@ def format_pwdProperties(raw_value):
 		pass
 	return raw_value
 
+# define an ldap3-compliant formatters
+def format_trustsInfos(raw_value):
+	try:
+		val = int(raw_value)
+		result = []
+		for k, v in TRUSTS_INFOS.items():
+			if v & val:
+				result.append(k)
+		return " | ".join(result)
+	except (TypeError, ValueError):  # expected exceptions↲
+		pass
+	except Exception:  # any other exception should be investigated, anyway the formatter returns the raw_value
+		pass
+	return raw_value
+
 
 # define an ldap3-compliant formatters
 def format_dnsrecord(raw_value):
@@ -97,6 +112,7 @@ def format_ad_timedelta(raw_value):
 	return raw_value
 
 
+#from http://www.kouti.com/tables/baseattributes.htm
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (format_userAccountControl, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.302"] = (format_samAccountType, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
@@ -106,6 +122,7 @@ ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] 
 ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.60'] = (format_ad_timedelta, None)
 ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.74'] = (format_ad_timedelta, None)
 ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.78'] = (format_ad_timedelta, None)
+ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.470'] = (format_trustsInfos, None)
 ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.2.281'] = (parse_ntSecurityDescriptor, None)
 
 class LdapActiveDirectoryView(ActiveDirectoryView):
