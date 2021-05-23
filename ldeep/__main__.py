@@ -176,6 +176,7 @@ class Ldeep(Command):
 			self.engine.ldap.start_tls()
 		except:
 			print("Can't retrieve gmsa, TLS needed")
+			return
 		entries = self.engine.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes)
 		for entry in entries:
 			try:
