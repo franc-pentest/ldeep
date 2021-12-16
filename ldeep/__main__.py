@@ -203,7 +203,7 @@ class Ldeep(Command):
 			"minPwdAge": (86400, "days"),
 			"forceLogoff": (60, "mins")
 		}
-		FIELDS_TO_PRINT = ["dc", "distinguishedName", "lockOutObservationWindow", "lockoutDuration", "lockoutThreshold", "maxPwdAge", "minPwdAge", "minPwdLength", "pwdHistoryLength", "pwdProperties"]
+		FIELDS_TO_PRINT = ["dc", "distinguishedName", "lockOutObservationWindow", "lockoutDuration", "lockoutThreshold", "maxPwdAge", "minPwdAge", "minPwdLength", "pwdHistoryLength", "pwdProperties", "ms-DS-MachineAccountQuota"]
 		policy = self.engine.query(self.engine.DOMAIN_INFO_FILTER())
 		if policy:
 			policy = policy[0]
