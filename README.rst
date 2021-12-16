@@ -26,6 +26,7 @@ Ldeep can either run against an Active Directory LDAP server or locally on saved
   $ ldeep ldap -u Administrator -p 'password' -d winlab -s ldap://10.0.0.1 all backup/winlab
   [+] Retrieving computers output
   [+] Retrieving domain_policy output
+  [+] Retrieving gmsa output
   [+] Retrieving gpo output
   [+] Retrieving groups output
   [+] Retrieving groups verbose output
@@ -61,7 +62,7 @@ LDAP
    $ ldeep ldap -h                                                        
    usage: ldeep ldap [-h] [-d DOMAIN] [-s LDAPSERVER] [-b BASE]
                            [-u USERNAME] [-p PASSWORD] [-k] [-a]
-                           {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,search,modify_password,unlock}
+                           {computers,domain_policy,gmsa,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,search,modify_password,unlock}
                            ...
 
    optional arguments:
@@ -78,6 +79,7 @@ LDAP
                              The username
        -p PASSWORD, --password PASSWORD
                              The password or the corresponding NTLM hash
+       -H NTLM, --ntlm NTLM  The NTLM hash used for authentication, ex: aad3b435b51404eeaad3b435b51404ee:a2d4623d306be8e06dbc4e2e8b78353a
 
    Kerberos authentication:
        -k, --kerberos        For Kerberos authentication, ticket file should be
@@ -89,9 +91,10 @@ LDAP
    commands:
        available commands
 
-       {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,search,modify_password,unlock}
+       {computers,domain_policy,gmsa,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,search,modify_password,unlock}
        computers           List the computer hostnames and resolve them if --resolve is specify.
        domain_policy       Return the domain policy.
+       gmsa                List the gmsa accounts and retrieve NT hash if possible.
        gpo                 Return the list of Group policy objects.
        groups              List the groups.
        machines            List the machine accounts.
@@ -118,7 +121,7 @@ CACHE
 ::
    
    usage: ldeep cache [-h] [-d DIR] -p PREFIX
-                         {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,m                         embersof,object,sddl,zone}
+                         {computers,domain_policy,gmsa,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,m                         embersof,object,sddl,zone}
                          ...
 
    optional arguments:
@@ -133,6 +136,7 @@ CACHE
      {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone}
        computers           List the computer hostnames and resolve them if --resolve is specify.
        domain_policy       Return the domain policy.
+       gmsa                List the gmsa accounts and retrieve NT hash if possible.
        gpo                 Return the list of Group policy objects.
        groups              List the groups.
        machines            List the machine accounts.
@@ -262,6 +266,8 @@ Upcoming
 ========
 
 * Proper DNS zone enumeration
+* ADCS enumeration
+* Sites and subnets
 * Project tree
 * Python package
 * Useful Kerberos delegation information
