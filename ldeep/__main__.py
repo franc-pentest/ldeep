@@ -695,10 +695,10 @@ def main():
 			if args.kerberos:
 				method = "Kerberos"
 			elif args.username:
-				if args.password:
-					method = "SIMPLE"
-				else:
-					method = "NTLM"
+				#if args.password:
+				#	method = "SIMPLE"
+				#else:
+				method = "NTLM"
 			elif args.anonymous:
 				method = "anonymous"
 			else:

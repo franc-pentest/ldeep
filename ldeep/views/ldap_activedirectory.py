@@ -203,10 +203,11 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		if method == "anonymous":
 			self.ldap = Connection(server)
 		elif method == "NTLM":
+			creds = password if password else ntlm
 			self.ldap = Connection(
 				server,
 				user=f"{domain}\\{username}",
-				password=ntlm,
+				password=creds,
 				authentication=NTLM, check_names=True
 			)
 		elif method == "SIMPLE":
@@ -221,7 +222,18 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
 		try:
 			if not self.ldap.bind():
-				raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
+				if method == "NTLM":
+					if "." in domain:
+						domain, _, _ = domain.partition(".")
+					self.ldap = Connection(
+						server,
+						user=f"{domain}\\{username}",
+						password=password,
+						authentication=SIMPLE, check_names=True)
+					if not self.ldap.bind():
+						raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
+				else:
+					raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
 		except LDAPSocketOpenError:
 			raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}")
 
