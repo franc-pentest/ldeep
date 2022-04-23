@@ -655,6 +655,7 @@ def main():
 	ldap.add_argument("-d", "--domain", required=True, help="The domain as NetBIOS or FQDN")
 	ldap.add_argument("-s", "--ldapserver", required=True, help="The LDAP path (ex : ldap://corp.contoso.com:389)")
 	ldap.add_argument("-b", "--base", default="", help="LDAP base for query (by default, this value is pulled from remote Ldap)")
+	ldap.add_argument("-t", "--type", default="ntlm", choices=['ntlm', 'simple'], help="Authentication type: ntlm (default) or simple")
 	
 	cache.add_argument("-d", "--dir", default=".", type=str, help="Use saved JSON files in specified directory as cache")
 	cache.add_argument("-p", "--prefix", required=True, type=str, help="Prefix of ldeep saved files")
@@ -662,7 +663,7 @@ def main():
 	ntlm = ldap.add_argument_group("NTLM authentication")
 	ntlm.add_argument("-u", "--username", help="The username")
 	ntlm.add_argument("-p", "--password", help="The password used for the authentication")
-	ntlm.add_argument("-H", "--ntlm", help="The NTLM hash used for authentication, ex: aad3b435b51404eeaad3b435b51404ee:a2d4623d306be8e06dbc4e2e8b78353a")
+	ntlm.add_argument("-H", "--ntlm", help="NTLM hashes, format is LMHASH:NTHASH")
 
 	kerberos = ldap.add_argument_group("Kerberos authentication")
 	kerberos.add_argument("-k", "--kerberos", action="store_true", help="For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable")
@@ -694,11 +695,10 @@ def main():
 			method = "NTLM"
 			if args.kerberos:
 				method = "Kerberos"
-			elif args.username:
-				#if args.password:
-				#	method = "SIMPLE"
-				#else:
+			elif args.type == "ntlm":
 				method = "NTLM"
+			elif args.type == "simple":
+				method = "SIMPLE"
 			elif args.anonymous:
 				method = "anonymous"
 			else:

@@ -1,3 +1,4 @@
+from sys import exit
 from struct import unpack
 from socket import inet_ntoa
 from ssl import CERT_NONE
@@ -163,8 +164,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
 		Three authentication modes:
 			* Kerberos (ldap3 will automatically retrieve the $KRB5CCNAME env variable)
+			* NTLM (username + NTLM hash/password)
 			* SIMPLE (username + password)
-			* NTLM (username + NTLM hash)
 
 		@server: Server to connect and perform LDAP query to.
 		@domain: Fully qualified domain name of the Active Directory domain.
@@ -172,7 +173,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		@username: Username to use for the authentication
 		@password: Password to use for the authentication (for SIMPLE authentication)
 		@ntlm: NTLM hash to use for the authentication (for NTLM authentication)
-		@method: Either to use NTLM, Kerberos or anonymous authentication.
+		@method: Either to use NTLM, SIMPLE, Kerberos or anonymous authentication.
 
 		@throw ActiveDirectoryLdapException when the connection or the bind does not work.
 		"""
@@ -203,14 +204,27 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		if method == "anonymous":
 			self.ldap = Connection(server)
 		elif method == "NTLM":
-			creds = password if password else ntlm
+			if password is not None:
+				ntlm = password
+			else:
+				try:
+					lm, nt = ntlm.split(':')
+					lm = "aad3b435b51404eeaad3b435b51404ee" if not lm else lm
+					ntlm = f"{lm}:{nt}"
+				except Exception as e:
+					print(e)
+					print("Incorrect hash, format is LMHASH:NTHASH")
+					exit(1)
 			self.ldap = Connection(
 				server,
 				user=f"{domain}\\{username}",
-				password=creds,
+				password=ntlm,
 				authentication=NTLM, check_names=True
 			)
 		elif method == "SIMPLE":
+			if not password:
+				print("Password is required (-p)")
+				exit(1)
 			if "." in domain:
 				domain, _, _ = domain.partition(".")
 			self.ldap = Connection(
@@ -222,18 +236,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
 		try:
 			if not self.ldap.bind():
-				if method == "NTLM":
-					if "." in domain:
-						domain, _, _ = domain.partition(".")
-					self.ldap = Connection(
-						server,
-						user=f"{domain}\\{username}",
-						password=password,
-						authentication=SIMPLE, check_names=True)
-					if not self.ldap.bind():
-						raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
-				else:
-					raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
+				raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
 		except LDAPSocketOpenError:
 			raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}")
 
