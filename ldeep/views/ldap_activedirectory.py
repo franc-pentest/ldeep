@@ -144,7 +144,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 	DISTINGUISHED_NAME = lambda _, n: f"(distinguishedName={n})"
 	COMPUTERS_FILTER = lambda _: "(objectClass=computer)"
 	GROUP_DN_FILTER = lambda _, g: f"(&(objectClass=group)(sAMAccountName={g}))"
-	USER_DN_FILTER = lambda _, u: "(&(objectClass=user)(objectCategory=Person)(sAMAccountName={u}))"
+	USER_DN_FILTER = lambda _, u: f"(&(objectClass=user)(objectCategory=Person)(sAMAccountName={u}))"
 	USERS_IN_GROUP_FILTER = lambda _, p, g: f"(&(|(objectCategory=user)(objectCategory=group))(|(primaryGroupID={p})(memberOf={g})))"
 	USER_IN_GROUPS_FILTER = lambda _, u: f"(sAMAccountName={u})"
 	PRIMARY_GROUP_ID = lambda s, i: f"(objectSid={s.get_domain_sid()}-{i})"
@@ -380,9 +380,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		@throw ActiveDirectoryLdapException if the account does not exist or the query returns more than one result.
 		@return True if the account was successfully unlock or False otherwise.
 		"""
-		results = self.query(USER_DN_FILTER(username))
+		results = self.query(self.USER_DN_FILTER(username))
 		if len(results) != 1:
-			raise ActiveDirectoryLdapException("Zero or non uniq result")
+			raise self.ActiveDirectoryLdapException("Zero or non uniq result")
 		else:
 			user = results[0]
 			unlock = ad_unlock_account(self.ldap, user["dn"])
