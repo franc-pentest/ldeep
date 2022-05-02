@@ -268,6 +268,7 @@ class Ldeep(Command):
 			"msDS-LockoutThreshold",
 			"msDS-MinimumPasswordAge",
 			"msDS-MaximumPasswordAge",
+			"msDS-PSOAppliesTo",
 		]
 		psos = self.engine.query(self.engine.PSO_INFO_FILTER())
 		for policy in psos:
