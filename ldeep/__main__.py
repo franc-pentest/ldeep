@@ -696,12 +696,12 @@ def main():
 			method = "NTLM"
 			if args.kerberos:
 				method = "Kerberos"
+			elif args.anonymous:
+				method = "anonymous"
 			elif args.type == "ntlm":
 				method = "NTLM"
 			elif args.type == "simple":
 				method = "SIMPLE"
-			elif args.anonymous:
-				method = "anonymous"
 			else:
 				error("Lack of authentication options: either Kerberos, Username with Password (can be a NTLM hash) or Anonymous.")
 
