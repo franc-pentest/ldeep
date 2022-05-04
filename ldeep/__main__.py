@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-from sys import exit
-from os import path
 from argparse import ArgumentParser
-from json import dump as json_dump, load as json_load
+from json import dump as json_dump
 import base64
 import binascii
 from math import fabs
@@ -216,11 +214,14 @@ class Ldeep(Command):
 		}
 
 		FIELDS_TO_PRINT = ["dc", "distinguishedName", "lockOutObservationWindow", "lockoutDuration", "lockoutThreshold", "maxPwdAge", "minPwdAge", "minPwdLength", "pwdHistoryLength", "pwdProperties", "ms-DS-MachineAccountQuota", "msDS-Behavior-Version"]
+
 		policy = self.engine.query(self.engine.DOMAIN_INFO_FILTER())
 		if policy:
 			policy = policy[0]
 			for field in FIELDS_TO_PRINT:
-				val = policy[field]
+				val = policy.get(field, None)
+				if not val:
+					continue
 
 				if field == "lockOutObservationWindow" and isinstance(val, timedelta):
 					val = int(val.total_seconds()) / 60
@@ -264,12 +265,14 @@ class Ldeep(Command):
 		"""
 		List the Password Settings Objects.
 		"""
+
 		FILETIME_TIMESTAMP_FIELDS = {
 			"msDS-LockoutObservationWindow": (60, "mins"),
 			"msDS-MinimumPasswordAge": (86400, "days"),
 			"msDS-MaximumPasswordAge": (86400, "days"),
 			"msDS-LockoutDuration": (60, "mins")
 		}
+
 		FIELDS_TO_PRINT = [
 			"cn",
 			"msDS-PasswordReversibleEncryptionEnabled",
@@ -284,13 +287,15 @@ class Ldeep(Command):
 			"msDS-MaximumPasswordAge",
 			"msDS-PSOAppliesTo",
 		]
+
 		psos = self.engine.query(self.engine.PSO_INFO_FILTER())
 		for policy in psos:
 			for field in FIELDS_TO_PRINT:
-				if isinstance(policy[field], list):
+				val = policy.get(field, None)
+				if not val:
+					continue
+				if isinstance(val, list):
 					val = policy[field][0]
-				else:
-					val = policy[field]
 
 				if field in FILETIME_TIMESTAMP_FIELDS.keys():
 					val = int((fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
