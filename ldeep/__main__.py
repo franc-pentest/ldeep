@@ -683,6 +683,10 @@ def main():
 	kerberos = ldap.add_argument_group("Kerberos authentication")
 	kerberos.add_argument("-k", "--kerberos", action="store_true", help="For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable")
 
+	certificate = ldap.add_argument_group("Certificate authentication")
+	certificate.add_argument("--cert-pem", help="User certificate")
+	certificate.add_argument("--key-pem", help="User private key")
+
 	anonymous = ldap.add_argument_group("Anonymous authentication")
 	anonymous.add_argument("-a", "--anonymous", action="store_true", help="Perform anonymous binds")
 
@@ -710,6 +714,8 @@ def main():
 			method = "NTLM"
 			if args.kerberos:
 				method = "Kerberos"
+			elif args.cert_pem:
+				method = "Certificate"
 			elif args.anonymous:
 				method = "anonymous"
 			elif args.type == "ntlm":
@@ -717,9 +723,9 @@ def main():
 			elif args.type == "simple":
 				method = "SIMPLE"
 			else:
-				error("Lack of authentication options: either Kerberos, Username with Password (can be a NTLM hash) or Anonymous.")
+				error("Lack of authentication options: either Kerberos, Certificate, Username with Password (can be a NTLM hash) or Anonymous.")
 
-			query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, method)
+			query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.cert_pem, args.key_pem, method)
 
 			
 		except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:

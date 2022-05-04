@@ -157,7 +157,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 	class ActiveDirectoryLdapException(Exception):
 		pass
 
-	def __init__(self, server, domain="", base="", username="", password="", ntlm="", method="NTLM"):
+	def __init__(self, server, domain="", base="", username="", password="", ntlm="", cert_pem="", key_pem="", method="NTLM"):
 		"""
 		LdapActiveDirectoryView constructor.
 		Initialize the connection with the LDAP server.
@@ -180,12 +180,19 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		self.username = username
 		self.password = password
 		self.ntlm = ntlm
+		self.cert = cert_pem
+		self.key = key_pem
 		self.server = server
 		self.domain = domain
 		self.hostnames = []
 		
 		self.set_controls()
 		self.set_all_attributes()
+
+		if method == "Certificate":
+			tls = ldap3.Tls(local_private_key_file=self.key, local_certificate_file=self.cert, validate=CERT_NONE)
+		else:
+			tls=ldap3.Tls(validate=CERT_NONE)
 
 		if self.server.startswith("ldaps"):
 			server = Server(
@@ -194,14 +201,16 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 				use_ssl=True,
 				allowed_referral_hosts=[('*', True)],
 				get_info=LDAP3_ALL,
-				tls=ldap3.Tls(validate=CERT_NONE)
+				tls=tls
 			)
 		else:
 			server = Server(self.server, get_info=LDAP3_ALL)
 
 		if method == "Kerberos":
 			self.ldap = Connection(server, authentication=SASL, sasl_mechanism=KERBEROS)
-		if method == "anonymous":
+		elif method == "Certificate":
+			self.ldap = Connection(server)
+		elif method == "anonymous":
 			self.ldap = Connection(server)
 		elif method == "NTLM":
 			if password is not None:
@@ -235,8 +244,20 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 			)
 
 		try:
-			if not self.ldap.bind():
-				raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
+			if method == "Certificate":
+				try:
+					self.ldap.open()
+				except ldap3.core.exceptions.LDAPSocketOpenError:
+					print("Cannot get private key data, corrupted key or wrong passphrase ?")
+					exit(1)
+				except Exception as e:
+					print("Unhandled Exception")
+					import traceback
+					traceback.print_exc()
+					exit(1)
+			else:
+				if not self.ldap.bind():
+					raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
 		except LDAPSocketOpenError:
 			raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}")
 
