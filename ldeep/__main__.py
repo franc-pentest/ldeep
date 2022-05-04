@@ -203,7 +203,19 @@ class Ldeep(Command):
 			"minPwdAge": (86400, "days"),
 			"forceLogoff": (60, "mins")
 		}
-		FIELDS_TO_PRINT = ["dc", "distinguishedName", "lockOutObservationWindow", "lockoutDuration", "lockoutThreshold", "maxPwdAge", "minPwdAge", "minPwdLength", "pwdHistoryLength", "pwdProperties", "ms-DS-MachineAccountQuota"]
+
+		FOREST_LEVELS = {
+			7:"Windows Server 2016",
+			6:"Windows Server 2012 R2",
+			5:"Windows Server 2012",
+			4:"Windows Server 2008 R2",
+			3:"Windows Server 2008",
+			2:"Windows Server 2003",
+			1:"Windows Server 2003 operating system through Windows Server 2016",
+			0:"Windows 2000 Server operating system through Windows Server 2008 operating system"
+		}
+
+		FIELDS_TO_PRINT = ["dc", "distinguishedName", "lockOutObservationWindow", "lockoutDuration", "lockoutThreshold", "maxPwdAge", "minPwdAge", "minPwdLength", "pwdHistoryLength", "pwdProperties", "ms-DS-MachineAccountQuota", "msDS-Behavior-Version"]
 		policy = self.engine.query(self.engine.DOMAIN_INFO_FILTER())
 		if policy:
 			policy = policy[0]
@@ -216,6 +228,8 @@ class Ldeep(Command):
 					val = int((fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
 				if field in FILETIME_TIMESTAMP_FIELDS.keys():
 					val = "%d %s" % (val, FILETIME_TIMESTAMP_FIELDS[field][1])
+				if field == "msDS-Behavior-Version" and isinstance(val, int):
+					val = "%s" % (FOREST_LEVELS[policy[field]])
 
 				print("%s: %s" % (field, val))
 
