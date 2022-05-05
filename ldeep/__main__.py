@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-from sys import exit
-from os import path
 from argparse import ArgumentParser
-from json import dump as json_dump, load as json_load
+from json import dump as json_dump
 import base64
 import binascii
 from math import fabs
@@ -215,12 +213,27 @@ class Ldeep(Command):
 			0:"Windows 2000 Server operating system through Windows Server 2008 operating system"
 		}
 
-		FIELDS_TO_PRINT = ["dc", "distinguishedName", "lockOutObservationWindow", "lockoutDuration", "lockoutThreshold", "maxPwdAge", "minPwdAge", "minPwdLength", "pwdHistoryLength", "pwdProperties", "ms-DS-MachineAccountQuota", "msDS-Behavior-Version"]
+		FIELDS_TO_PRINT = [
+			"dc",
+			"distinguishedName",
+			"lockOutObservationWindow",
+			"lockoutDuration",
+			"lockoutThreshold",
+			"maxPwdAge",
+			"minPwdAge",
+			"minPwdLength",
+			"pwdHistoryLength",
+			"pwdProperties",
+			"ms-DS-MachineAccountQuota",
+			"msDS-Behavior-Version"]
+
 		policy = self.engine.query(self.engine.DOMAIN_INFO_FILTER())
 		if policy:
 			policy = policy[0]
 			for field in FIELDS_TO_PRINT:
-				val = policy[field]
+				val = policy.get(field, None)
+				if not val:
+					continue
 
 				if field == "lockOutObservationWindow" and isinstance(val, timedelta):
 					val = int(val.total_seconds()) / 60
@@ -270,6 +283,7 @@ class Ldeep(Command):
 			"msDS-MaximumPasswordAge": (86400, "days"),
 			"msDS-LockoutDuration": (60, "mins")
 		}
+
 		FIELDS_TO_PRINT = [
 			"cn",
 			"msDS-PasswordReversibleEncryptionEnabled",
@@ -284,11 +298,18 @@ class Ldeep(Command):
 			"msDS-MaximumPasswordAge",
 			"msDS-PSOAppliesTo",
 		]
+
 		psos = self.engine.query(self.engine.PSO_INFO_FILTER())
 		for policy in psos:
 			for field in FIELDS_TO_PRINT:
-				if isinstance(policy[field], list):
-					val = policy[field][0]
+				val = policy.get(field, None)
+				if not val:
+					continue
+				if isinstance(val, list):
+					targets = []
+					for target in val:
+						targets.append(target)
+					val = " | ".join(targets)
 				else:
 					val = policy[field]
 
@@ -302,7 +323,18 @@ class Ldeep(Command):
 		List the domain's trust relationships.
 		"""
 		results = self.engine.query(self.engine.TRUSTS_INFO_FILTER())
-		FIELDS_TO_PRINT = ["dn", "cn", "securityIdentifier", "name", "trustDirection", "trustPartner", "trustType", "trustAttributes", "flatName"]
+		FIELDS_TO_PRINT = [
+			"dn",
+			"cn",
+			"securityIdentifier",
+			"name",
+			"trustDirection",
+			"trustPartner",
+			"trustType",
+			"trustAttributes",
+			"flatName"
+		]
+
 		for result in results:
 			for field in FIELDS_TO_PRINT:
 				if field in result:
