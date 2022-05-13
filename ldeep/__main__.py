@@ -53,6 +53,8 @@ class Ldeep(Command):
 					print(record["dc"])
 				elif "domain" in record["objectClass"]:
 					print(record["dn"])
+				elif "pKIEnrollmentService" in record["objectClass"]:
+					print(record["dNSHostName"])
 
 	def __display_json(self, records, default):
 		json_dump(records, sys.stdout, ensure_ascii=False, default=default, sort_keys=True, indent=2)
@@ -380,6 +382,76 @@ class Ldeep(Command):
 			),
 			verbose
 		)
+
+	def list_pkis(self, kwargs):
+		"""
+		List pkis.
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+		"""
+		verbose  = kwargs.get("verbose", False)
+
+		if verbose:
+			attributes = self.engine.all_attributes()
+		else:
+			attributes = ["dNSHostName", "objectClass"]
+
+		self.display(
+			self.engine.query(self.engine.PKI_FILTER(),
+				attributes,
+				base=','.join(["CN=Enrollment Services,CN=Public Key Services,CN=Services,CN=CONFIGURATION", self.engine.base_dn]),
+				),
+				verbose
+			)
+
+	def list_subnets(self, kwargs):
+		"""
+		List sites and associated subnets.
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+		"""
+		verbose = kwargs.get("verbose", False)
+
+		if not verbose:
+			attributes = ["distinguishedName", "name", "description"]
+		else:
+			attributes = ALL
+
+		if verbose:
+			self.display(
+				self.engine.query(
+					self.engine.SITES_FILTER(),
+					attributes, base=','.join(["CN=Configuration", self.engine.base_dn])
+				),
+				verbose
+			)
+		else:
+			entries = self.engine.query(self.engine.SITES_FILTER(), attributes, base=','.join(["CN=Configuration", self.engine.base_dn]))
+
+			site_dn = ""
+			site_name = ""
+			site_description = ""
+			subnet_dn = ""
+			subnet_name = ""
+			subnet_description = ""
+			for entry in entries:
+				site_dn = entry["distinguishedName"] if entry["distinguishedName"] else ""
+				site_name = entry["name"] if entry["name"] else ""
+				site_description = entry["description"][0] if entry["description"] else ""
+				subnet_entries = self.engine.query(self.engine.SUBNET_FILTER(site_dn), attributes, base=','.join(["CN=Sites,CN=Configuration", self.engine.base_dn]))
+				for subnet in subnet_entries:
+					subnet_dn = subnet["distinguishedName"] if subnet["distinguishedName"] else ""
+					subnet_name = subnet["name"] if subnet["name"] else ""
+					subnet_description = subnet["description"][0] if subnet["description"] else ""
+
+				output = "Site: {}".format(site_name)
+				output += " | Subnet: {}".format(subnet_name) if subnet_name else ""
+				output += " | Site description: {}".format(site_description) if site_description else ""
+				output += " | Subnet description: {}".format(subnet_description) if subnet_description else ""
+				print(output)
+
 
 	# GETTERS #
 
