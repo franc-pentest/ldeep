@@ -60,12 +60,9 @@ LDAP
 ::
 
     $ ldeep ldap -h
-    usage: __main__.py ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE]
-                      [-t {ntlm,simple}] [-u USERNAME] [-p PASSWORD]
-                      [-H NTLM] [-k] [--cert-pem CERT_PEM]
-                      [--key-pem KEY_PEM] [-a]
-                      {computers,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,enum_users,search,modify_password,unlock}
-                      ...
+    usage: ldeep ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--cert-pem CERT_PEM] [--key-pem KEY_PEM] [-a]
+                            {computers,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,enum_users,search,modify_password,unlock}
+                            ...
 
     LDAP mode
 
@@ -75,8 +72,7 @@ LDAP
                             The domain as NetBIOS or FQDN
       -s LDAPSERVER, --ldapserver LDAPSERVER
                             The LDAP path (ex : ldap://corp.contoso.com:389)
-      -b BASE, --base BASE  LDAP base for query (by default, this value is pulled
-                            from remote Ldap)
+      -b BASE, --base BASE  LDAP base for query (by default, this value is pulled from remote Ldap)
       -t {ntlm,simple}, --type {ntlm,simple}
                             Authentication type: ntlm (default) or simple
 
@@ -88,8 +84,7 @@ LDAP
       -H NTLM, --ntlm NTLM  NTLM hashes, format is LMHASH:NTHASH
 
     Kerberos authentication:
-      -k, --kerberos        For Kerberos authentication, ticket file should be
-                            pointed by $KRB5NAME env variable
+      -k, --kerberos        For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable
 
     Certificate authentication:
       --cert-pem CERT_PEM   User certificate
@@ -102,16 +97,13 @@ LDAP
       available commands
 
       {computers,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,enum_users,search,modify_password,unlock}
-        computers           List the computer hostnames and resolve them if
-                            --resolve is specify.
+        computers           List the computer hostnames and resolve them if --resolve is specify.
         domain_policy       Return the domain policy.
-        gmsa                List the gmsa accounts and retrieve NT hash if
-                            possible.
+        gmsa                List the gmsa accounts and retrieve NT hash if possible.
         gpo                 Return the list of Group policy objects.
         groups              List the groups.
         machines            List the machine accounts.
-        ou                  Return the list of organizational units with linked
-                            GPO.
+        ou                  Return the list of organizational units with linked GPO.
         pkis                List pkis.
         pso                 List the Password Settings Objects.
         subnets             List sites and associated subnets.
@@ -125,11 +117,9 @@ LDAP
         object              Return the records containing `object` in a CN.
         sddl                Returns the SDDL of an object given it's CN.
         zone                Return the records of a DNS zone.
-        all                 Collect and store computers, domain_policy, zones, gpo,
-                            groups, ou, users, trusts, pso information
+        all                 Collect and store computers, domain_policy, zones, gpo, groups, ou, users, trusts, pso information
         enum_users          Anonymously enumerate users with LDAP pings.
-        search              Query the LDAP with `filter` and retrieve ALL or
-                            `attributes` if specified.
+        search              Query the LDAP with `filter` and retrieve ALL or `attributes` if specified.
         modify_password     Change `user`'s password.
         unlock              Unlock `user`.
 
@@ -138,40 +128,42 @@ CACHE
 
 ::
    
-   usage: ldeep cache [-h] [-d DIR] -p PREFIX
-                         {computers,domain_policy,gmsa,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,m                         embersof,object,sddl,zone}
-                         ...
+    $ ldeep cache -h
+    usage: ldeep cache [-h] [-d DIR] -p PREFIX {computers,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone} ...
 
-   optional arguments:
-     -h, --help            show this help message and exit
-     -d DIR, --dir DIR     Use saved JSON files in specified directory as cache
-     -p PREFIX, --prefix PREFIX
-                           Prefix of ldeep saved files
+    Cache mode
+
+    optional arguments:
+      -h, --help            show this help message and exit
+      -d DIR, --dir DIR     Use saved JSON files in specified directory as cache
+      -p PREFIX, --prefix PREFIX
+                            Prefix of ldeep saved files
+
+    commands:
+      available commands
+
+      {computers,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone}
+        computers           List the computer hostnames and resolve them if --resolve is specify.
+        domain_policy       Return the domain policy.
+        gmsa                List the gmsa accounts and retrieve NT hash if possible.
+        gpo                 Return the list of Group policy objects.
+        groups              List the groups.
+        machines            List the machine accounts.
+        ou                  Return the list of organizational units with linked GPO.
+        pkis                List pkis.
+        pso                 List the Password Settings Objects.
+        subnets             List sites and associated subnets.
+        trusts              List the domain's trust relationships.
+        users               List users according to a filter.
+        zones               List the DNS zones configured in the Active Directory.
+        from_guid           Return the object associated with the given `guid`.
+        from_sid            Return the object associated with the given `sid`.
+        memberships         List the group for which `account` belongs to.
+        membersof           List the members of `group`.
+        object              Return the records containing `object` in a CN.
+        sddl                Returns the SDDL of an object given it's CN.
+        zone                Return the records of a DNS zone.
    
-   commands:
-     available commands
-   
-     {computers,domain_policy,gpo,groups,machines,ou,pso,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone}
-       computers           List the computer hostnames and resolve them if --resolve is specify.
-       domain_policy       Return the domain policy.
-       gmsa                List the gmsa accounts and retrieve NT hash if possible.
-       gpo                 Return the list of Group policy objects.
-       groups              List the groups.
-       machines            List the machine accounts.
-       ou                  Return the list of organizational units with linked GPO.
-       pso                 List the Password Settings Objects.
-       trusts              List the domain's trust relationships.
-       users               List users according to a filter.
-       zones               List the DNS zones configured in the Active Directory.
-       from_guid           Return the object associated with the given `guid`.
-       from_sid            Return the object associated with the given `sid`.
-       memberships         List the group for which `users` belongs to.
-       membersof           List the members of `group`.
-       object              Return the records containing `object` in a CN.
-       sddl                Returns the SDDL of an object given it's CN.
-       zone                Return the records of a DNS zone.
-   
-  
 
 =======
 INSTALL
