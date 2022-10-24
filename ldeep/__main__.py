@@ -8,6 +8,7 @@ from math import fabs
 from re import compile as re_compile
 from datetime import date, datetime, timedelta
 from commandparse import Command
+from time import sleep
 from Cryptodome.Hash import MD4
 
 from pyasn1.error import PyAsn1UnicodeDecodeError
@@ -686,6 +687,27 @@ class Ldeep(Command):
 					kwargs["verbose"] = True
 					getattr(self, method)(kwargs)
 					kwargs["verbose"] = False
+
+	def misc_enum_users(self, kwargs):
+		"""
+		Anonymously enumerate users with LDAP pings.
+
+		Arguments:
+			#file:string
+				File containing a list of usernames to try
+			@delay:int = 0
+				Delay in milliseconds between each try
+		"""
+		file = kwargs["file"]
+		delay = kwargs["delay"]
+		with open(file, 'r') as f:
+			while True:
+				l = f.readline()[:-1]
+				if not l:
+					break
+				if self.engine.user_exists(l):
+					print(l)
+				sleep(delay / 1000)
 
 	# ACTION #
 
