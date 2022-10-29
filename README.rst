@@ -171,7 +171,7 @@ INSTALL
 
 ``ldeep`` is Python3 only.::
 
-	pip3 install ldeep
+	pip3 install git+https://github.com/franc-pentest/ldeep
 
 =====
 USAGE
