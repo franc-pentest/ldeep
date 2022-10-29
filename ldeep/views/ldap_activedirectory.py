@@ -156,6 +156,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 	PSO_INFO_FILTER = lambda _: "(objectClass=msDS-PasswordSettings)"
 	TRUSTS_INFO_FILTER = lambda _: "(objectCategory=trustedDomain)"
 	OU_FILTER = lambda _: "(|(objectClass=OrganizationalUnit)(objectClass=domain))"
+	ENUM_USER_FILTER = lambda _, n: f"(&(NtVer=\x06\x00\x00\x00)(AAC=\x10\x00\x00\x00)(User={n}))"
 
 	class ActiveDirectoryLdapException(Exception):
 		pass
@@ -435,14 +436,14 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		"""
 		Perform an LDAP ping to determine if the specified user exists.
 
-		@username: the username to test
+		@username: the username to test.
 
-		@return True if the user exists, False otherwise
+		@return True if the user exists, False otherwise.
 		"""
 		try:
 			result = self.ldap.search(
 				'',
-				search_filter=f'(&(NtVer=\x06\x00\x00\x00)(AAC=\x10\x00\x00\x00)(User={username}))',
+				search_filter=self.ENUM_USER_FILTER(username),
 				search_scope=BASE,
 				attributes=['NetLogon'],
 				dereference_aliases=DEREF_NEVER
@@ -455,7 +456,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 					attr = entry.get('raw_attributes')
 					if attr:
 						netlogon = attr.get('netlogon')
-						if netlogon and netlogon[0] and netlogon[0][0] == 0x17:
+						if netlogon and len(netlogon[0]) > 1 and netlogon[0][:2] == LOGON_SAM_LOGON_RESPONSE_EX:
 							return True
 
 		except LDAPOperationResult as e:

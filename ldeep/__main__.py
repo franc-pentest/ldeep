@@ -694,10 +694,16 @@ class Ldeep(Command):
 
 		Arguments:
 			#file:string
-				File containing a list of usernames to try
+				File containing a list of usernames to try.
 			@delay:int = 0
-				Delay in milliseconds between each try
+				Delay in milliseconds between each try.
 		"""
+
+		# LDAP pings can only be used with an anonymous bind
+		print(self.engine.ldap.authentication)
+		if self.engine.ldap.authentication != 'ANONYMOUS':
+			error('The enum_users feature can only be used with an anonymous bind')
+
 		file = kwargs["file"]
 		delay = kwargs["delay"]
 		with open(file, 'r') as f:
