@@ -3,7 +3,7 @@ from struct import unpack
 from socket import inet_ntoa
 from ssl import CERT_NONE
 
-from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL
+from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL, BASE, DEREF_NEVER
 from ldap3 import SIMPLE
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
 from ldap3.core.exceptions import LDAPNoSuchObjectResult, LDAPOperationResult, LDAPSocketOpenError
@@ -156,6 +156,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 	PSO_INFO_FILTER = lambda _: "(objectClass=msDS-PasswordSettings)"
 	TRUSTS_INFO_FILTER = lambda _: "(objectCategory=trustedDomain)"
 	OU_FILTER = lambda _: "(|(objectClass=OrganizationalUnit)(objectClass=domain))"
+	ENUM_USER_FILTER = lambda _, n: f"(&(NtVer=\x06\x00\x00\x00)(AAC=\x10\x00\x00\x00)(User={n}))"
 
 	class ActiveDirectoryLdapException(Exception):
 		pass
@@ -430,3 +431,35 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		else:
 			user = results[0]
 			return ad_modify_password(self.ldap, user["dn"], newpassword, None)
+
+	def user_exists(self, username):
+		"""
+		Perform an LDAP ping to determine if the specified user exists.
+
+		@username: the username to test.
+
+		@return True if the user exists, False otherwise.
+		"""
+		try:
+			result = self.ldap.search(
+				'',
+				search_filter=self.ENUM_USER_FILTER(username),
+				search_scope=BASE,
+				attributes=['NetLogon'],
+				dereference_aliases=DEREF_NEVER
+			)
+
+			if not result:
+				raise self.ActiveDirectoryLdapException()
+			else:
+				for entry in self.ldap.response:
+					attr = entry.get('raw_attributes')
+					if attr:
+						netlogon = attr.get('netlogon')
+						if netlogon and len(netlogon[0]) > 1 and netlogon[0][:2] == LOGON_SAM_LOGON_RESPONSE_EX:
+							return True
+
+		except LDAPOperationResult as e:
+			raise self.ActiveDirectoryLdapException(e)
+
+		return False
