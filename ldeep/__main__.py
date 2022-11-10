@@ -700,9 +700,8 @@ class Ldeep(Command):
 		"""
 
 		# LDAP pings can only be used with an anonymous bind
-		print(self.engine.ldap.authentication)
 		if self.engine.ldap.authentication != 'ANONYMOUS':
-			error('The enum_users feature can only be used with an anonymous bind')
+			error('The enum_users feature can only be used with an anonymous bind (-a option)')
 
 		file = kwargs["file"]
 		delay = kwargs["delay"]
@@ -848,7 +847,7 @@ def main():
 				method = "Kerberos"
 			elif args.cert_pem:
 				method = "Certificate"
-			elif args.anonymous:
+			elif args.anonymous or args.command_ldap == "enum_users":
 				method = "anonymous"
 			elif args.type == "ntlm":
 				method = "NTLM"
