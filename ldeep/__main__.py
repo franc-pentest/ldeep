@@ -754,6 +754,42 @@ class Ldeep(Command):
 		else:
 			error("Unable to change {username}'s password, check privileges or try with ldaps://".format(username=user))
 
+	def action_add_to_group(self, kwargs):
+		"""
+		Add `user` to `group`.
+
+		Arguments:
+			#user:string
+				Target user (dn format). Ex: "CN=bob,CN=Users,DC=CORP,DC=LOCAL"
+			#group:string
+				Target group (dn format). Ex: "CN=Domain Admins,CN=Users,DC=CORP,DC=LOCAL"
+		"""
+		user = kwargs["user"]
+		group = kwargs["group"]
+
+		if self.engine.add_user_to_group(user, group):
+			info(f"User {user} sucessfully added to {group}")
+		else:
+			error(f"Unable to add {user} to {group}, check privileges or dn")
+
+	def action_remove_from_group(self, kwargs):
+		"""
+		Remove `user` from `group`.
+
+		Arguments:
+			#user:string
+				Target user (dn format). Ex: "CN=bob,CN=Users,DC=CORP,DC=LOCAL"
+			#group:string
+				Target group (dn format). Ex: "CN=Domain Admins,CN=Users,DC=CORP,DC=LOCAL"
+		"""
+		user = kwargs["user"]
+		group = kwargs["group"]
+
+		if self.engine.remove_user_from_group(user, group):
+			info(f"User {user} sucessfully removed from {group}")
+		else:
+			error(f"Unable to remove {user} from {group}, check privileges or dn")
+
 class MSDS_MANAGEDPASSWORD_BLOB(Structure):
 	structure = (
 		('Version','<H'),
@@ -815,6 +851,7 @@ def main():
 	kerberos.add_argument("-k", "--kerberos", action="store_true", help="For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable")
 
 	certificate = ldap.add_argument_group("Certificate authentication")
+	certificate.add_argument("--pfx-file", help="PFX file")
 	certificate.add_argument("--cert-pem", help="User certificate")
 	certificate.add_argument("--key-pem", help="User private key")
 
@@ -845,7 +882,7 @@ def main():
 			method = "NTLM"
 			if args.kerberos:
 				method = "Kerberos"
-			elif args.cert_pem:
+			elif args.cert_pem or args.pfx_file:
 				method = "Certificate"
 			elif args.anonymous or args.command_ldap == "enum_users":
 				method = "anonymous"
@@ -856,7 +893,7 @@ def main():
 			else:
 				error("Lack of authentication options: either Kerberos, Certificate, Username with Password (can be a NTLM hash) or Anonymous.")
 
-			query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.cert_pem, args.key_pem, method)
+			query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.pfx_file, args.cert_pem, args.key_pem, method)
 
 			
 		except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
