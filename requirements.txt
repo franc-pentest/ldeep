@@ -1,5 +1,5 @@
 dnspython>=1.15.0
-cryptography==38.0.1
+cryptography==38.0.3
 ldap3>=2.5.1
 tqdm>=4.26.0
 termcolor
