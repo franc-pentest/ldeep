@@ -20,6 +20,7 @@ jobs:
         git config user.name BastienFaure
         git config user.email BastienFaure@users.noreply.github.com
         VERSION=$(cat VERSION)
+        git remote add origin git@github.com:franc-pentest/ldeep
         git tag $VERSION
         git push origin $VERSION
         python3 setup.py sdist
