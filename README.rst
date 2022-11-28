@@ -60,9 +60,8 @@ LDAP
 ::
 
     $ ldeep ldap -h
-    usage: ldeep ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--cert-pem CERT_PEM] [--key-pem KEY_PEM] [-a]
-                            {computers,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,enum_users,search,modify_password,unlock}
-                            ...
+    usage: ldeep ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--pfx-file PFX_FILE] [--cert-pem CERT_PEM] [--key-pem KEY_PEM] [-a]
+                  {computers,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,zone,all,enum_users,search,add_to_group,modify_password,remove_from_group,unlock}
 
     LDAP mode
 
@@ -87,6 +86,7 @@ LDAP
       -k, --kerberos        For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable
 
     Certificate authentication:
+      --pfx-file PFX_FILE   PFX file
       --cert-pem CERT_PEM   User certificate
       --key-pem KEY_PEM     User private key
 
@@ -120,7 +120,9 @@ LDAP
         all                 Collect and store computers, domain_policy, zones, gpo, groups, ou, users, trusts, pso information
         enum_users          Anonymously enumerate users with LDAP pings.
         search              Query the LDAP with `filter` and retrieve ALL or `attributes` if specified.
+        add_to_group        Add `user` to `group`.
         modify_password     Change `user`'s password.
+        remove_from_group   Remove `user` from `group`.
         unlock              Unlock `user`.
 
 CACHE
