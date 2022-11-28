@@ -1,0 +1,27 @@
+name: Version Update
+on:
+  push:
+    branches:
+    - 'master'
+    paths:
+    - 'VERSION'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        persist-credentials: false
+    - name: Build and publish
+      run: |
+        mkdir ~/.ssh
+        echo -n "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        git config user.name franc-pentest-automation-user
+        git config user.email franc-pentester-automation-user@users.noreply.github.com
+        VERSION=$(cat VERSION)
+        git tag $VERSION
+        git push origin $VERSION
+        python3 setup.py sdist
+        pip install twine
+        twine upload -u b0z -p '{{ secrets.PYPI_PASSWORD}}' dist/*
