@@ -22,6 +22,7 @@ jobs:
         VERSION=$(cat VERSION)
         git remote add origin git@github.com:franc-pentest/ldeep
         git tag $VERSION
+        git remote remove origin
         git push origin $VERSION
         python3 setup.py sdist
         pip install twine
