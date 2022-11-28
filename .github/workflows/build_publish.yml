@@ -26,4 +26,4 @@ jobs:
         git push origin $VERSION
         python3 setup.py sdist
         pip install twine
-        twine upload -u b0z -p '{{ secrets.PYPI_PASSWORD}}' dist/*
+        twine upload -u b0z -p '${{ secrets.PYPI_PASSWORD }}' dist/*
