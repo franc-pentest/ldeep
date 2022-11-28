@@ -8,6 +8,7 @@ from math import fabs
 from re import compile as re_compile
 from datetime import date, datetime, timedelta
 from commandparse import Command
+from time import sleep
 from Cryptodome.Hash import MD4
 
 from pyasn1.error import PyAsn1UnicodeDecodeError
@@ -687,6 +688,32 @@ class Ldeep(Command):
 					getattr(self, method)(kwargs)
 					kwargs["verbose"] = False
 
+	def misc_enum_users(self, kwargs):
+		"""
+		Anonymously enumerate users with LDAP pings.
+
+		Arguments:
+			#file:string
+				File containing a list of usernames to try.
+			@delay:int = 0
+				Delay in milliseconds between each try.
+		"""
+
+		# LDAP pings can only be used with an anonymous bind
+		if self.engine.ldap.authentication != 'ANONYMOUS':
+			error('The enum_users feature can only be used with an anonymous bind (-a option)')
+
+		file = kwargs["file"]
+		delay = kwargs["delay"]
+		with open(file, 'r') as f:
+			while True:
+				l = f.readline()[:-1]
+				if not l:
+					break
+				if self.engine.user_exists(l):
+					print(l)
+				sleep(delay / 1000)
+
 	# ACTION #
 
 	def action_unlock(self, kwargs):
@@ -726,6 +753,42 @@ class Ldeep(Command):
 			info("Password of {username} changed".format(username=user))
 		else:
 			error("Unable to change {username}'s password, check privileges or try with ldaps://".format(username=user))
+
+	def action_add_to_group(self, kwargs):
+		"""
+		Add `user` to `group`.
+
+		Arguments:
+			#user:string
+				Target user (dn format). Ex: "CN=bob,CN=Users,DC=CORP,DC=LOCAL"
+			#group:string
+				Target group (dn format). Ex: "CN=Domain Admins,CN=Users,DC=CORP,DC=LOCAL"
+		"""
+		user = kwargs["user"]
+		group = kwargs["group"]
+
+		if self.engine.add_user_to_group(user, group):
+			info(f"User {user} sucessfully added to {group}")
+		else:
+			error(f"Unable to add {user} to {group}, check privileges or dn")
+
+	def action_remove_from_group(self, kwargs):
+		"""
+		Remove `user` from `group`.
+
+		Arguments:
+			#user:string
+				Target user (dn format). Ex: "CN=bob,CN=Users,DC=CORP,DC=LOCAL"
+			#group:string
+				Target group (dn format). Ex: "CN=Domain Admins,CN=Users,DC=CORP,DC=LOCAL"
+		"""
+		user = kwargs["user"]
+		group = kwargs["group"]
+
+		if self.engine.remove_user_from_group(user, group):
+			info(f"User {user} sucessfully removed from {group}")
+		else:
+			error(f"Unable to remove {user} from {group}, check privileges or dn")
 
 class MSDS_MANAGEDPASSWORD_BLOB(Structure):
 	structure = (
@@ -788,6 +851,7 @@ def main():
 	kerberos.add_argument("-k", "--kerberos", action="store_true", help="For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable")
 
 	certificate = ldap.add_argument_group("Certificate authentication")
+	certificate.add_argument("--pfx-file", help="PFX file")
 	certificate.add_argument("--cert-pem", help="User certificate")
 	certificate.add_argument("--key-pem", help="User private key")
 
@@ -818,9 +882,9 @@ def main():
 			method = "NTLM"
 			if args.kerberos:
 				method = "Kerberos"
-			elif args.cert_pem:
+			elif args.cert_pem or args.pfx_file:
 				method = "Certificate"
-			elif args.anonymous:
+			elif args.anonymous or args.command_ldap == "enum_users":
 				method = "anonymous"
 			elif args.type == "ntlm":
 				method = "NTLM"
@@ -829,7 +893,7 @@ def main():
 			else:
 				error("Lack of authentication options: either Kerberos, Certificate, Username with Password (can be a NTLM hash) or Anonymous.")
 
-			query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.cert_pem, args.key_pem, method)
+			query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.pfx_file, args.cert_pem, args.key_pem, method)
 
 			
 		except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:

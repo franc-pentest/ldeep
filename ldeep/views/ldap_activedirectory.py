@@ -3,12 +3,14 @@ from struct import unpack
 from socket import inet_ntoa
 from ssl import CERT_NONE
 
-from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL
+from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL, BASE, DEREF_NEVER
 from ldap3 import SIMPLE
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid, format_ad_timestamp
 from ldap3.core.exceptions import LDAPNoSuchObjectResult, LDAPOperationResult, LDAPSocketOpenError
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
 from ldap3.extend.microsoft.modifyPassword import ad_modify_password
+from ldap3.extend.microsoft.addMembersToGroups import ad_add_members_to_groups as addUsersInGroups
+from ldap3.extend.microsoft.removeMembersFromGroups import ad_remove_members_from_groups as removeUsersInGroups
 
 import ldap3
 
@@ -156,11 +158,12 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 	PSO_INFO_FILTER = lambda _: "(objectClass=msDS-PasswordSettings)"
 	TRUSTS_INFO_FILTER = lambda _: "(objectCategory=trustedDomain)"
 	OU_FILTER = lambda _: "(|(objectClass=OrganizationalUnit)(objectClass=domain))"
+	ENUM_USER_FILTER = lambda _, n: f"(&(NtVer=\x06\x00\x00\x00)(AAC=\x10\x00\x00\x00)(User={n}))"
 
 	class ActiveDirectoryLdapException(Exception):
 		pass
 
-	def __init__(self, server, domain="", base="", username="", password="", ntlm="", cert_pem="", key_pem="", method="NTLM"):
+	def __init__(self, server, domain="", base="", username="", password="", ntlm="", pfx_file="", cert_pem="", key_pem="", method="NTLM"):
 		"""
 		LdapActiveDirectoryView constructor.
 		Initialize the connection with the LDAP server.
@@ -183,6 +186,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		self.username = username
 		self.password = password
 		self.ntlm = ntlm
+		self.pfx_file = pfx_file
 		self.cert = cert_pem
 		self.key = key_pem
 		self.server = server
@@ -193,7 +197,37 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		self.set_all_attributes()
 
 		if method == "Certificate":
-			tls = ldap3.Tls(local_private_key_file=self.key, local_certificate_file=self.cert, validate=CERT_NONE)
+			if not self.server.startswith("ldaps"):
+				# TODO start tls if ldap
+				print("At this moment ldeep needs to use ldaps (use ldaps:// before the server parameter)")
+				exit(1)
+			else:
+				if self.pfx_file:
+					# TODO deal with pfx password protected
+					with open(pfx_file, 'rb') as f:
+						pfxdata = f.read()
+					from cryptography.hazmat.primitives.serialization import pkcs12
+					from cryptography.hazmat.primitives import serialization
+					privkey, cert, extra_certs = pkcs12.load_key_and_certificates(pfxdata, None)
+					key = privkey.private_bytes(
+						encoding=serialization.Encoding.PEM,
+						format=serialization.PrivateFormat.TraditionalOpenSSL,
+						encryption_algorithm=serialization.NoEncryption(),
+					)
+					cert = cert.public_bytes(encoding=serialization.Encoding.PEM)
+					try:
+						from tempfile import gettempdir
+						key_path = f'{gettempdir()}/ldeep_key'
+						cert_path = f'{gettempdir()}/ldeep_cert'
+						with open(key_path, "wb") as f1, open(cert_path, "wb") as f2:
+							f1.write(key)
+							f2.write(cert)
+						tls = ldap3.Tls(local_private_key_file=key_path, local_certificate_file=cert_path, validate=CERT_NONE)
+					except PermissionError:
+						print("Can't write key and cert to disk")
+						exit(1)
+				else:
+					tls = ldap3.Tls(local_private_key_file=self.key, local_certificate_file=self.cert, validate=CERT_NONE)
 		else:
 			tls=ldap3.Tls(validate=CERT_NONE)
 
@@ -248,10 +282,17 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
 		try:
 			if method == "Certificate":
+				import os
 				try:
 					self.ldap.open()
+					if self.pfx_file:
+						os.remove(key_path)
+						os.remove(cert_path)
 				except ldap3.core.exceptions.LDAPSocketOpenError:
 					print("Cannot get private key data, corrupted key or wrong passphrase ?")
+					if self.pfx_file:
+						os.remove(key_path)
+						os.remove(cert_path)
 					exit(1)
 				except Exception as e:
 					print("Unhandled Exception")
@@ -430,3 +471,65 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 		else:
 			user = results[0]
 			return ad_modify_password(self.ldap, user["dn"], newpassword, None)
+
+	def add_user_to_group(self, user_dn, group_dn):
+		"""
+		Add user to a group.
+
+		@username: the username that will be added to the group. DN format: "CN=username,CN=Users,DC=CORP,DC=LOCAL"
+		@group: the target group. DN format: "CN=group,CN=Users,DC=CORP,DC=LOCAL"
+
+		@return True if the account was successfully added or False otherwise.
+		"""
+		try:
+			return addUsersInGroups(self.ldap, user_dn, group_dn)
+		except ldap3.core.exceptions.LDAPInvalidDnError as e:
+			# catch invalid group dn
+			return False
+
+	def remove_user_from_group(self, user_dn, group_dn):
+		"""
+		Remove user from a group.
+
+		@username: the username that will be removed from the group. dn format: "CN=username,CN=Users,DC=CORP,DC=LOCAL"
+		@group: the target group. dn format: "CN=group,CN=Users,DC=CORP,DC=LOCAL"
+
+		@return True if the account was successfully removed or if the account doesn't exist or False otherwise.
+		"""
+		try:
+			return removeUsersInGroups(self.ldap, user_dn, group_dn, fix=True)
+		except ldap3.core.exceptions.LDAPInvalidDnError as e:
+			# catch invalid group dn
+			return False
+
+	def user_exists(self, username):
+		"""
+		Perform an LDAP ping to determine if the specified user exists.
+
+		@username: the username to test.
+
+		@return True if the user exists, False otherwise.
+		"""
+		try:
+			result = self.ldap.search(
+				'',
+				search_filter=self.ENUM_USER_FILTER(username),
+				search_scope=BASE,
+				attributes=['NetLogon'],
+				dereference_aliases=DEREF_NEVER
+			)
+
+			if not result:
+				raise self.ActiveDirectoryLdapException()
+			else:
+				for entry in self.ldap.response:
+					attr = entry.get('raw_attributes')
+					if attr:
+						netlogon = attr.get('netlogon')
+						if netlogon and len(netlogon[0]) > 1 and netlogon[0][:2] == LOGON_SAM_LOGON_RESPONSE_EX:
+							return True
+
+		except LDAPOperationResult as e:
+			raise self.ActiveDirectoryLdapException(e)
+
+		return False
