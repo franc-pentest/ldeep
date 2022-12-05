@@ -235,7 +235,7 @@ class Ldeep(Command):
 			policy = policy[0]
 			for field in FIELDS_TO_PRINT:
 				val = policy.get(field, None)
-				if not val:
+				if val is None:
 					continue
 
 				if field == "lockOutObservationWindow" and isinstance(val, timedelta):
