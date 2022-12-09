@@ -9,7 +9,10 @@ from re import compile as re_compile
 from datetime import date, datetime, timedelta
 from commandparse import Command
 from time import sleep
-from Cryptodome.Hash import MD4
+
+from Cryptodome.Cipher import AES
+from Cryptodome.Hash import MD4, SHA1
+from Cryptodome.Protocol.KDF import PBKDF2
 
 from pyasn1.error import PyAsn1UnicodeDecodeError
 
@@ -179,17 +182,46 @@ class Ldeep(Command):
 			print("Can't retrieve gmsa, TLS needed")
 			return
 		entries = self.engine.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes)
+
+		constants = b'\x6b\x65\x72\x62\x65\x72\x6f\x73\x7b\x9b\x5b\x2b\x93\x13\x2b\x93\x5c\x9b\xdc\xda\xd9\x5c\x98\x99\xc4\xca\xe4\xde\xe6\xd6\xca\xe4'
+		iv = b'\x00' * 16
+
 		for entry in entries:
 			try:
 				sam = entry['sAMAccountName']
 				data = entry['msDS-ManagedPassword']
 				blob = MSDS_MANAGEDPASSWORD_BLOB()
 				blob.fromString(data)
-				hash = MD4.new ()
-				hash.update (blob['CurrentPassword'][:-2])
-				passwd = binascii.hexlify(hash.digest()).decode("utf-8")
-				userpass = sam + ':::' + passwd
-				print(userpass)
+				password = blob['CurrentPassword'][:-2]
+
+				# Compute NT hash
+				hash = MD4.new()
+				hash.update(password)
+				nthash = hash.hexdigest()
+
+				# Quick and dirty way to get the FQDN of the account's domain
+				dc_list = []
+				for s in entry['dn'].split(','):
+					if s.startswith('DC='):
+						dc_list.append(s[3:])
+
+				domain_fqdn = '.'.join(dc_list)
+				salt = f'{domain_fqdn.upper()}host{sam[:-1].lower()}.{domain_fqdn.lower()}'
+				encryption_key = PBKDF2(password.decode('utf-16-le', 'replace').encode(), salt.encode(), 32, count=4096, hmac_hash_module=SHA1)
+
+				# Compute AES keys
+				cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
+				first_part = cipher.encrypt(constants)
+				cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
+				second_part = cipher.encrypt(first_part)
+				aes256_key = first_part[:16] + second_part[:16]
+
+				cipher = AES.new(encryption_key[:16], AES.MODE_CBC, iv)
+				aes128_key = cipher.encrypt(constants[:16])
+
+				print(f'{sam}:nt:{nthash}')
+				print(f'{sam}:aes128-cts-hmac-sha1-96:{aes128_key.hex()}')
+				print(f'{sam}:aes256-cts-hmac-sha1-96:{aes256_key.hex()}')
 			except:
 				print(sam)
 
