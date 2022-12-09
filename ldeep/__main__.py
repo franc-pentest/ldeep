@@ -59,6 +59,8 @@ class Ldeep(Command):
 					print(record["dn"])
 				elif "pKIEnrollmentService" in record["objectClass"]:
 					print(record["dNSHostName"])
+				elif "msDS-AuthNPolicy" in record["objectClass"] or "msDS-AuthNPolicySilo" in record["objectClass"]:
+					print(record["cn"])
 
 	def __display_json(self, records, default):
 		json_dump(records, sys.stdout, ensure_ascii=False, default=default, sort_keys=True, indent=2)
@@ -485,6 +487,55 @@ class Ldeep(Command):
 				output += " | Subnet description: {}".format(subnet_description) if subnet_description else ""
 				print(output)
 
+	def list_conf(self, kwargs):
+		"""
+		Dump the configuration partition of the Active Directory.
+		"""
+		self.display(
+			self.engine.query(
+				self.engine.ALL_FILTER(),
+				ALL, base=','.join(["CN=Configuration", self.engine.base_dn])
+			),
+			True
+		)
+
+	def list_auth_policies(self, kwargs):
+		"""
+		List the authentication policies configured in the Active Directory.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+		"""
+		verbose = kwargs.get("verbose", False)
+		attributes = ALL if verbose else ["cn", "objectClass"]
+
+		self.display(
+			self.engine.query(
+				self.engine.AUTH_POLICIES_FILTER(),
+				attributes, base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
+			),
+			verbose
+		)
+
+	def list_silos(self, kwargs):
+		"""
+		List the silos configured in the Active Directory.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+		"""
+		verbose = kwargs.get("verbose", False)
+		attributes = ALL if verbose else ["cn", "objectClass"]
+
+		self.display(
+			self.engine.query(
+				self.engine.SILOS_FILTER(),
+				attributes, base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
+			),
+			verbose
+		)
 
 	# GETTERS #
 
@@ -652,6 +703,46 @@ class Ldeep(Command):
 		results = self.engine.get_sddl(f"(anr={anr})")
 
 		self.display(results, True, False)
+
+	def get_silo(self, kwargs):
+		"""
+		Get information about a specific `silo`.
+
+		Arguments:
+			#silo:string
+				Silo to query
+			@information:string = ["all", "members", "auth_policies"]
+				Information to query
+		"""
+		silo = kwargs["silo"]
+		info = kwargs["information"]
+
+		if info == "all":
+			attributes = ALL
+		elif info == "members":
+			attributes = ["msDS-AuthNPolicySiloMembers"]
+		elif info == "auth_policies":
+			attributes = ["msDS-ComputerAuthNPolicy", "msDS-ServiceAuthNPolicy", "msDS-UserAuthNPolicy"]
+		else:
+			return None
+
+		results = self.engine.query(
+			self.engine.SILO_FILTER(silo),
+			attributes,
+			base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
+		)
+		if not results:
+			error(f"Silo {silo} does not exists")
+
+		if info == "all":
+			self.display(results, True)
+		elif info == "members":
+			members = results[0]["msDS-AuthNPolicySiloMembers"]
+			print(*members, sep="\n")
+		elif info == "auth_policies":
+			print(f"msDS-ComputerAuthNPolicy: {results[0]['msDS-ComputerAuthNPolicy']}")
+			print(f"msDS-ServiceAuthNPolicy: {results[0]['msDS-ServiceAuthNPolicy']}")
+			print(f"msDS-UserAuthNPolicy: {results[0]['msDS-UserAuthNPolicy']}")
 
 	# MISC #
 

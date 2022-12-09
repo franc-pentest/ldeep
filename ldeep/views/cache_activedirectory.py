@@ -65,6 +65,13 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 		"files": ["users_all", "groups", "machines"],
 		"filter": lambda x: x["objectSid"].endswith(f"-{i}")
 	}
+	AUTH_POLICIES_FILTER = lambda _: {"files": ["auth_policies"]}
+	SILOS_FILTER = lambda _: {"files": ["silos"]}
+	SILO_FILTER = lambda _, s: {
+		"fmt": "json",
+		"files": ["silos"],
+		"filter": lambda x: eq(x["cn"], s)
+	}
 	# Not implemented:
 	DOMAIN_INFO_FILTER = lambda _: None
 	GPO_INFO_FILTER = lambda _: None
