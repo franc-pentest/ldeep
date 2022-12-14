@@ -159,6 +159,10 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 	TRUSTS_INFO_FILTER = lambda _: "(objectCategory=trustedDomain)"
 	OU_FILTER = lambda _: "(|(objectClass=OrganizationalUnit)(objectClass=domain))"
 	ENUM_USER_FILTER = lambda _, n: f"(&(NtVer=\x06\x00\x00\x00)(AAC=\x10\x00\x00\x00)(User={n}))"
+	ALL_FILTER = lambda _: "(objectClass=*)"
+	AUTH_POLICIES_FILTER = lambda _: "(objectClass=msDS-AuthNPolicy)"
+	SILOS_FILTER = lambda _: "(objectClass=msDS-AuthNPolicySilo)"
+	SILO_FILTER = lambda _, s: f"(&(objectClass=msDS-AuthNPolicySilo)(cn={s}))"
 
 	class ActiveDirectoryLdapException(Exception):
 		pass
