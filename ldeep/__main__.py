@@ -539,7 +539,7 @@ class Ldeep(Command):
 
 	def list_smsa(self, kwargs):
 		"""
-		List the smsa accounts and the machine they are associated with.
+		List the smsa accounts and the machines they are associated with.
 
 		Arguments:
 			@verbose:bool
