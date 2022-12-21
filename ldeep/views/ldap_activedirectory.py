@@ -163,6 +163,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 	AUTH_POLICIES_FILTER = lambda _: "(objectClass=msDS-AuthNPolicy)"
 	SILOS_FILTER = lambda _: "(objectClass=msDS-AuthNPolicySilo)"
 	SILO_FILTER = lambda _, s: f"(&(objectClass=msDS-AuthNPolicySilo)(cn={s}))"
+	SMSA_FILTER = lambda _: "(ObjectClass=msDS-ManagedServiceAccount)"
 
 	class ActiveDirectoryLdapException(Exception):
 		pass
