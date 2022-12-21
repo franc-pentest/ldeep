@@ -69,7 +69,7 @@ LDAP
 ::
 
     $ ldeep ldap -h
-    usage: ldeep  ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--pfx-file PFX_FILE] [--cert-pem CERT_PEM] [--key-pem KEY_PEM] [-a]
+    usage: ldeep ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--pfx-file PFX_FILE] [--cert-pem CERT_PEM] [--key-pem KEY_PEM] [-a]
                         {auth_policies,computers,conf,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,add_to_group,modify_password,remove_from_group,unlock}
                         ...
 
