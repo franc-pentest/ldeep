@@ -547,7 +547,7 @@ class Ldeep(Command):
 		"""
 
 		verbose = kwargs.get("verbose", False)
-		attributes = ALL if verbose else ["samAccountName", "objectClass", "msDS-HostServiceAccountBL"]
+		attributes = ALL if verbose else ["samAccountName", "msDS-HostServiceAccountBL"]
 		entries = self.engine.query(self.engine.SMSA_FILTER(), attributes)
 
 		if verbose:
