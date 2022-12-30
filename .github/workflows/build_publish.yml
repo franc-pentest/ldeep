@@ -20,8 +20,9 @@ jobs:
       - name: Build release assets
         run: |
           pip install pex wheel
-          python3 setup.py sdist
+          python3 setup.py sdist -d sdist
           python3 setup.py bdist_pex
+          mkdir
       - name: Create the release
         uses: softprops/action-gh-release@v1
         with:
@@ -31,3 +32,4 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_KEY }}
+          packages_dir: sdist/
