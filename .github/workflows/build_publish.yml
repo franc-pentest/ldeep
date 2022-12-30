@@ -9,21 +9,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-      with:
-        persist-credentials: false
-    - name: Build and publish
-      run: |
-        mkdir ~/.ssh
-        echo -n "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        git config user.name BastienFaure
-        git config user.email BastienFaure@users.noreply.github.com
-        VERSION=$(cat VERSION)
-        git remote remove origin
-        git remote add origin git@github.com:franc-pentest/ldeep
-        git tag $VERSION
-        git push origin $VERSION
-        python3 setup.py sdist
-        pip install twine
-        twine upload -u b0z -p '${{ secrets.PYPI_PASSWORD }}' dist/*
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Get local version
+        run: echo "version=$(cat VERSION)" >> $GITHUB_ENV
+      - name: Create tag
+        uses: rickstaa/action-create-tag@v1
+        with:
+          tag: ${{ env.version }}
+      - name: Build release assets
+        run: |
+          pip install pex wheel
+          python3 setup.py sdist
+          python3 setup.py bdist_pex
+      - name: Create the release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.version }}
+          files: dist/*
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_KEY }}
