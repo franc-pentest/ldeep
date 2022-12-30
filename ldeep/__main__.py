@@ -537,6 +537,27 @@ class Ldeep(Command):
 			verbose
 		)
 
+	def list_smsa(self, kwargs):
+		"""
+		List the smsa accounts and the machines they are associated with.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+		"""
+
+		verbose = kwargs.get("verbose", False)
+		attributes = ALL if verbose else ["samAccountName", "msDS-HostServiceAccountBL"]
+		entries = self.engine.query(self.engine.SMSA_FILTER(), attributes)
+
+		if verbose:
+			self.display(entries, verbose)
+		else:
+			for entry in entries:
+				sam = entry['sAMAccountName']
+				for host in entry["msDS-HostServiceAccountBL"]:
+					print(f'{sam}:{host}')
+
 	# GETTERS #
 
 	def get_zone(self, kwargs):

@@ -83,6 +83,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 	USER_ACCOUNT_CONTROL_FILTER = lambda _, __: None
 	USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: None
 	USER_LOCKED_FILTER = lambda _: None
+	SMSA_FILTER = lambda _: None
 
 	class CacheActiveDirectoryException(Exception):
 		pass
