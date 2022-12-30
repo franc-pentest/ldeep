@@ -22,7 +22,6 @@ jobs:
           pip install pex wheel
           python3 setup.py sdist -d sdist
           python3 setup.py bdist_pex
-          mkdir
       - name: Create the release
         uses: softprops/action-gh-release@v1
         with:
