@@ -28,6 +28,7 @@ Ldeep can either run against an Active Directory LDAP server or locally on saved
   [+] Retrieving auth_policies verbose output
   [+] Retrieving computers output
   [+] Retrieving conf output
+  [+] Retrieving delegations output
   [+] Retrieving delegations verbose output
   [+] Retrieving delegations verbose output
   [+] Retrieving delegations verbose output
