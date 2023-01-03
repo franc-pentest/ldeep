@@ -23,6 +23,7 @@ from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 
 from ldeep.utils import error, info, Logger, resolve as utils_resolve
 from ldeep.utils.structure import Structure
+from ldeep.utils.sddl import parse_ntSecurityDescriptor
 
 import sys
 
@@ -557,6 +558,70 @@ class Ldeep(Command):
 				sam = entry['sAMAccountName']
 				for host in entry["msDS-HostServiceAccountBL"]:
 					print(f'{sam}:{host}')
+
+	def list_delegations(self, kwargs):
+		"""
+		List accounts configured for any kind of delegation.
+
+		Arguments:
+			@verbose:bool
+				Results will contain full information
+			@filter:string = ["all", "unconstrained", "constrained", "rbcd"]
+		"""
+		verbose	 = kwargs.get("verbose", False)
+		filter_	 = kwargs.get("filter", "all")
+
+		attributes = ALL if verbose else ["samAccountName", "userAccountControl"]
+
+		if filter_ == "all":
+			if not verbose:
+				attributes.extend([
+					"msDS-AllowedToDelegateTo",
+					"msDS-AllowedToActOnBehalfOfOtherIdentity"
+				])
+			entries = self.engine.query(self.engine.ALL_DELEGATIONS_FILTER(), attributes)
+		elif filter_ == "unconstrained":
+			entries = self.engine.query(self.engine.UNCONSTRAINED_DELEGATION_FILTER(), attributes)
+		elif filter_ == "constrained":
+			if not verbose:
+				attributes.append("msDS-AllowedToDelegateTo")
+			entries = self.engine.query(self.engine.CONSTRAINED_DELEGATION_FILTER(), attributes)
+		elif filter_ == "rbcd":
+			if not verbose:
+				attributes.append("msDS-AllowedToActOnBehalfOfOtherIdentity")
+			entries = self.engine.query(self.engine.RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER(), attributes)
+		else:
+			return None
+
+		if verbose:
+			self.display(entries, verbose)
+		else:
+			for entry in entries:
+				try:
+					uac = entry["userAccountControl"]
+					sam = entry["samAccountName"]
+					delegate = entry.get("msDS-AllowedToDelegateTo")
+					allowed_to_act = entry.get("msDS-AllowedToActOnBehalfOfOtherIdentity")
+					if (filter_ == "unconstrained" or filter_ == "all") and "TRUSTED_FOR_DELEGATION" in uac:
+						print(f"{sam}:unconstrained:")
+					if (filter_ == "constrained" or filter_ == "all") and delegate:
+						transition = "with" if "TRUSTED_TO_AUTH_FOR_DELEGATION" in uac else "without"
+						for a in delegate:
+							print(f"{sam}:constrained {transition} protocol transition:{a}")
+					if (filter_ == "rbcd" or filter_ == "all") and allowed_to_act:
+						sd = parse_ntSecurityDescriptor(allowed_to_act)
+						for ace in sd['DACL']['ACEs']:
+							try:
+								sid = ace.get('SID')
+								if not sid:
+									continue
+								res = self.engine.resolve_sid(sid)
+								name = res[0]['samAccountName']
+								print(f"{name}:rbcd:{sam}")
+							except Exception:
+								print(f"{sid}:rbcd:{sam}")
+				except Exception:
+					continue
 
 	# GETTERS #
 

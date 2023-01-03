@@ -28,6 +28,11 @@ Ldeep can either run against an Active Directory LDAP server or locally on saved
   [+] Retrieving auth_policies verbose output
   [+] Retrieving computers output
   [+] Retrieving conf output
+  [+] Retrieving delegations output
+  [+] Retrieving delegations verbose output
+  [+] Retrieving delegations verbose output
+  [+] Retrieving delegations verbose output
+  [+] Retrieving delegations verbose output
   [+] Retrieving domain_policy output
   [+] Retrieving gmsa output
   [+] Retrieving gpo output
@@ -70,7 +75,7 @@ LDAP
 
     $ ldeep ldap -h
     usage: ldeep ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--pfx-file PFX_FILE] [--cert-pem CERT_PEM] [--key-pem KEY_PEM] [-a]
-                        {auth_policies,computers,conf,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,add_to_group,modify_password,remove_from_group,unlock}
+                        {auth_policies,computers,conf,delegations,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,add_to_group,modify_password,remove_from_group,unlock}
                         ...
 
     LDAP mode
@@ -106,10 +111,11 @@ LDAP
     commands:
       available commands
 
-      {auth_policies,computers,conf,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,add_to_group,modify_password,remove_from_group,unlock}
+      {auth_policies,computers,conf,delegations,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,add_to_group,modify_password,remove_from_group,unlock}
         auth_policies       List the authentication policies configured in the Active Directory.
         computers           List the computer hostnames and resolve them if --resolve is specify.
         conf                Dump the configuration partition of the Active Directory.
+        delegations         List accounts configured for any kind of delegation.
         domain_policy       Return the domain policy.
         gmsa                List the gmsa accounts and retrieve NT hash if possible.
         gpo                 Return the list of Group policy objects.
@@ -119,7 +125,7 @@ LDAP
         pkis                List pkis.
         pso                 List the Password Settings Objects.
         silos               List the silos configured in the Active Directory.
-        smsa                List the smsa accounts and the machine they are associated with.
+        smsa                List the smsa accounts and the machines they are associated with.
         subnets             List sites and associated subnets.
         trusts              List the domain's trust relationships.
         users               List users according to a filter.
@@ -147,7 +153,7 @@ CACHE
    
     $ ldeep cache -h
     usage: ldeep cache [-h] [-d DIR] -p PREFIX
-                         {auth_policies,computers,conf,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone}
+                         {auth_policies,computers,conf,delegations,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone}
                          ...
 
     Cache mode
@@ -161,10 +167,11 @@ CACHE
     commands:
       available commands
 
-      {auth_policies,computers,conf,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone}
+      {auth_policies,computers,conf,delegations,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone}
         auth_policies       List the authentication policies configured in the Active Directory.
         computers           List the computer hostnames and resolve them if --resolve is specify.
         conf                Dump the configuration partition of the Active Directory.
+        delegations         List accounts configured for any kind of delegation.
         domain_policy       Return the domain policy.
         gmsa                List the gmsa accounts and retrieve NT hash if possible.
         gpo                 Return the list of Group policy objects.
@@ -174,7 +181,7 @@ CACHE
         pkis                List pkis.
         pso                 List the Password Settings Objects.
         silos               List the silos configured in the Active Directory.
-        smsa                List the smsa accounts and the machine they are associated with.
+        smsa                List the smsa accounts and the machines they are associated with.
         subnets             List sites and associated subnets.
         trusts              List the domain's trust relationships.
         users               List users according to a filter.

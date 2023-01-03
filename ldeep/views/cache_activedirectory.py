@@ -72,6 +72,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 		"files": ["silos"],
 		"filter": lambda x: eq(x["cn"], s)
 	}
+	
 	# Not implemented:
 	DOMAIN_INFO_FILTER = lambda _: None
 	GPO_INFO_FILTER = lambda _: None
@@ -84,6 +85,10 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 	USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: None
 	USER_LOCKED_FILTER = lambda _: None
 	SMSA_FILTER = lambda _: None
+	UNCONSTRAINED_DELEGATION_FILTER = lambda _: None
+	CONSTRAINED_DELEGATION_FILTER = lambda _: None
+	RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER = lambda _: None
+	ALL_DELEGATIONS_FILTER = lambda _: None
 
 	class CacheActiveDirectoryException(Exception):
 		pass
