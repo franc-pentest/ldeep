@@ -107,7 +107,7 @@ TRUSTS_INFOS = {
 	"PIM_TRUST": 0x400
 }
 
-WELL_KNOWN_SIDs = {
+WELL_KNOWN_SIDS = {
 	"S-1-5-32-544"	: r"BUILTIN\Administrators",
 	"S-1-5-32-545"	: r"BUILTIN\Users",
 	"S-1-5-32-546"	: r"BUILTIN\Guests",
