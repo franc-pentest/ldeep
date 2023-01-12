@@ -23,6 +23,7 @@ from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 from ldeep.utils import error, info, Logger, resolve as utils_resolve
 from ldeep.utils.structure import Structure
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
+from ldap3.protocol.formatters.formatters import format_sid
 
 import sys
 
@@ -560,6 +561,26 @@ class Ldeep(Command):
                 sam = entry['sAMAccountName']
                 for host in entry["msDS-HostServiceAccountBL"]:
                     print(f'{sam}:{host}')
+
+    def list_shadow_principals(self, kwargs):
+        """
+        List the shadow principals and the groups associated with.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+
+        verbose = kwargs.get("verbose", False)
+        attributes = ALL if verbose else ["member", "msDS-ShadowPrincipalSid"]
+        base=','.join(["CN=Shadow Principal Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
+        entries = self.engine.query(self.engine.SHADOW_PRINCIPALS_FILTER(), attributes, base=base)
+
+        if verbose:
+            self.display(entries, verbose)
+        else:
+            for entry in entries:
+                print(f"User {entry['member'][0]} added to Group {format_sid(entry['msDS-ShadowPrincipalSid'])}")
 
     def list_delegations(self, kwargs):
         """

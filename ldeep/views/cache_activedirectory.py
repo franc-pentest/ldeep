@@ -85,6 +85,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
     USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: None
     USER_LOCKED_FILTER = lambda _: None
     SMSA_FILTER = lambda _: None
+    SHADOW_PRINCIPALS_FILTER = lambda _: None
     UNCONSTRAINED_DELEGATION_FILTER = lambda _: None
     CONSTRAINED_DELEGATION_FILTER = lambda _: None
     RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER = lambda _: None

@@ -34,7 +34,6 @@ def parse_ntSecurityDescriptor(input_buffer):
 	""" Parses a ntSecurityDescriptor.
 	"""
 	out = dict()
-
 	fields = ('Revision', 'Raw Type', 'Offset to owner SID', 'Offset to group SID', 'Offset to SACL', 'Offset to DACL')
 
 	for k, v in zip(fields, unpack('<HHIIII', input_buffer[:20])):

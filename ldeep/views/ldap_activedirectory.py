@@ -165,6 +165,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     SILOS_FILTER = lambda _: "(objectClass=msDS-AuthNPolicySilo)"
     SILO_FILTER = lambda _, s: f"(&(objectClass=msDS-AuthNPolicySilo)(cn={s}))"
     SMSA_FILTER = lambda _: "(ObjectClass=msDS-ManagedServiceAccount)"
+    SHADOW_PRINCIPALS_FILTER = lambda _: "(objectclass=msDS-ShadowPrincipal)"
     UNCONSTRAINED_DELEGATION_FILTER = lambda _: f"(userAccountControl:1.2.840.113556.1.4.803:=524288)"
     CONSTRAINED_DELEGATION_FILTER = lambda _: f"(msDS-AllowedToDelegateTo=*)"
     RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER = lambda _: f"(msDS-AllowedToActOnBehalfOfOtherIdentity=*)"
