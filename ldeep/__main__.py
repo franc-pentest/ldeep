@@ -357,11 +357,40 @@ class Ldeep(Command):
                     val = "{val} {typ}".format(val=val, typ=FILETIME_TIMESTAMP_FIELDS[field][1])
                 print("{field}: {val}".format(field=field, val=val))
 
-    def list_trusts(self, _):
+    def list_trusts(self, kwargs):
         """
         List the domain's trust relationships.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
         """
+        verbose = kwargs.get("verbose", False)
         results = self.engine.query(self.engine.TRUSTS_INFO_FILTER())
+
+        ATTRIBUTE_TRANSLATION = {
+            "trustDirection": {
+                0x00000003: "bidirectional",
+                0x00000002: "outbound",
+                0x00000001: "inbound",
+                0x00000000: "disabled",
+            },
+            "trustType": {
+                0x00000001: "Non running Windows domain",
+                0x00000002: "Windows domain running Active Directory",
+                0x00000003: "Non Windows domain",
+            },
+        }
+
+        for result in results:
+            for key in ATTRIBUTE_TRANSLATION:
+                if key in result:
+                    result[key] = ATTRIBUTE_TRANSLATION[key][int(result[key])]
+
+        if verbose:
+            self.display(results, verbose)
+            return
+
         FIELDS_TO_PRINT = [
             "dn",
             "cn",
@@ -378,22 +407,6 @@ class Ldeep(Command):
             for field in FIELDS_TO_PRINT:
                 if field in result:
                     val = result[field]
-                    if field == "trustDirection":
-                        if int(val) == 0x00000003:
-                            val = "bidirectional"
-                        elif int(val) == 0x00000002:
-                            val = "outbound"
-                        elif int(val) == 0x00000001:
-                            val = "inbound"
-                        elif int(val) == 0x00000000:
-                            val = "disabled"
-                    elif field == "trustType":
-                        if int(val) == 0x00000001:
-                            val = "Non running Windows domain"
-                        elif int(val) == 0x00000002:
-                            val = "Windows domain running Active Directory"
-                        elif int(val) == 0x00000003:
-                            val = "Non Windows domain"
                     print("{field}: {val}".format(field=field, val=val))
             print("")
 
