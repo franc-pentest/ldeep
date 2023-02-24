@@ -24,6 +24,7 @@ from ldeep.utils import error, info, Logger, resolve as utils_resolve
 from ldeep.utils.structure import Structure
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldap3.protocol.formatters.formatters import format_sid
+from ldap3.core import results as coreResults
 
 import sys
 
@@ -226,7 +227,6 @@ class Ldeep(Command):
                 print(f'{sam}:aes128-cts-hmac-sha1-96:{aes128_key.hex()}')
                 print(f'{sam}:aes256-cts-hmac-sha1-96:{aes256_key.hex()}')
             except Exception as e:
-                print(f"Raised exception: {e}")
                 print(sam)
 
     def list_domain_policy(self, _):
@@ -778,6 +778,39 @@ class Ldeep(Command):
         except ActiveDirectoryView.ActiveDirectoryLdapInvalidGUID:
             error("Invalid GUID")
 
+    def get_laps(self, kwargs):
+        """
+        Return the LAPS passwords. If a target is specified, only retrieve the LAPS password for this one.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+            @computer:string
+                Target computer where LAPS is set
+        """
+        computer = kwargs["computer"] if kwargs["computer"] else "*"
+        verbose = kwargs.get("verbose", False)
+
+        attributes = ALL if verbose else ["dNSHostName", "ms-Mcs-AdmPwd", "ms-Mcs-AdmPwdExpirationTime"]
+
+        try:
+            entries = self.engine.query(self.engine.LAPS_FILTER(computer), attributes)
+            for entry in entries:
+                if not verbose:
+                    # TODO: deal with self.display for better code
+                    cn = entry['dNSHostName']
+                    password = entry['ms-Mcs-AdmPwd']
+                    try:
+                        epoch = (int(str(entry['ms-Mcs-AdmPwdExpirationTime']))/10000000) - 11644473600
+                        expiration_date = datetime.fromtimestamp(epoch).strftime("%m-%d-%Y")
+                    except Exception:
+                        expiration_date =  entry['ms-Mcs-AdmPwdExpirationTime']
+                    print(f'{cn} {password} {expiration_date}')
+                else:
+                    self.display(entries, verbose)
+        except Exception as e:
+            error(e)
+
     def get_object(self, kwargs):
         """
         Return the records containing `object` in a CN.
@@ -1020,6 +1053,39 @@ class Ldeep(Command):
             info(f"User {user} sucessfully removed from {group}")
         else:
             error(f"Unable to remove {user} from {group}, check privileges or dn")
+
+    def action_create_computer(self, kwargs):
+        """
+        Create a computer account
+
+        Arguments:
+            #computer_name:string
+                Name of computer to add.
+            #computer_pass:string
+                Password set to computer account
+        """
+        computer = kwargs["computer_name"]
+        password = kwargs["computer_pass"]
+
+        try:
+            self.engine.ldap.start_tls()
+        except Exception as e:
+            print(f"Can't create computer, TLS needed: {e}")
+            return
+
+        if self.engine.create_computer(computer, password):
+            info(f"Computer {computer} sucessfully created wit password {password}")
+        else :
+            if self.engine.ldap.result['result'] == coreResults.RESULT_UNWILLING_TO_PERFORM:
+                error_code = int(self.engine.ldap.result['message'].split(':')[0].strip(), 16)
+                if error_code == 0x216D:
+                    print(f"Machine quota exceeded with account {self.engine.username}")
+                else:
+                    print(str(self.engine.ldap.result))
+            elif self.engine.ldap.result['result'] == coreResults.RESULT_INSUFFICIENT_ACCESS_RIGHTS:
+                print(f"User {self.engine.username} doesn't have right to create a machine account!")
+            elif self.engine.ldap.result['result'] == list(coreResults.RESULT_CODES.keys())[36]:
+                print(f"Computer {computer} already exists")
 
 
 class MSDS_MANAGEDPASSWORD_BLOB(Structure):

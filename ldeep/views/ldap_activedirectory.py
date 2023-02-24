@@ -1,4 +1,4 @@
-from sys import exit
+from sys import exit, _getframe
 from struct import unpack
 from socket import inet_ntoa
 from ssl import CERT_NONE
@@ -6,7 +6,7 @@ from ssl import CERT_NONE
 from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL, BASE, DEREF_NEVER
 from ldap3 import SIMPLE
 from ldap3.protocol.formatters.formatters import format_sid
-from ldap3.core.exceptions import LDAPOperationResult, LDAPSocketOpenError
+from ldap3.core.exceptions import LDAPOperationResult, LDAPSocketOpenError, LDAPAttributeError
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
 from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 from ldap3.extend.microsoft.addMembersToGroups import ad_add_members_to_groups as addUsersInGroups
@@ -164,6 +164,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     AUTH_POLICIES_FILTER = lambda _: "(objectClass=msDS-AuthNPolicy)"
     SILOS_FILTER = lambda _: "(objectClass=msDS-AuthNPolicySilo)"
     SILO_FILTER = lambda _, s: f"(&(objectClass=msDS-AuthNPolicySilo)(cn={s}))"
+    LAPS_FILTER = lambda _, s: f"(&(objectCategory=computer)(ms-MCS-AdmPwd=*)(cn={s}))"
     SMSA_FILTER = lambda _: "(ObjectClass=msDS-ManagedServiceAccount)"
     SHADOW_PRINCIPALS_FILTER = lambda _: "(objectclass=msDS-ShadowPrincipal)"
     UNCONSTRAINED_DELEGATION_FILTER = lambda _: f"(userAccountControl:1.2.840.113556.1.4.803:=524288)"
@@ -361,6 +362,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
         except LDAPOperationResult as e:
             raise self.ActiveDirectoryLdapException(e)
+        except LDAPAttributeError as e:
+            if not _getframe().f_back.f_code.co_name == "get_laps":
+                raise self.ActiveDirectoryLdapException(e)
 
         return result_set
 
@@ -545,3 +549,34 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             raise self.ActiveDirectoryLdapException(e)
 
         return False
+
+    def create_computer(self, computer, password):
+        """
+        Create a computer account on the domain.
+
+        @computer: the name of the create computer.
+        @password: the password of the computer to create.
+
+        @return the result code on the add action
+        """
+        computer_dn = f'CN={computer},CN=Computers,{self.base_dn}'
+        # Default computer SPNs
+        spns = [
+                    'HOST/%s' % computer,
+                    'HOST/%s.%s' % (computer, self.domain),
+                    'RestrictedKrbHost/%s' % computer,
+                    'RestrictedKrbHost/%s.%s' % (computer, self.domain),
+                ]
+
+        ucd = {
+            'dnsHostName': '%s.%s' % (computer, self.domain),
+            'userAccountControl': 0x1000,   # WORKSTATION_TRUST_ACCOUNT
+            'servicePrincipalName': spns,
+            'sAMAccountName': computer,
+            'unicodePwd': ('"%s"' % password).encode('utf-16-le')
+        }
+        try:
+            result = self.ldap.add(computer_dn, ['top','person','organizationalPerson','user','computer'], ucd)
+        except Exception as e:
+            raise self.ActiveDirectoryLdapException(e)
+        return result
