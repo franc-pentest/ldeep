@@ -149,6 +149,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     ANR = lambda _, u: f"(anr={u})"
     DISTINGUISHED_NAME = lambda _, n: f"(distinguishedName={n})"
     COMPUTERS_FILTER = lambda _: "(objectClass=computer)"
+    DC_FILTER = lambda _: "(userAccountControl:1.2.840.113556.1.4.803:=8192)"
     GROUP_DN_FILTER = lambda _, g: f"(&(objectClass=group)(sAMAccountName={g}))"
     USER_DN_FILTER = lambda _, u: f"(&(objectClass=user)(objectCategory=Person)(sAMAccountName={u}))"
     ACCOUNTS_IN_GROUP_FILTER = lambda _, p, g: f"(|(primaryGroupID={p})(memberOf={g}))"

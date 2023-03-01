@@ -152,12 +152,18 @@ class Ldeep(Command):
                 A resolution on all computer names will be performed
             @dns:string
                 An optional DNS server to use for the resolution
+            @dc:bool
+                List only domain controllers
         """
         resolve = "resolve" in kwargs and kwargs["resolve"]
         dns = kwargs.get("dns", "")
+        dc = kwargs.get("dc", False)
 
         hostnames = []
-        results = self.engine.query(self.engine.COMPUTERS_FILTER(), ["name"])
+        if not dc:
+            results = self.engine.query(self.engine.COMPUTERS_FILTER(), ["name"])
+        else:
+            results = self.engine.query(self.engine.DC_FILTER(), ["name"])
         for result in results:
             if "name" in result:  # ugly
                 computer_name = result["name"]
@@ -484,12 +490,15 @@ class Ldeep(Command):
                     subnet_dn = subnet["distinguishedName"] if subnet["distinguishedName"] else ""
                     subnet_name = subnet["name"] if subnet["name"] else ""
                     subnet_description = subnet["description"][0] if subnet["description"] else ""
+                    servers = self.engine.query("(objectClass=server)", ['cn'], base=site_dn)
+                    servers_list = [d['cn'] for d in servers]
 
-                output = "Site: {}".format(site_name)
-                output += " | Subnet: {}".format(subnet_name) if subnet_name else ""
-                output += " | Site description: {}".format(site_description) if site_description else ""
-                output += " | Subnet description: {}".format(subnet_description) if subnet_description else ""
-                print(output)
+                    output = "Site: {}".format(site_name)
+                    output += " | Subnet: {}".format(subnet_name) if subnet_name else ""
+                    output += " | Site description: {}".format(site_description) if site_description else ""
+                    output += " | Subnet description: {}".format(subnet_description) if subnet_description else ""
+                    output += " | Servers: {}".format(', '.join(servers_list)) if servers_list else ""
+                    print(output)
 
     def list_conf(self, kwargs):
         """
