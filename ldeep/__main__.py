@@ -26,8 +26,6 @@ from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldap3.protocol.formatters.formatters import format_sid
 from ldap3.core import results as coreResults
 
-from time import sleep
-
 import sys
 
 
@@ -49,7 +47,9 @@ class Ldeep(Command):
             # self.__display(list(map(dict, records)), default)
             self.__display(records, default)
         else:
+            k = 0
             for record in records:
+                k += 1
                 if "objectClass" not in record:
                     print(record)
                 elif "group" in record["objectClass"]:
@@ -66,20 +66,26 @@ class Ldeep(Command):
                     print(record["dNSHostName"])
                 elif "msDS-AuthNPolicy" in record["objectClass"] or "msDS-AuthNPolicySilo" in record["objectClass"]:
                     print(record["cn"])
-                sleep(self.engine.throttle)
+
+                if self.engine.page_size > 0 and k % self.engine.page_size == 0:
+                    sleep(self.engine.throttle)
 
     def __display_json(self, records, default):
         need_comma_sep = False
+        k = 0
 
         sys.stdout.write("[")
         for record in records:
+            k += 1
             if need_comma_sep:
                 sys.stdout.write(",\n")
             else:
                 need_comma_sep = True
 
             json_dump(record, sys.stdout, ensure_ascii=False, default=default, sort_keys=True, indent=2)
-            sleep(self.engine.throttle)
+
+            if self.engine.page_size > 0 and k % self.engine.page_size == 0:
+                sleep(self.engine.throttle)
 
         sys.stdout.write("]\n")
         sys.stdout.flush()
