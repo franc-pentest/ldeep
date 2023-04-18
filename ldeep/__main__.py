@@ -26,6 +26,8 @@ from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldap3.protocol.formatters.formatters import format_sid
 from ldap3.core import results as coreResults
 
+from time import sleep
+
 import sys
 
 
@@ -44,7 +46,8 @@ class Ldeep(Command):
                 return b64encode(o).decode('ascii')
 
         if verbose:
-            self.__display(list(map(dict, records)), default)
+            # self.__display(list(map(dict, records)), default)
+            self.__display(records, default)
         else:
             for record in records:
                 if "objectClass" not in record:
@@ -65,7 +68,17 @@ class Ldeep(Command):
                     print(record["cn"])
 
     def __display_json(self, records, default):
-        json_dump(records, sys.stdout, ensure_ascii=False, default=default, sort_keys=True, indent=2)
+        need_comma_sep = False
+
+        sys.stdout.write("[")
+        for record in records:
+            if need_comma_sep:
+                sys.stdout.write(",\n")
+            else:
+                need_comma_sep = True
+            json_dump(record, sys.stdout, ensure_ascii=False, default=default, sort_keys=True, indent=2)
+        sys.stdout.write("]\n")
+        sys.stdout.flush()
 
     # LISTERS #
 
@@ -272,7 +285,7 @@ class Ldeep(Command):
             "ms-DS-MachineAccountQuota",
             "msDS-Behavior-Version"]
 
-        policy = self.engine.query(self.engine.DOMAIN_INFO_FILTER())
+        policy = list(self.engine.query(self.engine.DOMAIN_INFO_FILTER()))
         if policy:
             policy = policy[0]
             for field in FIELDS_TO_PRINT:
