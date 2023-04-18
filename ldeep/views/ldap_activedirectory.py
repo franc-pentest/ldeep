@@ -18,8 +18,6 @@ from ldeep.views.activedirectory import ActiveDirectoryView, ALL, validate_sid, 
 from ldeep.views.constants import USER_ACCOUNT_CONTROL, DNS_TYPES, SAM_ACCOUNT_TYPE, PWD_PROPERTIES, TRUSTS_INFOS, WELL_KNOWN_SIDS, LOGON_SAM_LOGON_RESPONSE_EX
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 
-PAGE_SIZE = 500
-
 
 # define an ldap3-compliant formatters
 def format_userAccountControl(raw_value):
@@ -171,7 +169,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     class ActiveDirectoryLdapException(Exception):
         pass
 
-    def __init__(self, server, domain="", base="", username="", password="", ntlm="", pfx_file="", cert_pem="", key_pem="", method="NTLM"):
+    def __init__(self, server, domain="", base="", username="", password="", ntlm="", pfx_file="", cert_pem="", key_pem="", method="NTLM", throttle=0, page_size=1000):
         """
         LdapActiveDirectoryView constructor.
         Initialize the connection with the LDAP server.
@@ -200,6 +198,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         self.server = server
         self.domain = domain
         self.hostnames = []
+        self.throttle = throttle
+        self.page_size = page_size
 
         self.set_controls()
         self.set_all_attributes()
@@ -326,7 +326,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     def all_attributes(self):
         return self.attributes
 
-    def _query(self, ldapfilter, attributes=[], base=None, scope=None):
+    # Not used anymore
+    def __query(self, ldapfilter, attributes=[], base=None, scope=None):
         """
         Perform a query to the LDAP server and return the results.
 
@@ -346,7 +347,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 search_scope=scope or self.search_scope,
                 attributes=attributes,
                 controls=self.controls,
-                paged_size=PAGE_SIZE,
+                paged_size=self.page_size,
                 generator=True
             )
 
@@ -384,7 +385,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 search_scope=scope or self.search_scope,
                 attributes=attributes,
                 controls=self.controls,
-                paged_size=500,
+                paged_size=self.page_size,
                 generator=True
             )
 
@@ -393,12 +394,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         except LDAPAttributeError as e:
             if not _getframe().f_back.f_code.co_name == "get_laps":
                 raise self.ActiveDirectoryLdapException(e)
-
-            # for entry in entry_generator:
-            #     if "dn" in entry:
-            #         d = entry["attributes"]
-            #         d["dn"] = entry["dn"]
-            #         result_set.append(d)
 
         def result(x):
             if "dn" in x:
