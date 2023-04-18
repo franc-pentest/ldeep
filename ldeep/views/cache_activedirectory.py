@@ -111,6 +111,8 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         self.prefix = prefix
         self.fqdn, self.base_dn = self.__get_domain_info()
         self.attributes = ALL
+        self.throttle = 0
+        self.page_size = 0
 
     def set_all_attributes(self, attributes=ALL):
         self.attributes = attributes

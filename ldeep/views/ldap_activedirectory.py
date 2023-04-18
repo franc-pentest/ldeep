@@ -18,8 +18,6 @@ from ldeep.views.activedirectory import ActiveDirectoryView, ALL, validate_sid, 
 from ldeep.views.constants import USER_ACCOUNT_CONTROL, DNS_TYPES, SAM_ACCOUNT_TYPE, PWD_PROPERTIES, TRUSTS_INFOS, WELL_KNOWN_SIDS, LOGON_SAM_LOGON_RESPONSE_EX
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 
-PAGE_SIZE = 1000
-
 
 # define an ldap3-compliant formatters
 def format_userAccountControl(raw_value):
@@ -68,6 +66,7 @@ def format_pwdProperties(raw_value):
         pass
     return raw_value
 
+
 # define an ldap3-compliant formatters
 def format_trustsInfos(raw_value):
     try:
@@ -99,13 +98,6 @@ def format_dnsrecord(raw_value):
                 target = ''.join([c for c in data if ord(c) > 31 or ord(c) == 9])
             return "%s %s" % (recordname, target)
 
-def format_ad_timedelta(raw_value):
-    """
-    Convert a negative filetime value to an integer timedelta.
-    """
-    if isinstance(raw_value, bytes):
-        raw_value = int(raw_value)
-    return raw_value
 
 def format_ad_timedelta(raw_value):
     """
@@ -116,7 +108,7 @@ def format_ad_timedelta(raw_value):
     return raw_value
 
 
-#from http://www.kouti.com/tables/baseattributes.htm
+# from http://www.kouti.com/tables/baseattributes.htm
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (format_userAccountControl, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.302"] = (format_samAccountType, None)
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (format_dnsrecord, None)
@@ -128,6 +120,7 @@ ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.74'] =
 ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.78'] = (format_ad_timedelta, None)
 ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.4.470'] = (format_trustsInfos, None)
 ldap3.protocol.formatters.standard.standard_formatter['1.2.840.113556.1.2.281'] = (parse_ntSecurityDescriptor, None)
+
 
 class LdapActiveDirectoryView(ActiveDirectoryView):
     """
@@ -176,7 +169,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     class ActiveDirectoryLdapException(Exception):
         pass
 
-    def __init__(self, server, domain="", base="", username="", password="", ntlm="", pfx_file="", cert_pem="", key_pem="", method="NTLM"):
+    def __init__(self, server, domain="", base="", username="", password="", ntlm="", pfx_file="", cert_pem="", key_pem="", method="NTLM", throttle=0, page_size=1000):
         """
         LdapActiveDirectoryView constructor.
         Initialize the connection with the LDAP server.
@@ -205,6 +198,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         self.server = server
         self.domain = domain
         self.hostnames = []
+        self.throttle = throttle
+        self.page_size = page_size
 
         self.set_controls()
         self.set_all_attributes()
@@ -242,7 +237,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 else:
                     tls = ldap3.Tls(local_private_key_file=self.key, local_certificate_file=self.cert, validate=CERT_NONE)
         else:
-            tls=ldap3.Tls(validate=CERT_NONE)
+            tls = ldap3.Tls(validate=CERT_NONE)
 
         if self.server.startswith("ldaps"):
             server = Server(
@@ -308,7 +303,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                         os.remove(cert_path)
                     exit(1)
                 except Exception as e:
-                    print("Unhandled Exception")
+                    print(f"Unhandled Exception: {e}")
                     import traceback
                     traceback.print_exc()
                     exit(1)
@@ -331,7 +326,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     def all_attributes(self):
         return self.attributes
 
-    def query(self, ldapfilter, attributes=[], base=None, scope=None):
+    # Not used anymore
+    def __query(self, ldapfilter, attributes=[], base=None, scope=None):
         """
         Perform a query to the LDAP server and return the results.
 
@@ -351,7 +347,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 search_scope=scope or self.search_scope,
                 attributes=attributes,
                 controls=self.controls,
-                paged_size=PAGE_SIZE,
+                paged_size=self.page_size,
                 generator=True
             )
 
@@ -369,6 +365,44 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
         return result_set
 
+    def query(self, ldapfilter, attributes=[], base=None, scope=None):
+        """
+        Perform a query to the LDAP server and return the results as a generator.
+
+        @ldapfilter: The LDAP filter to query (see RFC 2254).
+        @attributes: List of attributes to retrieved with the query.
+        @base: Base to use during the request.
+        @scope: Scope to use during the request.
+
+        @return a generator yielding records.
+        """
+        attributes = self.attributes if attributes == [] else attributes
+        # result_set = []
+        try:
+            entry_generator = self.ldap.extend.standard.paged_search(
+                search_base=base or self.base_dn,
+                search_filter=ldapfilter,
+                search_scope=scope or self.search_scope,
+                attributes=attributes,
+                controls=self.controls,
+                paged_size=self.page_size,
+                generator=True
+            )
+
+        except LDAPOperationResult as e:
+            raise self.ActiveDirectoryLdapException(e)
+        except LDAPAttributeError as e:
+            if not _getframe().f_back.f_code.co_name == "get_laps":
+                raise self.ActiveDirectoryLdapException(e)
+
+        def result(x):
+            if "dn" in x:
+                d = x["attributes"]
+                d["dn"] = x["dn"]
+                return dict(d)
+
+        return filter(lambda x: x is not None, map(result, entry_generator))
+
     def get_domain_sid(self):
         """
         Return the current domain SID by issueing a LDAP request.
@@ -381,7 +415,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             return results[0]["objectSid"]
 
         return None
-
 
     def resolve_sid(self, sid):
         """
@@ -501,6 +534,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         try:
             return addUsersInGroups(self.ldap, user_dn, group_dn)
         except ldap3.core.exceptions.LDAPInvalidDnError as e:
+            print(f"Unhandled exception: {e}")
             # catch invalid group dn
             return False
 
@@ -516,6 +550,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         try:
             return removeUsersInGroups(self.ldap, user_dn, group_dn, fix=True)
         except ldap3.core.exceptions.LDAPInvalidDnError as e:
+            print(f"Unhandled exception: {e}")
             # catch invalid group dn
             return False
 
@@ -563,11 +598,12 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         computer_dn = f'CN={computer},CN=Computers,{self.base_dn}'
         # Default computer SPNs
         spns = [
-                    'HOST/%s' % computer,
-                    'HOST/%s.%s' % (computer, self.domain),
-                    'RestrictedKrbHost/%s' % computer,
-                    'RestrictedKrbHost/%s.%s' % (computer, self.domain),
-                ]
+            f"HOST/{computer}",
+            f"HOST/{computer}.{self.domain}",
+            f"HOST/{computer}.{self.domain}",
+            f"RestrictedKrbHost/{computer}",
+            f"RestrictedKrbHost/{computer}.{self.domain}",
+        ]
 
         ucd = {
             'dnsHostName': '%s.%s' % (computer, self.domain),
@@ -577,7 +613,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             'unicodePwd': ('"%s"' % password).encode('utf-16-le')
         }
         try:
-            result = self.ldap.add(computer_dn, ['top','person','organizationalPerson','user','computer'], ucd)
+            result = self.ldap.add(computer_dn, ["top", "person", "organizationalPerson", "user", "computer"], ucd)
         except Exception as e:
             raise self.ActiveDirectoryLdapException(e)
         return result
