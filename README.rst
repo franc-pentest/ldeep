@@ -89,6 +89,13 @@ LDAP
       -b BASE, --base BASE  LDAP base for query (by default, this value is pulled from remote Ldap)
       -t {ntlm,simple}, --type {ntlm,simple}
                             Authentication type: ntlm (default) or simple
+	  --throttle THROTTLE   Add a throttle between queries to sneak under detection
+                            thresholds (in seconds between queries: argument to the sleep
+                            function)
+      --page_size PAGE_SIZE
+                            Configure the page size used by the engine to query the LDAP
+                            server (default: 1000)
+
 
     NTLM authentication:
       -u USERNAME, --username USERNAME
