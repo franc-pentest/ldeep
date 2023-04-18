@@ -44,9 +44,12 @@ class Ldeep(Command):
                 return b64encode(o).decode('ascii')
 
         if verbose:
-            self.__display(list(map(dict, records)), default)
+            # self.__display(list(map(dict, records)), default)
+            self.__display(records, default)
         else:
+            k = 0
             for record in records:
+                k += 1
                 if "objectClass" not in record:
                     print(record)
                 elif "group" in record["objectClass"]:
@@ -64,8 +67,28 @@ class Ldeep(Command):
                 elif "msDS-AuthNPolicy" in record["objectClass"] or "msDS-AuthNPolicySilo" in record["objectClass"]:
                     print(record["cn"])
 
+                if self.engine.page_size > 0 and k % self.engine.page_size == 0:
+                    sleep(self.engine.throttle)
+
     def __display_json(self, records, default):
-        json_dump(records, sys.stdout, ensure_ascii=False, default=default, sort_keys=True, indent=2)
+        need_comma_sep = False
+        k = 0
+
+        sys.stdout.write("[")
+        for record in records:
+            k += 1
+            if need_comma_sep:
+                sys.stdout.write(",\n")
+            else:
+                need_comma_sep = True
+
+            json_dump(record, sys.stdout, ensure_ascii=False, default=default, sort_keys=True, indent=2)
+
+            if self.engine.page_size > 0 and k % self.engine.page_size == 0:
+                sleep(self.engine.throttle)
+
+        sys.stdout.write("]\n")
+        sys.stdout.flush()
 
     # LISTERS #
 
@@ -233,6 +256,7 @@ class Ldeep(Command):
                 print(f'{sam}:aes128-cts-hmac-sha1-96:{aes128_key.hex()}')
                 print(f'{sam}:aes256-cts-hmac-sha1-96:{aes256_key.hex()}')
             except Exception as e:
+                print(f"Unhandled exception: {e}")
                 print(sam)
 
     def list_domain_policy(self, _):
@@ -272,7 +296,7 @@ class Ldeep(Command):
             "ms-DS-MachineAccountQuota",
             "msDS-Behavior-Version"]
 
-        policy = self.engine.query(self.engine.DOMAIN_INFO_FILTER())
+        policy = list(self.engine.query(self.engine.DOMAIN_INFO_FILTER()))
         if policy:
             policy = policy[0]
             for field in FIELDS_TO_PRINT:
@@ -363,11 +387,40 @@ class Ldeep(Command):
                     val = "{val} {typ}".format(val=val, typ=FILETIME_TIMESTAMP_FIELDS[field][1])
                 print("{field}: {val}".format(field=field, val=val))
 
-    def list_trusts(self, _):
+    def list_trusts(self, kwargs):
         """
         List the domain's trust relationships.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
         """
+        verbose = kwargs.get("verbose", False)
         results = self.engine.query(self.engine.TRUSTS_INFO_FILTER())
+
+        ATTRIBUTE_TRANSLATION = {
+            "trustDirection": {
+                0x00000003: "bidirectional",
+                0x00000002: "outbound",
+                0x00000001: "inbound",
+                0x00000000: "disabled",
+            },
+            "trustType": {
+                0x00000001: "Non running Windows domain",
+                0x00000002: "Windows domain running Active Directory",
+                0x00000003: "Non Windows domain",
+            },
+        }
+
+        for result in results:
+            for key in ATTRIBUTE_TRANSLATION:
+                if key in result:
+                    result[key] = ATTRIBUTE_TRANSLATION[key][int(result[key])]
+
+        if verbose:
+            self.display(results, verbose)
+            return
+
         FIELDS_TO_PRINT = [
             "dn",
             "cn",
@@ -384,22 +437,6 @@ class Ldeep(Command):
             for field in FIELDS_TO_PRINT:
                 if field in result:
                     val = result[field]
-                    if field == "trustDirection":
-                        if int(val) == 0x00000003:
-                            val = "bidirectional"
-                        elif int(val) == 0x00000002:
-                            val = "outbound"
-                        elif int(val) == 0x00000001:
-                            val = "inbound"
-                        elif int(val) == 0x00000000:
-                            val = "disabled"
-                    elif field == "trustType":
-                        if int(val) == 0x00000001:
-                            val = "Non running Windows domain"
-                        elif int(val) == 0x00000002:
-                            val = "Windows domain running Active Directory"
-                        elif int(val) == 0x00000003:
-                            val = "Non Windows domain"
                     print("{field}: {val}".format(field=field, val=val))
             print("")
 
@@ -478,7 +515,7 @@ class Ldeep(Command):
             site_dn = ""
             site_name = ""
             site_description = ""
-            subnet_dn = ""
+            # subnet_dn = ""
             subnet_name = ""
             subnet_description = ""
             for entry in entries:
@@ -487,7 +524,7 @@ class Ldeep(Command):
                 site_description = entry["description"][0] if entry["description"] else ""
                 subnet_entries = self.engine.query(self.engine.SUBNET_FILTER(site_dn), attributes, base=','.join(["CN=Sites,CN=Configuration", self.engine.base_dn]))
                 for subnet in subnet_entries:
-                    subnet_dn = subnet["distinguishedName"] if subnet["distinguishedName"] else ""
+                    # subnet_dn = subnet["distinguishedName"] if subnet["distinguishedName"] else ""
                     subnet_name = subnet["name"] if subnet["name"] else ""
                     subnet_description = subnet["description"][0] if subnet["description"] else ""
                     servers = self.engine.query("(objectClass=server)", ['cn'], base=site_dn)
@@ -582,7 +619,7 @@ class Ldeep(Command):
 
         verbose = kwargs.get("verbose", False)
         attributes = ALL if verbose else ["member", "msDS-ShadowPrincipalSid"]
-        base=','.join(["CN=Shadow Principal Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
+        base = ','.join(["CN=Shadow Principal Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
         entries = self.engine.query(self.engine.SHADOW_PRINCIPALS_FILTER(), attributes, base=base)
 
         if verbose:
@@ -600,8 +637,8 @@ class Ldeep(Command):
                 Results will contain full information
             @filter:string = ["all", "unconstrained", "constrained", "rbcd"]
         """
-        verbose     = kwargs.get("verbose", False)
-        filter_     = kwargs.get("filter", "all")
+        verbose = kwargs.get("verbose", False)
+        filter_ = kwargs.get("filter", "all")
 
         attributes = ALL if verbose else ["samAccountName", "userAccountControl"]
 
@@ -810,10 +847,10 @@ class Ldeep(Command):
                     cn = entry['dNSHostName']
                     password = entry['ms-Mcs-AdmPwd']
                     try:
-                        epoch = (int(str(entry['ms-Mcs-AdmPwdExpirationTime']))/10000000) - 11644473600
+                        epoch = (int(str(entry['ms-Mcs-AdmPwdExpirationTime'])) / 10000000) - 11644473600
                         expiration_date = datetime.fromtimestamp(epoch).strftime("%m-%d-%Y")
                     except Exception:
-                        expiration_date =  entry['ms-Mcs-AdmPwdExpirationTime']
+                        expiration_date = entry['ms-Mcs-AdmPwdExpirationTime']
                     print(f'{cn} {password} {expiration_date}')
                 else:
                     self.display(entries, verbose)
@@ -916,7 +953,7 @@ class Ldeep(Command):
                 results = self.engine.query(filter_)
             self.display(results, True)
         except PyAsn1UnicodeDecodeError as e:
-            error("Decoding error with the filter")
+            error(f"Decoding error with the filter: {e}")
         except Exception as e:
             if e.__str__() == "":
                 error("An exception occurred with the provided filter")
@@ -980,11 +1017,11 @@ class Ldeep(Command):
         delay = kwargs["delay"]
         with open(file, 'r') as f:
             while True:
-                l = f.readline()[:-1]
-                if not l:
+                line = f.readline()[:-1]
+                if not line:
                     break
-                if self.engine.user_exists(l):
-                    print(l)
+                if self.engine.user_exists(line):
+                    print(line)
                 sleep(delay / 1000)
 
     # ACTION #
@@ -1084,7 +1121,7 @@ class Ldeep(Command):
 
         if self.engine.create_computer(computer, password):
             info(f"Computer {computer} sucessfully created wit password {password}")
-        else :
+        else:
             if self.engine.ldap.result['result'] == coreResults.RESULT_UNWILLING_TO_PERFORM:
                 error_code = int(self.engine.ldap.result['message'].split(':')[0].strip(), 16)
                 if error_code == 0x216D:
@@ -1125,9 +1162,9 @@ class MSDS_MANAGEDPASSWORD_BLOB(Structure):
 
         self['CurrentPassword'] = self.rawData[self['CurrentPasswordOffset']:][:endData - self['CurrentPasswordOffset']]
         if self['PreviousPasswordOffset'] != 0:
-            self['PreviousPassword'] = self.rawData[self['PreviousPasswordOffset']:][:self['QueryPasswordIntervalOffset']-self['PreviousPasswordOffset']]
+            self['PreviousPassword'] = self.rawData[self['PreviousPasswordOffset']:][:self['QueryPasswordIntervalOffset'] - self['PreviousPasswordOffset']]
 
-        self['QueryPasswordInterval'] = self.rawData[self['QueryPasswordIntervalOffset']:][:self['UnchangedPasswordIntervalOffset']-self['QueryPasswordIntervalOffset']]
+        self['QueryPasswordInterval'] = self.rawData[self['QueryPasswordIntervalOffset']:][:self['UnchangedPasswordIntervalOffset'] - self['QueryPasswordIntervalOffset']]
         self['UnchangedPasswordInterval'] = self.rawData[self['UnchangedPasswordIntervalOffset']:]
 
 
@@ -1146,6 +1183,8 @@ def main():
     ldap.add_argument("-s", "--ldapserver", required=True, help="The LDAP path (ex : ldap://corp.contoso.com:389)")
     ldap.add_argument("-b", "--base", default="", help="LDAP base for query (by default, this value is pulled from remote Ldap)")
     ldap.add_argument("-t", "--type", default="ntlm", choices=['ntlm', 'simple'], help="Authentication type: ntlm (default) or simple")
+    ldap.add_argument("--throttle", default=0, type=float, help="Add a throttle between queries to sneak under detection thresholds (in seconds between queries: argument to the sleep function)")
+    ldap.add_argument("--page_size", default=1000, type=int, help="Configure the page size used by the engine to query the LDAP server (default: 1000)")
 
     cache.add_argument("-d", "--dir", default=".", type=str, help="Use saved JSON files in specified directory as cache")
     cache.add_argument("-p", "--prefix", required=True, type=str, help="Prefix of ldeep saved files")
@@ -1201,7 +1240,7 @@ def main():
             else:
                 error("Lack of authentication options: either Kerberos, Certificate, Username with Password (can be a NTLM hash) or Anonymous.")
 
-            query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.pfx_file, args.cert_pem, args.key_pem, method)
+            query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.pfx_file, args.cert_pem, args.key_pem, method, args.throttle, args.page_size)
 
         except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
             error(e)
