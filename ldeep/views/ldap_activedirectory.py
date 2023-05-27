@@ -409,7 +409,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
         @return the domain sid or None if a problem occurred.
         """
-        results = self.query(self.DOMAIN_INFO_FILTER(), ["ObjectSid"])
+        results = list(self.query(self.DOMAIN_INFO_FILTER(), ["ObjectSid"]))
 
         if results:
             return results[0]["objectSid"]
@@ -495,7 +495,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @throw ActiveDirectoryLdapException if the account does not exist or the query returns more than one result.
         @return True if the account was successfully unlock or False otherwise.
         """
-        results = self.query(self.USER_DN_FILTER(username))
+        results = list(self.query(self.USER_DN_FILTER(username)))
         if len(results) != 1:
             raise self.ActiveDirectoryLdapException("Zero or non uniq result")
         else:
@@ -515,7 +515,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @throw ActiveDirectoryLdapException if the account does not exist or the query returns more than one result.
         @return True if the account was successfully unlock or False otherwise.
         """
-        results = self.query(self.USER_DN_FILTER(username))
+        results = list(self.query(self.USER_DN_FILTER(username)))
         if len(results) != 1:
             raise self.ActiveDirectoryLdapException("Zero or non uniq result")
         else:

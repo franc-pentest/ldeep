@@ -780,7 +780,7 @@ class Ldeep(Command):
 
             if "primaryGroupID" in result:
                 pid = result["primaryGroupID"]
-                results = self.engine.query(self.engine.PRIMARY_GROUP_ID(pid))
+                results = list(self.engine.query(self.engine.PRIMARY_GROUP_ID(pid)))
                 if results:
                     print(results[0]["dn"])
 
