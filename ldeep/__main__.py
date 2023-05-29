@@ -726,7 +726,7 @@ class Ldeep(Command):
         group = kwargs["group"]
         verbose = kwargs.get("verbose", False)
 
-        results = self.engine.query(self.engine.GROUP_DN_FILTER(group), ["distinguishedName", "objectSid"])
+        results = list(self.engine.query(self.engine.GROUP_DN_FILTER(group), ["distinguishedName", "objectSid"]))
         if results:
             group_dn = results[0]["distinguishedName"]
         else:
@@ -763,8 +763,9 @@ class Ldeep(Command):
 
                 if "primaryGroupID" in result and result["primaryGroupID"]:
                     pid = result["primaryGroupID"]
-                    results = self.engine.query(self.engine.PRIMARY_GROUP_ID(pid))
-                    already_treated.add(results[0]["dn"])
+                    results = list(self.engine.query(self.engine.PRIMARY_GROUP_ID(pid)))
+                    if results:
+                        already_treated.add(results[0]["dn"])
 
             return already_treated
 
@@ -778,7 +779,9 @@ class Ldeep(Command):
                         s = lookup_groups(group_dn, 4, already_printed)
                         already_printed.union(s)
 
-            if "primaryGroupID" in result:
+            # for some reason, when we request an attribute which is not set on an object,
+            # ldap3 returns an empty list as the value of this attribute
+            if "primaryGroupID" in result and result["primaryGroupID"] != []:
                 pid = result["primaryGroupID"]
                 results = list(self.engine.query(self.engine.PRIMARY_GROUP_ID(pid)))
                 if results:
@@ -913,10 +916,10 @@ class Ldeep(Command):
         else:
             return None
 
-        results = self.engine.query(
+        results = list(self.engine.query(
             self.engine.SILO_FILTER(silo),
             attributes,
-            base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
+            base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn]))
         )
         if not results:
             error(f"Silo {silo} does not exists")
