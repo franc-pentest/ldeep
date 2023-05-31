@@ -412,10 +412,12 @@ class Ldeep(Command):
             },
         }
 
+        trusts = []
         for result in results:
             for key in ATTRIBUTE_TRANSLATION:
                 if key in result:
                     result[key] = ATTRIBUTE_TRANSLATION[key][int(result[key])]
+            trusts.append(result)
 
         if verbose:
             self.display(results, verbose)
@@ -433,7 +435,7 @@ class Ldeep(Command):
             "flatName"
         ]
 
-        for result in results:
+        for result in trusts:
             for field in FIELDS_TO_PRINT:
                 if field in result:
                     val = result[field]
