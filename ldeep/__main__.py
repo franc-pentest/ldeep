@@ -107,7 +107,7 @@ class Ldeep(Command):
         if verbose:
             attributes = self.engine.all_attributes()
         else:
-            attributes = ["samAccountName", "objectClass"]
+            attributes = ["sAMAccountName", "objectClass"]
 
         if filter_ == "all":
             results = self.engine.query(self.engine.USER_ALL_FILTER(), attributes)
@@ -145,7 +145,7 @@ class Ldeep(Command):
         if verbose:
             attributes = self.engine.all_attributes()
         else:
-            attributes = ["samAccountName", "objectClass"]
+            attributes = ["sAMAccountName", "objectClass"]
 
         self.display(self.engine.query(self.engine.GROUPS_FILTER(), attributes), verbose, specify_group=False)
 
@@ -162,7 +162,7 @@ class Ldeep(Command):
         if verbose:
             attributes = self.engine.all_attributes()
         else:
-            attributes = ["samAccountName", "objectClass"]
+            attributes = ["sAMAccountName", "objectClass"]
 
         self.display(self.engine.query(self.engine.COMPUTERS_FILTER(), attributes), verbose, specify_group=False)
 
@@ -207,7 +207,7 @@ class Ldeep(Command):
         List the gmsa accounts and retrieve NT hash if possible.
         """
 
-        attributes = ["samAccountName", "objectClass", "msDS-ManagedPassword"]
+        attributes = ["sAMAccountName", "objectClass", "msDS-ManagedPassword"]
 
         try:
             self.engine.ldap.start_tls()
@@ -599,7 +599,7 @@ class Ldeep(Command):
         """
 
         verbose = kwargs.get("verbose", False)
-        attributes = ALL if verbose else ["samAccountName", "msDS-HostServiceAccountBL"]
+        attributes = ALL if verbose else ["sAMAccountName", "msDS-HostServiceAccountBL"]
         entries = self.engine.query(self.engine.SMSA_FILTER(), attributes)
 
         if verbose:
@@ -642,7 +642,7 @@ class Ldeep(Command):
         verbose = kwargs.get("verbose", False)
         filter_ = kwargs.get("filter", "all")
 
-        attributes = ALL if verbose else ["samAccountName", "userAccountControl"]
+        attributes = ALL if verbose else ["sAMAccountName", "userAccountControl"]
 
         if filter_ == "all":
             if not verbose:
@@ -670,7 +670,7 @@ class Ldeep(Command):
             for entry in entries:
                 try:
                     uac = entry["userAccountControl"]
-                    sam = entry["samAccountName"]
+                    sam = entry["sAMAccountName"]
                     delegate = entry.get("msDS-AllowedToDelegateTo")
                     allowed_to_act = entry.get("msDS-AllowedToActOnBehalfOfOtherIdentity")
                     if (filter_ == "unconstrained" or filter_ == "all") and "TRUSTED_FOR_DELEGATION" in uac:
@@ -687,7 +687,7 @@ class Ldeep(Command):
                                 if not sid:
                                     continue
                                 res = self.engine.resolve_sid(sid)
-                                name = res[0]['samAccountName']
+                                name = res[0]['sAMAccountName']
                                 print(f"{name}:rbcd:{sam}")
                             except Exception:
                                 print(f"{sid}:rbcd:{sam}")
