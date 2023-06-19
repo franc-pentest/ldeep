@@ -3,6 +3,10 @@ from struct import unpack
 from socket import inet_ntoa
 from ssl import CERT_NONE
 
+from Cryptodome.Cipher import AES
+from Cryptodome.Hash import MD4, SHA1
+from Cryptodome.Protocol.KDF import PBKDF2
+
 from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL, BASE, DEREF_NEVER
 from ldap3 import SIMPLE
 from ldap3.protocol.formatters.formatters import format_sid
@@ -15,8 +19,10 @@ from ldap3.extend.microsoft.removeMembersFromGroups import ad_remove_members_fro
 import ldap3
 
 from ldeep.views.activedirectory import ActiveDirectoryView, ALL, validate_sid, validate_guid
-from ldeep.views.constants import USER_ACCOUNT_CONTROL, DNS_TYPES, SAM_ACCOUNT_TYPE, PWD_PROPERTIES, TRUSTS_INFOS, WELL_KNOWN_SIDS, LOGON_SAM_LOGON_RESPONSE_EX
+from ldeep.views.constants import USER_ACCOUNT_CONTROL, DNS_TYPES, SAM_ACCOUNT_TYPE, PWD_PROPERTIES, TRUSTS_INFOS, WELL_KNOWN_SIDS, LOGON_SAM_LOGON_RESPONSE_EX, GMSA_ENCRYPTION_CONSTANTS
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
+from ldeep.utils.structure import Structure
+from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB 
 
 
 # define an ldap3-compliant formatters
@@ -485,6 +491,60 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             raise self.ActiveDirectoryLdapException(e)
 
         return result_set
+
+    def get_gmsa(self, attributes):
+
+        try:
+            self.ldap.start_tls()
+        except Exception as e:
+            print(f"Can't retrieve gmsa, TLS needed: {e}")
+            return
+        entries = list(self.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes))
+
+        constants = GMSA_ENCRYPTION_CONSTANTS
+        iv = b'\x00' * 16
+
+        for entry in entries:
+            sam = entry['sAMAccountName']
+            data = entry['msDS-ManagedPassword']
+            blob = MSDS_MANAGEDPASSWORD_BLOB()
+            try:
+                blob.fromString(data)
+            except TypeError as e:
+                print(f"Exception for {sam}: {e}")
+
+            password = blob['CurrentPassword'][:-2]
+
+            # Compute NT hash
+            hash = MD4.new()
+            hash.update(password)
+            nthash = hash.hexdigest()
+
+            # Quick and dirty way to get the FQDN of the account's domain
+            dc_list = []
+            for s in entry['dn'].split(','):
+                if s.startswith('DC='):
+                    dc_list.append(s[3:])
+
+            domain_fqdn = '.'.join(dc_list)
+            salt = f'{domain_fqdn.upper()}host{sam[:-1].lower()}.{domain_fqdn.lower()}'
+            encryption_key = PBKDF2(password.decode('utf-16-le', 'replace').encode(), salt.encode(), 32, count=4096, hmac_hash_module=SHA1)
+
+            # Compute AES keys
+            cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
+            first_part = cipher.encrypt(constants)
+            cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
+            second_part = cipher.encrypt(first_part)
+            aes256_key = first_part[:16] + second_part[:16]
+
+            cipher = AES.new(encryption_key[:16], AES.MODE_CBC, iv)
+            aes128_key = cipher.encrypt(constants[:16])
+
+            entry["nthash"] = f"{nthash}"
+            entry["aes128-cts-hmac-sha1-96"] = f"{aes128_key.hex()}"
+            entry["aes256-cts-hmac-sha1-96"] = f"{aes256_key.hex()}"
+
+        return entries
 
     def unlock(self, username):
         """

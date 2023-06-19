@@ -9,10 +9,6 @@ from datetime import date, datetime, timedelta
 from commandparse import Command
 from time import sleep
 
-from Cryptodome.Cipher import AES
-from Cryptodome.Hash import MD4, SHA1
-from Cryptodome.Protocol.KDF import PBKDF2
-
 from pyasn1.error import PyAsn1UnicodeDecodeError
 
 from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
@@ -21,7 +17,6 @@ from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 
 from ldeep.utils import error, info, Logger, resolve as utils_resolve
-from ldeep.utils.structure import Structure
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldap3.protocol.formatters.formatters import format_sid
 from ldap3.core import results as coreResults
@@ -205,59 +200,28 @@ class Ldeep(Command):
     def list_gmsa(self, kwargs):
         """
         List the gmsa accounts and retrieve NT hash if possible.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
         """
+        verbose = kwargs.get("verbose", False)
+        hidden_attributes = ["msDS-ManagedPassword"]
+        if verbose:
+            attributes = ALL + hidden_attributes
+        else:
+            attributes = ["sAMAccountName", "objectClass"] + hidden_attributes
 
-        attributes = ["sAMAccountName", "objectClass", "msDS-ManagedPassword"]
-
-        try:
-            self.engine.ldap.start_tls()
-        except Exception as e:
-            print(f"Can't retrieve gmsa, TLS needed: {e}")
-            return
-        entries = self.engine.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes)
-
-        constants = b'\x6b\x65\x72\x62\x65\x72\x6f\x73\x7b\x9b\x5b\x2b\x93\x13\x2b\x93\x5c\x9b\xdc\xda\xd9\x5c\x98\x99\xc4\xca\xe4\xde\xe6\xd6\xca\xe4'
-        iv = b'\x00' * 16
-
-        for entry in entries:
-            try:
-                sam = entry['sAMAccountName']
-                data = entry['msDS-ManagedPassword']
-                blob = MSDS_MANAGEDPASSWORD_BLOB()
-                blob.fromString(data)
-                password = blob['CurrentPassword'][:-2]
-
-                # Compute NT hash
-                hash = MD4.new()
-                hash.update(password)
-                nthash = hash.hexdigest()
-
-                # Quick and dirty way to get the FQDN of the account's domain
-                dc_list = []
-                for s in entry['dn'].split(','):
-                    if s.startswith('DC='):
-                        dc_list.append(s[3:])
-
-                domain_fqdn = '.'.join(dc_list)
-                salt = f'{domain_fqdn.upper()}host{sam[:-1].lower()}.{domain_fqdn.lower()}'
-                encryption_key = PBKDF2(password.decode('utf-16-le', 'replace').encode(), salt.encode(), 32, count=4096, hmac_hash_module=SHA1)
-
-                # Compute AES keys
-                cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
-                first_part = cipher.encrypt(constants)
-                cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
-                second_part = cipher.encrypt(first_part)
-                aes256_key = first_part[:16] + second_part[:16]
-
-                cipher = AES.new(encryption_key[:16], AES.MODE_CBC, iv)
-                aes128_key = cipher.encrypt(constants[:16])
-
-                print(f'{sam}:nt:{nthash}')
-                print(f'{sam}:aes128-cts-hmac-sha1-96:{aes128_key.hex()}')
-                print(f'{sam}:aes256-cts-hmac-sha1-96:{aes256_key.hex()}')
-            except Exception as e:
-                print(f"Unhandled exception: {e}")
-                print(sam)
+        entries = self.engine.get_gmsa(attributes)
+        if verbose:
+            self.display(entries, verbose)
+        else:
+            for entry in entries:
+                print(f"{entry['sAMAccountName']}")
+                print(f"nthash:{entry['nthash']}")
+                print(f"aes128-cts-hmac-sha1-96:{entry['aes128-cts-hmac-sha1-96']}")
+                print(f"aes256-cts-hmac-sha1-96:{entry['aes256-cts-hmac-sha1-96']}")
+                print()
 
     def list_domain_policy(self, _):
         """
@@ -1139,40 +1103,6 @@ class Ldeep(Command):
                 print(f"User {self.engine.username} doesn't have right to create a machine account!")
             elif self.engine.ldap.result['result'] == list(coreResults.RESULT_CODES.keys())[36]:
                 print(f"Computer {computer} already exists")
-
-
-class MSDS_MANAGEDPASSWORD_BLOB(Structure):
-    structure = (
-        ('Version', '<H'),
-        ('Reserved', '<H'),
-        ('Length', '<L'),
-        ('CurrentPasswordOffset', '<H'),
-        ('PreviousPasswordOffset', '<H'),
-        ('QueryPasswordIntervalOffset', '<H'),
-        ('UnchangedPasswordIntervalOffset', '<H'),
-        ('CurrentPassword', ':'),
-        ('PreviousPassword', ':'),
-        ('QueryPasswordInterval', ':'),
-        ('UnchangedPasswordInterval', ':'),
-    )
-
-    def __init__(self, data=None):
-        Structure.__init__(self, data=data)
-
-    def fromString(self, data):
-        Structure.fromString(self, data)
-
-        if self['PreviousPasswordOffset'] == 0:
-            endData = self['QueryPasswordIntervalOffset']
-        else:
-            endData = self['PreviousPasswordOffset']
-
-        self['CurrentPassword'] = self.rawData[self['CurrentPasswordOffset']:][:endData - self['CurrentPasswordOffset']]
-        if self['PreviousPasswordOffset'] != 0:
-            self['PreviousPassword'] = self.rawData[self['PreviousPasswordOffset']:][:self['QueryPasswordIntervalOffset'] - self['PreviousPasswordOffset']]
-
-        self['QueryPasswordInterval'] = self.rawData[self['QueryPasswordIntervalOffset']:][:self['UnchangedPasswordIntervalOffset'] - self['QueryPasswordIntervalOffset']]
-        self['UnchangedPasswordInterval'] = self.rawData[self['UnchangedPasswordIntervalOffset']:]
 
 
 def main():
