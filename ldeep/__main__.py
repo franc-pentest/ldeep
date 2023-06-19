@@ -216,12 +216,16 @@ class Ldeep(Command):
         if verbose:
             self.display(entries, verbose)
         else:
+            first = True
             for entry in entries:
-                print(f"{entry['sAMAccountName']}")
-                print(f"nthash:{entry['nthash']}")
-                print(f"aes128-cts-hmac-sha1-96:{entry['aes128-cts-hmac-sha1-96']}")
-                print(f"aes256-cts-hmac-sha1-96:{entry['aes256-cts-hmac-sha1-96']}")
-                print()
+                if not first:
+                    print()
+                print(f"sam:{entry['sAMAccountName']}")
+                if "nthash" in entry:
+                    print(f"nthash:{entry['nthash']}")
+                    print(f"aes128-cts-hmac-sha1-96:{entry['aes128-cts-hmac-sha1-96']}")
+                    print(f"aes256-cts-hmac-sha1-96:{entry['aes256-cts-hmac-sha1-96']}")
+                first = False
 
     def list_domain_policy(self, _):
         """

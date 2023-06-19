@@ -510,8 +510,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             blob = MSDS_MANAGEDPASSWORD_BLOB()
             try:
                 blob.fromString(data)
-            except TypeError as e:
-                print(f"Exception for {sam}: {e}")
+            except (TypeError, KeyError):
+                continue
 
             password = blob['CurrentPassword'][:-2]
 
