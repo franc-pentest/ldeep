@@ -6,7 +6,7 @@ A module used to handle binary ntSecurityDescriptor from Active Directory LDAP.
 
 from struct import unpack
 
-from ldap3.protocol.formatters.formatters import format_sid, format_uuid
+from ldap3.protocol.formatters.formatters import format_sid, format_uuid_le
 
 SDDLTypeFlags = {
 	'Self Relative'					: 0b1000000000000000,
@@ -115,10 +115,10 @@ def parse_aces(input_buffer, count):
 
 			offset = 12
 			if ace['Object Flags']['Object Type Present']:
-				ace['GUID'] = format_uuid(input_buffer[offset:offset + 16])
+				ace['GUID'] = format_uuid_le(input_buffer[offset:offset + 16])
 				offset += 16
 			if ace['Object Flags']['Inherited Object Type Present']:
-				ace['Inherited GUID'] = format_uuid(input_buffer[offset:offset + 16])
+				ace['Inherited GUID'] = format_uuid_le(input_buffer[offset:offset + 16])
 				offset += 16
 
 			ace['SID'] = format_sid(input_buffer[offset:ace['Size']])
