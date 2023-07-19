@@ -341,7 +341,10 @@ class Ldeep(Command):
             for field in FIELDS_TO_PRINT:
                 val = policy.get(field, None)
                 if not val:
-                    continue
+                    if field == "msDS-LockoutThreshold":
+                        val = 0
+                    else:
+                        continue
                 if isinstance(val, list):
                     targets = []
                     for target in val:
