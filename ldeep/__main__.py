@@ -340,11 +340,8 @@ class Ldeep(Command):
         for policy in psos:
             for field in FIELDS_TO_PRINT:
                 val = policy.get(field, None)
-                if not val:
-                    if field == "msDS-LockoutThreshold":
-                        val = 0
-                    else:
-                        continue
+                if val is None:
+                    continue
                 if isinstance(val, list):
                     targets = []
                     for target in val:
