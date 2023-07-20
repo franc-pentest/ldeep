@@ -210,22 +210,29 @@ class Ldeep(Command):
         if verbose:
             attributes = ALL + hidden_attributes
         else:
-            attributes = ["sAMAccountName", "objectClass"] + hidden_attributes
+            attributes = ["sAMAccountName", "msDS-GroupMSAMembership", "objectClass"] + hidden_attributes
 
         entries = self.engine.get_gmsa(attributes)
         if verbose:
             self.display(entries, verbose)
         else:
-            first = True
             for entry in entries:
-                if not first:
-                    print()
-                print(f"sam:{entry['sAMAccountName']}")
-                if "nthash" in entry:
-                    print(f"nthash:{entry['nthash']}")
-                    print(f"aes128-cts-hmac-sha1-96:{entry['aes128-cts-hmac-sha1-96']}")
-                    print(f"aes256-cts-hmac-sha1-96:{entry['aes256-cts-hmac-sha1-96']}")
-                first = False
+                printed = False
+                sam = entry['sAMAccountName']
+                for hash_format in ('nthash', 'aes128-cts-hmac-sha1-96', 'aes256-cts-hmac-sha1-96'):
+                    hash = entry.get(hash_format)
+                    if hash:
+                        print(f"{sam}:{hash_format}:{hash}")
+                        printed = True
+
+                readers = entry.get('readers')
+                if readers:
+                    for reader in readers:
+                        print(f"{sam}:reader:{reader}")
+                        printed = True
+
+                if not printed:
+                    print(sam)
 
     def list_domain_policy(self, _):
         """
