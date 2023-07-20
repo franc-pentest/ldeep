@@ -105,7 +105,7 @@ LDAP
       -H NTLM, --ntlm NTLM  NTLM hashes, format is LMHASH:NTHASH
 
     Kerberos authentication:
-      -k, --kerberos        For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable
+      -k, --kerberos        For Kerberos authentication, ticket file should be pointed by $KRB5CCNAME env variable
 
     Certificate authentication:
       --pfx-file PFX_FILE   PFX file
