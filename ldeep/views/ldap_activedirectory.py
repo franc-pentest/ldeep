@@ -498,7 +498,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             self.ldap.start_tls()
         except Exception as e:
             print(f"Can't retrieve gmsa, TLS needed: {e}")
-            return
+            return []
         entries = list(self.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes))
 
         constants = GMSA_ENCRYPTION_CONSTANTS
