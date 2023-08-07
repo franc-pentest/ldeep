@@ -10,7 +10,7 @@ from Cryptodome.Protocol.KDF import PBKDF2
 from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL, BASE, DEREF_NEVER
 from ldap3 import SIMPLE
 from ldap3.protocol.formatters.formatters import format_sid
-from ldap3.core.exceptions import LDAPOperationResult, LDAPSocketOpenError, LDAPAttributeError
+from ldap3.core.exceptions import LDAPOperationResult, LDAPSocketOpenError, LDAPAttributeError, LDAPSocketSendError
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
 from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 from ldap3.extend.microsoft.addMembersToGroups import ad_add_members_to_groups as addUsersInGroups
@@ -302,7 +302,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     if self.pfx_file:
                         os.remove(key_path)
                         os.remove(cert_path)
-                except ldap3.core.exceptions.LDAPSocketOpenError:
+                except LDAPSocketOpenError:
                     print("Cannot get private key data, corrupted key or wrong passphrase ?")
                     if self.pfx_file:
                         os.remove(key_path)
@@ -318,6 +318,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
         except LDAPSocketOpenError:
             raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}")
+        except LDAPSocketSendError:
+            raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}, maybe LDAPS is not enabled ?")
 
         self.base_dn = base or server.info.other["defaultNamingContext"][0]
         self.fqdn = ".".join(map(lambda x: x.replace("DC=", ''), self.base_dn.split(',')))
