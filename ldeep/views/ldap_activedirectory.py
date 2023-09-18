@@ -683,7 +683,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         spns = [
             f"HOST/{computer}",
             f"HOST/{computer}.{self.domain}",
-            f"HOST/{computer}.{self.domain}",
             f"RestrictedKrbHost/{computer}",
             f"RestrictedKrbHost/{computer}.{self.domain}",
         ]
