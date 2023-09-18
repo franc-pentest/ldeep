@@ -1102,7 +1102,7 @@ class Ldeep(Command):
             return
 
         if self.engine.create_computer(computer, password):
-            info(f"Computer {computer} sucessfully created wit password {password}")
+            info(f"Computer {computer} sucessfully created with password {password}")
         else:
             if self.engine.ldap.result['result'] == coreResults.RESULT_UNWILLING_TO_PERFORM:
                 error_code = int(self.engine.ldap.result['message'].split(':')[0].strip(), 16)
@@ -1114,6 +1114,46 @@ class Ldeep(Command):
                 print(f"User {self.engine.username} doesn't have right to create a machine account!")
             elif self.engine.ldap.result['result'] == list(coreResults.RESULT_CODES.keys())[36]:
                 print(f"Computer {computer} already exists")
+            else:
+                error_message = self.engine.ldap.result['message']
+                print(f"ERROR: {error_message}")
+
+    def action_create_user(self, kwargs):
+        """
+        Create a user account
+
+        Arguments:
+            #user_name:string
+                Name of user to add.
+            #user_pass:string
+                Password set to user account
+        """
+        user = kwargs["user_name"]
+        password = kwargs["user_pass"]
+
+        try:
+            self.engine.ldap.start_tls()
+        except Exception as e:
+            print(f"Can't create user, TLS needed: {e}")
+            return
+
+        if self.engine.create_user(user, password):
+            info(f"User {user} sucessfully created with password {password}")
+        else:
+            if self.engine.ldap.result['result'] == coreResults.RESULT_UNWILLING_TO_PERFORM:
+                error_code = int(self.engine.ldap.result['message'].split(':')[0].strip(), 16)
+                print(f"ERROR: error_code = {error_code}")
+                if error_code == 0x216D:
+                    print(f"Machine quota exceeded with account {self.engine.username}")
+                else:
+                    print(str(self.engine.ldap.result))
+            elif self.engine.ldap.result['result'] == coreResults.RESULT_INSUFFICIENT_ACCESS_RIGHTS:
+                print(f"User {self.engine.username} doesn't have right to create a user account!")
+            elif self.engine.ldap.result['result'] == list(coreResults.RESULT_CODES.keys())[36]:
+                print(f"User {user} already exists")
+            else:
+                error_message = self.engine.ldap.result['message']
+                print(f"ERROR: {error_message}")
 
 
 def main():

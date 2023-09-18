@@ -699,3 +699,32 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         except Exception as e:
             raise self.ActiveDirectoryLdapException(e)
         return result
+    def create_user(self, user, password):
+        """
+        Create a user account on the domain.
+
+        @user: the name of the create user.
+        @password: the password of the user to create.
+
+        @return the result code on the add action
+        """
+        user_dn = f'CN={user},CN=Users,{self.base_dn}'
+
+        ucd = {
+            'objectCategory': 'CN=Person,CN=Schema,CN=Configuration,%s' % self.base_dn,
+            'distinguishedName': user_dn,
+            'cn': user,
+            'sn': user,
+            'givenName': user,
+            'displayName': user,
+            'name': user,
+            'userAccountControl': 0x200, # NORMAL_ACCOUNT (decimal value: 512)
+            'accountExpires': 0,
+            'sAMAccountName': user,
+            'unicodePwd': ('"%s"' % password).encode('utf-16-le')
+        }
+        try:
+            result = self.ldap.add(user_dn, ["top", "person", "organizationalPerson", "user"], ucd)
+        except Exception as e:
+            raise self.ActiveDirectoryLdapException(e)
+        return result
