@@ -3,6 +3,7 @@ from json import load as json_load
 from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES, validate_guid, validate_sid
 from ldeep.views.constants import WELL_KNOWN_SIDS
 
+FILE_CONTENT_DICT = dict()
 
 class UnexpectedFormatException(Exception):
     pass
@@ -169,31 +170,39 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
                         file=fil,
                         ext=fmt)
 
-            with open(path.join(self.path, filename)) as fp:
-                # Two cases
-                # all attributes are required thus we parse the JSON file
-                if fmt == "json":
+            # Two cases
+            # all attributes are required thus we parse the JSON file
+            if fmt == "json":
+                if path.join(self.path, filename) in FILE_CONTENT_DICT:
+                    json = FILE_CONTENT_DICT[path.join(self.path, filename)]
+                else:
+                    fp = open(path.join(self.path,filename))
                     json = json_load(fp)
-
                     if "ntSecurityDescriptor" not in self.attributes:
                         scrub_json_from_key(json, lambda x: x == "nTSecurityDescriptor")
+                    FILE_CONTENT_DICT[path.join(self.path, filename)] = json
 
-                    if "filter" in cachefilter:
-                        for record in json:
-                            if cachefilter["filter"](record):
-                                data.append(record)
-                    else:
-                        data += json
-
-                # we use the lst file
+                if "filter" in cachefilter:
+                    for record in json:
+                        if cachefilter["filter"](record):
+                            data.append(record)
                 else:
-                    if "filter" in cachefilter:
-                        for line in fp:
-                            x = {"sAMAccountName": line.strip()}  # a little hacky :)
-                            if cachefilter["filter"](x):
-                                data += [line.strip()]
-                    else:
-                        data += map(lambda x: x.strip(), fp.readlines())
+                    data += json
+
+            # we use the lst file
+            else:
+                if path.join(self.path, filename) in FILE_CONTENT_DICT:
+                    fp = FILE_CONTENT_DICT[path.join(self.path, filename)]
+                else:
+                    fp = open(path.join(self.path,filename))
+                    FILE_CONTENT_DICT[path.join(self.path, filename)] = fp
+                if "filter" in cachefilter:
+                    for line in fp:
+                        x = {"sAMAccountName": line.strip()}  # a little hacky :)
+                        if cachefilter["filter"](x):
+                            data += [line.strip()]
+                else:
+                    data += map(lambda x: x.strip(), fp.readlines())
         return data
 
     def resolve_sid(self, sid):
