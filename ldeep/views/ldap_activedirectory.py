@@ -166,6 +166,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     SILO_FILTER = lambda _, s: f"(&(objectClass=msDS-AuthNPolicySilo)(cn={s}))"
     LAPS_FILTER = lambda _, s: f"(&(objectCategory=computer)(ms-MCS-AdmPwd=*)(cn={s}))"
     SMSA_FILTER = lambda _: "(ObjectClass=msDS-ManagedServiceAccount)"
+    BITLOCKERKEY_FILTER = lambda _: "(objectClass=msFVE-RecoveryInformation)"
     SHADOW_PRINCIPALS_FILTER = lambda _: "(objectclass=msDS-ShadowPrincipal)"
     UNCONSTRAINED_DELEGATION_FILTER = lambda _: f"(userAccountControl:1.2.840.113556.1.4.803:=524288)"
     CONSTRAINED_DELEGATION_FILTER = lambda _: f"(msDS-AllowedToDelegateTo=*)"

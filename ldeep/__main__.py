@@ -61,6 +61,12 @@ class Ldeep(Command):
                     print(record["dNSHostName"])
                 elif "msDS-AuthNPolicy" in record["objectClass"] or "msDS-AuthNPolicySilo" in record["objectClass"]:
                     print(record["cn"])
+                elif "msFVE-RecoveryInformation" in record["objectClass"]:
+                    recovery_key = record["msFVE-RecoveryPassword"] if record["msFVE-RecoveryPassword"] else ""
+                    if ',' in record['dn']:
+                        if record['dn'].split(',')[1].upper().startswith("CN="):
+                            computer_name = record['dn'].split(',')[1].split('=',1)[1]
+                    print(f"Machine: {computer_name} | Key: {recovery_key}")
 
                 if self.engine.page_size > 0 and k % self.engine.page_size == 0:
                     sleep(self.engine.throttle)
@@ -912,6 +918,27 @@ class Ldeep(Command):
             print(f"msDS-ComputerAuthNPolicy: {results[0]['msDS-ComputerAuthNPolicy']}")
             print(f"msDS-ServiceAuthNPolicy: {results[0]['msDS-ServiceAuthNPolicy']}")
             print(f"msDS-UserAuthNPolicy: {results[0]['msDS-UserAuthNPolicy']}")
+
+    def get_bitlockerkeys(self, kwargs):
+        """
+        Extract the bitlocker recovery keys.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+        if verbose:
+            attributes = ALL
+        else:
+            attributes = ["objectClass", "msFVE-RecoveryPassword"]
+
+        try:
+            results = self.engine.query(self.engine.BITLOCKERKEY_FILTER(), attributes)
+        except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
+            error(e)
+
+        self.display(results, verbose)
 
     # MISC #
 
