@@ -1097,7 +1097,7 @@ class Ldeep(Command):
         group = kwargs["group"]
 
         if self.engine.add_user_to_group(user, group):
-            info(f"User {user} sucessfully added to {group}")
+            info(f"User {user} successfully added to {group}")
         else:
             error(f"Unable to add {user} to {group}, check privileges or dn")
 
@@ -1115,7 +1115,7 @@ class Ldeep(Command):
         group = kwargs["group"]
 
         if self.engine.remove_user_from_group(user, group):
-            info(f"User {user} sucessfully removed from {group}")
+            info(f"User {user} successfully removed from {group}")
         else:
             error(f"Unable to remove {user} from {group}, check privileges or dn")
 
@@ -1139,7 +1139,7 @@ class Ldeep(Command):
             return
 
         if self.engine.create_computer(computer, password):
-            info(f"Computer {computer} sucessfully created with password {password}")
+            info(f"Computer {computer} successfully created with password {password}")
         else:
             if self.engine.ldap.result['result'] == coreResults.RESULT_UNWILLING_TO_PERFORM:
                 error_code = int(self.engine.ldap.result['message'].split(':')[0].strip(), 16)
@@ -1175,7 +1175,7 @@ class Ldeep(Command):
             return
 
         if self.engine.create_user(user, password):
-            info(f"User {user} sucessfully created with password {password}")
+            info(f"User {user} successfully created with password {password}")
         else:
             if self.engine.ldap.result['result'] == coreResults.RESULT_UNWILLING_TO_PERFORM:
                 error_code = int(self.engine.ldap.result['message'].split(':')[0].strip(), 16)

@@ -425,7 +425,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
     def get_domain_sid(self):
         """
-        Return the current domain SID by issueing a LDAP request.
+        Return the current domain SID by issuing a LDAP request.
 
         @return the domain sid or None if a problem occurred.
         """
