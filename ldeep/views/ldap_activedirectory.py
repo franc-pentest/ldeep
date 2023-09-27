@@ -176,7 +176,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     class ActiveDirectoryLdapException(Exception):
         pass
 
-    def __init__(self, server, domain="", base="", username="", password="", ntlm="", pfx_file="", cert_pem="", key_pem="", method="NTLM", throttle=0, page_size=1000):
+    def __init__(self, server, domain="", base="", username="", password="", ntlm="", pfx_file="", pfx_pass="", cert_pem="", key_pem="", method="NTLM", throttle=0, page_size=1000):
         """
         LdapActiveDirectoryView constructor.
         Initialize the connection with the LDAP server.
@@ -200,6 +200,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         self.password = password
         self.ntlm = ntlm
         self.pfx_file = pfx_file
+        self.pfx_pass = pfx_pass
         self.cert = cert_pem
         self.key = key_pem
         self.server = server
@@ -218,18 +219,26 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 exit(1)
             else:
                 if self.pfx_file:
-                    # TODO deal with pfx password protected
-                    with open(pfx_file, 'rb') as f:
-                        pfxdata = f.read()
                     from cryptography.hazmat.primitives.serialization import pkcs12
                     from cryptography.hazmat.primitives import serialization
-                    privkey, cert, extra_certs = pkcs12.load_key_and_certificates(pfxdata, None)
-                    key = privkey.private_bytes(
-                        encoding=serialization.Encoding.PEM,
-                        format=serialization.PrivateFormat.TraditionalOpenSSL,
-                        encryption_algorithm=serialization.NoEncryption(),
-                    )
-                    cert = cert.public_bytes(encoding=serialization.Encoding.PEM)
+                    with open(pfx_file, 'rb') as f:
+                        pfxdata = f.read()
+                    if self.pfx_pass:
+                        from oscrypto.keys import parse_pkcs12, parse_certificate, parse_private
+                        from oscrypto.asymmetric import rsa_pkcs1v15_sign, load_private_key, dump_openssl_private_key, dump_certificate
+                        if isinstance(self.pfx_pass, str):
+                            pfxpass = self.pfx_pass.encode()
+                        privkeyinfo, certinfo, _ = parse_pkcs12(pfxdata, password=pfxpass)
+                        key = dump_openssl_private_key(privkeyinfo, self.pfx_pass)
+                        cert = dump_certificate(certinfo, encoding='pem')
+                    else:
+                        privkey, cert, extra_certs = pkcs12.load_key_and_certificates(pfxdata, None)
+                        key = privkey.private_bytes(
+                            encoding=serialization.Encoding.PEM,
+                            format=serialization.PrivateFormat.TraditionalOpenSSL,
+                            encryption_algorithm=serialization.NoEncryption(),
+                        )
+                        cert = cert.public_bytes(encoding=serialization.Encoding.PEM)
                     try:
                         from tempfile import gettempdir
                         key_path = f'{gettempdir()}/ldeep_key'
@@ -237,10 +246,10 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                         with open(key_path, "wb") as f1, open(cert_path, "wb") as f2:
                             f1.write(key)
                             f2.write(cert)
-                        tls = ldap3.Tls(local_private_key_file=key_path, local_certificate_file=cert_path, validate=CERT_NONE)
                     except PermissionError:
                         print("Can't write key and cert to disk")
                         exit(1)
+                    tls = ldap3.Tls(local_private_key_file=key_path, local_certificate_file=cert_path, validate=CERT_NONE)
                 else:
                     tls = ldap3.Tls(local_private_key_file=self.key, local_certificate_file=self.cert, validate=CERT_NONE)
         else:
@@ -317,6 +326,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             else:
                 if not self.ldap.bind():
                     raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
+                if method == "anonymous" and not server.schema:
+                    raise self.ActiveDirectoryLdapException("Unable to retrieve information with anonymous bind")
         except LDAPSocketOpenError:
             raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}")
         except LDAPSocketSendError:

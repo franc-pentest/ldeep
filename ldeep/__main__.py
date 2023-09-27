@@ -677,6 +677,27 @@ class Ldeep(Command):
                 except Exception:
                     continue
 
+    def list_bitlockerkeys(self, kwargs):
+        """
+        Extract the bitlocker recovery keys.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+        if verbose:
+            attributes = ALL
+        else:
+            attributes = ["objectClass", "msFVE-RecoveryPassword"]
+
+        try:
+            results = self.engine.query(self.engine.BITLOCKERKEY_FILTER(), attributes)
+        except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
+            error(e)
+
+        self.display(results, verbose)
+
     # GETTERS #
 
     def get_zone(self, kwargs):
@@ -919,27 +940,6 @@ class Ldeep(Command):
             print(f"msDS-ServiceAuthNPolicy: {results[0]['msDS-ServiceAuthNPolicy']}")
             print(f"msDS-UserAuthNPolicy: {results[0]['msDS-UserAuthNPolicy']}")
 
-    def get_bitlockerkeys(self, kwargs):
-        """
-        Extract the bitlocker recovery keys.
-
-        Arguments:
-            @verbose:bool
-                Results will contain full information
-        """
-        verbose = kwargs.get("verbose", False)
-        if verbose:
-            attributes = ALL
-        else:
-            attributes = ["objectClass", "msFVE-RecoveryPassword"]
-
-        try:
-            results = self.engine.query(self.engine.BITLOCKERKEY_FILTER(), attributes)
-        except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
-            error(e)
-
-        self.display(results, verbose)
-
     # MISC #
 
     def misc_search(self, kwargs):
@@ -1032,6 +1032,16 @@ class Ldeep(Command):
                 if self.engine.user_exists(line):
                     print(line)
                 sleep(delay / 1000)
+
+    def misc_whoami(self, kwargs):
+        """
+        Return user identity.
+        """
+        user = self.engine.ldap.extend.standard.who_am_i()
+        if user == None:
+            error("Can't retrieve user identiy")
+        else:
+            print(user[2:])
 
     # ACTION #
 
@@ -1214,6 +1224,7 @@ def main():
 
     certificate = ldap.add_argument_group("Certificate authentication")
     certificate.add_argument("--pfx-file", help="PFX file")
+    certificate.add_argument("--pfx-pass", help="PFX password")
     certificate.add_argument("--cert-pem", help="User certificate")
     certificate.add_argument("--key-pem", help="User private key")
 
@@ -1255,7 +1266,7 @@ def main():
             else:
                 error("Lack of authentication options: either Kerberos, Certificate, Username with Password (can be a NTLM hash) or Anonymous.")
 
-            query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.pfx_file, args.cert_pem, args.key_pem, method, args.throttle, args.page_size)
+            query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.pfx_file, args.pfx_pass, args.cert_pem, args.key_pem, method, args.throttle, args.page_size)
 
         except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
             error(e)
