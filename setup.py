@@ -37,6 +37,7 @@ setup(
 	# Packages and dependencies
 	#package_dir={"": "ldeep"},
 	packages=find_packages(include=["ldeep", "ldeep.*"]),
+	setup_requires=["cython"],
 	install_requires=requirements,
 
 	# Other configurations
