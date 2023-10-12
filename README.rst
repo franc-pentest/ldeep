@@ -2,16 +2,17 @@
 INSTALL
 =======
 
+If you want to use Kerberos authentication you will need additional packages.::
+
+  sudo apt-get install -y libkrb5-dev krb5-config
+
+
 ``ldeep`` is using Python3.::
 
 	pip3 install git+https://github.com/franc-pentest/ldeep
 
-If you want to use Kerberos authentication you will need additional packages.::
 
-  sudo apt-get install -y libkrb5-dev
-
-
-You will also need to configure the ``/etc/krb5.conf``.::
+For Kerberos, you will also need to configure the ``/etc/krb5.conf``.::
 
   [realms]
         CORP.LOCAL = {
