@@ -1,3 +1,24 @@
+=======
+INSTALL
+=======
+
+``ldeep`` is using Python3.::
+
+	pip3 install git+https://github.com/franc-pentest/ldeep
+
+If you want to use Kerberos authentication you will need additional packages.::
+
+  sudo apt-get install -y libkrb5-dev
+
+
+You will also need to configure the ``/etc/krb5.conf``.::
+
+  [realms]
+        CORP.LOCAL = {
+                kdc = DC01.CORP.LOCAL
+        }
+
+
 =====
 LDEEP
 =====
@@ -120,6 +141,7 @@ LDAP
 
       {auth_policies,computers,conf,delegations,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,add_to_group,modify_password,remove_from_group,unlock}
         auth_policies       List the authentication policies configured in the Active Directory.
+        bitlockerkeys       Extract the bitlocker recovery keys.
         computers           List the computer hostnames and resolve them if --resolve is specify.
         conf                Dump the configuration partition of the Active Directory.
         delegations         List accounts configured for any kind of delegation.
@@ -203,13 +225,6 @@ CACHE
         zone                Return the records of a DNS zone.
    
 
-=======
-INSTALL
-=======
-
-``ldeep`` is Python3 only.::
-
-	pip3 install git+https://github.com/franc-pentest/ldeep
 
 =====
 USAGE
@@ -328,4 +343,5 @@ Related projects
 * https://github.com/SecureAuthCorp/impacket
 * https://github.com/ropnop/windapsearch
 * https://github.com/shellster/LDAPPER
+
 
