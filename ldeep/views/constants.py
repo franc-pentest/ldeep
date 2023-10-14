@@ -107,6 +107,17 @@ TRUSTS_INFOS = {
     "PIM_TRUST": 0x400
 }
 
+FOREST_LEVELS = {
+    7: "Windows Server 2016",
+    6: "Windows Server 2012 R2",
+    5: "Windows Server 2012",
+    4: "Windows Server 2008 R2",
+    3: "Windows Server 2008",
+    2: "Windows Server 2003",
+    1: "Windows Server 2003 operating system through Windows Server 2016",
+    0: "Windows 2000 Server operating system through Windows Server 2008 operating system"
+}
+
 WELL_KNOWN_SIDS = {
     "S-1-5-32-544"    : r"BUILTIN\Administrators",
     "S-1-5-32-545"    : r"BUILTIN\Users",
@@ -162,6 +173,14 @@ DATETIME_FIELDS = [
     "whenChanged",
     "whenCreated"
 ]
+
+FILETIME_TIMESTAMP_FIELDS = {
+    "lockOutObservationWindow": (60, "mins"),
+    "lockoutDuration": (60, "mins"),
+    "maxPwdAge": (86400, "days"),
+    "minPwdAge": (86400, "days"),
+    "forceLogoff": (60, "mins")
+}
 
 LDAP_SERVER_SD_FLAGS_OID_SEC_DESC = [('1.2.840.113556.1.4.801', True, b'\x30\x03\x02\x01\x07')]
 

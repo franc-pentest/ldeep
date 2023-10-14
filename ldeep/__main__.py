@@ -12,7 +12,7 @@ from time import sleep
 from pyasn1.error import PyAsn1UnicodeDecodeError
 
 from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
-from ldeep.views.constants import USER_ACCOUNT_CONTROL, LDAP_SERVER_SD_FLAGS_OID_SEC_DESC
+from ldeep.views.constants import USER_ACCOUNT_CONTROL, LDAP_SERVER_SD_FLAGS_OID_SEC_DESC, FILETIME_TIMESTAMP_FIELDS, FOREST_LEVELS
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 
@@ -55,6 +55,19 @@ class Ldeep(Command):
                     print("{dc} {rec}".format(dc=record["dc"], rec=" ".join(record["dnsRecord"])))
                 elif "dnsZone" in record["objectClass"]:
                     print(record["dc"])
+                elif "domainDNS" in record['objectClass']:
+                    for field, value in record.items():
+                        if field == "objectClass":
+                            continue
+                        if field == "lockOutObservationWindow" and isinstance(value, timedelta):
+                            value = int(value.total_seconds()) / 60
+                        elif field in FILETIME_TIMESTAMP_FIELDS.keys() and type(value) == int:
+                            value = int((fabs(float(value)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
+                        if field in FILETIME_TIMESTAMP_FIELDS.keys():
+                            value = f"{value} {FILETIME_TIMESTAMP_FIELDS[field][1]}"
+                        if field == "msDS-Behavior-Version" and isinstance(value, int):
+                            value = FOREST_LEVELS[record[field]]
+                        print(f"{field}: {value}")
                 elif "domain" in record["objectClass"]:
                     print(record["dn"])
                 elif "pKIEnrollmentService" in record["objectClass"]:
@@ -240,61 +253,36 @@ class Ldeep(Command):
                 if not printed:
                     print(sam)
 
-    def list_domain_policy(self, _):
+    def list_domain_policy(self, kwargs):
         """
         Return the domain policy.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
         """
-        FILETIME_TIMESTAMP_FIELDS = {
-            "lockOutObservationWindow": (60, "mins"),
-            "lockoutDuration": (60, "mins"),
-            "maxPwdAge": (86400, "days"),
-            "minPwdAge": (86400, "days"),
-            "forceLogoff": (60, "mins")
-        }
+        verbose = kwargs.get("verbose", False)
 
-        FOREST_LEVELS = {
-            7: "Windows Server 2016",
-            6: "Windows Server 2012 R2",
-            5: "Windows Server 2012",
-            4: "Windows Server 2008 R2",
-            3: "Windows Server 2008",
-            2: "Windows Server 2003",
-            1: "Windows Server 2003 operating system through Windows Server 2016",
-            0: "Windows 2000 Server operating system through Windows Server 2008 operating system"
-        }
+        if verbose:
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = [
+                "objectClass",
+                "dc",
+                "distinguishedName",
+                "lockOutObservationWindow",
+                "lockoutDuration",
+                "lockoutThreshold",
+                "maxPwdAge",
+                "minPwdAge",
+                "minPwdLength",
+                "pwdHistoryLength",
+                "pwdProperties",
+                "ms-DS-MachineAccountQuota",
+                "msDS-Behavior-Version"
+                ]
 
-        FIELDS_TO_PRINT = [
-            "dc",
-            "distinguishedName",
-            "lockOutObservationWindow",
-            "lockoutDuration",
-            "lockoutThreshold",
-            "maxPwdAge",
-            "minPwdAge",
-            "minPwdLength",
-            "pwdHistoryLength",
-            "pwdProperties",
-            "ms-DS-MachineAccountQuota",
-            "msDS-Behavior-Version"]
-
-        policy = list(self.engine.query(self.engine.DOMAIN_INFO_FILTER()))
-        if policy:
-            policy = policy[0]
-            for field in FIELDS_TO_PRINT:
-                val = policy.get(field, None)
-                if val is None:
-                    continue
-
-                if field == "lockOutObservationWindow" and isinstance(val, timedelta):
-                    val = int(val.total_seconds()) / 60
-                elif field in FILETIME_TIMESTAMP_FIELDS.keys() and type(val) == int:
-                    val = int((fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
-                if field in FILETIME_TIMESTAMP_FIELDS.keys():
-                    val = "%d %s" % (val, FILETIME_TIMESTAMP_FIELDS[field][1])
-                if field == "msDS-Behavior-Version" and isinstance(val, int):
-                    val = "%s" % (FOREST_LEVELS[policy[field]])
-
-                print("%s: %s" % (field, val))
+        self.display(self.engine.query(self.engine.DOMAIN_INFO_FILTER(), attributes), verbose)
 
     def list_ou(self, _):
         """
