@@ -31,7 +31,7 @@ class Ldeep(Command):
         if format == "json":
             self.__display = self.__display_json
 
-    def display(self, records, verbose=False, specify_group=True):
+    def display(self, records, verbose=False, specify_group=True, extra_records=None):
         def default(o):
             if isinstance(o, date) or isinstance(o, datetime):
                 return o.isoformat()
@@ -51,6 +51,16 @@ class Ldeep(Command):
                     print(record["sAMAccountName"] + (" (group)" if specify_group else ""))
                 elif "user" in record["objectClass"]:
                     print(record["sAMAccountName"])
+                elif "organizationalUnit" in record["objectClass"] or "domain" in record["objectClass"] and extra_records:
+                    print(record["dn"])
+                    if record['gPLink']:
+                        guids = re_compile("{[^}]+}")
+                        gpo_guids = guids.findall(record["gPLink"])
+                        if len(gpo_guids) > 0:
+                            print("[gPLink]")
+                            print("* {}".format("\n* ".join([extra_records[g] if g in extra_records else g for g in gpo_guids])))
+                elif "groupPolicyContainer" in record["objectClass"]:
+                    print(f"{record['cn']}: {record['displayName']}")
                 elif "dnsNode" in record["objectClass"]:
                     print("{dc} {rec}".format(dc=record["dc"], rec=" ".join(record["dnsRecord"])))
                 elif "dnsZone" in record["objectClass"]:
@@ -284,32 +294,45 @@ class Ldeep(Command):
 
         self.display(self.engine.query(self.engine.DOMAIN_INFO_FILTER(), attributes), verbose)
 
-    def list_ou(self, _):
+    def list_ou(self, kwargs):
         """
         Return the list of organizational units with linked GPO.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
         """
-        cn_re = re_compile("{[^}]+}")
+        verbose = kwargs.get("verbose", False)
+
+        if verbose:
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = ["objectClass", "gPLink"]
+
+        ous = self.engine.query(self.engine.OU_FILTER(), attributes)
         results = self.engine.query(self.engine.GPO_INFO_FILTER(), ["cn", "displayName"])
+
         gpos = {}
         for gpo in results:
             gpos[gpo["cn"]] = gpo["displayName"]
+        self.display(ous, verbose, extra_records=gpos)
 
-        results = self.engine.query(self.engine.OU_FILTER())
-        for result in results:
-            print(result["distinguishedName"])
-            if "gPLink" in result:
-                guids = cn_re.findall(result["gPLink"])
-                if len(guids) > 0:
-                    print("[gPLink]")
-                    print("* {}".format("\n* ".join([gpos[g] if g in gpos else g for g in guids])))
-
-    def list_gpo(self, _):
+    def list_gpo(self, kwargs):
         """
         Return the list of Group policy objects.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
         """
-        results = self.engine.query(self.engine.GPO_INFO_FILTER(), ["cn", "displayName"])
-        for gpo in results:
-            print("{cn}: {name}".format(cn=gpo["cn"], name=gpo["displayName"]))
+        verbose = kwargs.get("verbose", False)
+
+        if verbose:
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = ["objectClass", "cn", "displayName"]
+
+        results = self.display(self.engine.query(self.engine.GPO_INFO_FILTER(), attributes), verbose)
 
     def list_pso(self, _):
         """
