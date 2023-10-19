@@ -8,3 +8,4 @@ pycryptodomex
 six
 gssapi
 oscrypto
+pycryptodome
