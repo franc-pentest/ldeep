@@ -65,6 +65,13 @@ class Ldeep(Command):
                     print("{dc} {rec}".format(dc=record["dc"], rec=" ".join(record["dnsRecord"])))
                 elif "dnsZone" in record["objectClass"]:
                     print(record["dc"])
+                elif "domainDNS" in record['objectClass'] and 'fSMORoleOwner' in record.keys():
+                    try:
+                        dc_name = record["fSMORoleOwner"].split(",")[1].split("=")[1]
+                        domain_fqdn ='.'.join(record["fSMORoleOwner"].split(',')[-2:]).replace('DC=','')
+                    except:
+                        print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
+                    print(f"PDC                      {dc_name}.{domain_fqdn}")
                 elif "domainDNS" in record['objectClass']:
                     for field, value in record.items():
                         if field == "objectClass":
@@ -90,6 +97,34 @@ class Ldeep(Command):
                         if record['dn'].split(',')[1].upper().startswith("CN="):
                             computer_name = record['dn'].split(',')[1].split('=',1)[1]
                     print(f"Machine: {computer_name} | Key: {recovery_key}")
+                elif "crossRefContainer" in record["objectClass"]:
+                    try:
+                        dc_name = record["fSMORoleOwner"].split(",")[1].split("=")[1]
+                        domain_fqdn ='.'.join(record["fSMORoleOwner"].split(',')[-2:]).replace('DC=','')
+                    except:
+                        print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
+                    print(f"Domain naming master     {dc_name}.{domain_fqdn}")
+                elif "dMD" in record["objectClass"]:
+                    try:
+                        dc_name = record["fSMORoleOwner"].split(",")[1].split("=")[1]
+                        domain_fqdn ='.'.join(record["fSMORoleOwner"].split(',')[-2:]).replace('DC=','')
+                    except:
+                        print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
+                    print(f"Schema master            {dc_name}.{domain_fqdn}")
+                elif "rIDManager" in record["objectClass"]:
+                    try:
+                        dc_name = record["fSMORoleOwner"].split(",")[1].split("=")[1]
+                        domain_fqdn ='.'.join(record["fSMORoleOwner"].split(',')[-2:]).replace('DC=','')
+                    except:
+                        print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
+                    print(f"RID pool manager         {dc_name}.{domain_fqdn}")
+                elif "infrastructureUpdate" in record["objectClass"]:
+                    try:
+                        dc_name = record["fSMORoleOwner"].split(",")[1].split("=")[1]
+                        domain_fqdn ='.'.join(record["fSMORoleOwner"].split(',')[-2:]).replace('DC=','')
+                    except:
+                        print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
+                    print(f"Infrastructure master    {dc_name}.{domain_fqdn}")
 
                 if self.engine.page_size > 0 and k % self.engine.page_size == 0:
                     sleep(self.engine.throttle)
@@ -623,6 +658,47 @@ class Ldeep(Command):
                     print(f"User {entry['member'][0]} added to Group {format_sid(entry['msDS-ShadowPrincipalSid'])}")
         except:
             print("Can't retrieve shadow principals")
+
+    def list_fsmo(self, kwargs):
+        """
+        List FSMO roles.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+        if verbose:
+            attributes = ALL
+        else:
+            attributes = ["objectClass", "fSMORoleOwner"]
+
+        try:
+            self.display(
+                self.engine.query(
+                    self.engine.FSMO_DOMAIN_NAMING_FILTER(),
+                    attributes,
+                    base=','.join(["CN=Partitions,CN=Configuration", self.engine.base_dn])
+                    ),
+                verbose
+                )
+            self.display(
+                self.engine.query(
+                    self.engine.FSMO_SCHEMA_FILTER(),
+                    attributes,
+                    base=','.join(["CN=Schema,CN=Configuration", self.engine.base_dn])
+                    ),
+                verbose
+                )
+            self.display(
+                self.engine.query(
+                    self.engine.FSMO_DOMAIN_FILTER(),
+                    attributes
+                    ),
+                verbose
+                )
+        except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
+            error(e)
 
     def list_delegations(self, kwargs):
         """
