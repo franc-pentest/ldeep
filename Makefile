@@ -5,17 +5,17 @@ SRC = $(wildcard ./ldeep/*.py)
 all: $(EXEC)
 
 $(EXEC): $(SRC)
-	python3 setup.py bdist_wheel
+	pdm build --no-sdist
 	pex -r requirements.txt --disable-cache -f dist/ -o $@ -e ldeep.__main__ ldeep
 
 release: $(SRC)
 	git tag $(shell cat VERSION)
 	git push origin $(shell cat VERSION)
-	python3 setup.py sdist
+	pdm build --no-wheel
 	twine upload dist/*
 
 release-test: $(SRC)
-	python3 setup.py sdist
+	pdm build --no-wheel
 	twine upload --repository testpypi dist/*
 
 clean:
@@ -24,5 +24,9 @@ clean:
 mrproper: clean
 	@find . -name *.pyc -exec rm '{}' \;
 	@rm -rf *.egg-info
+
+export:
+	pdm export -f requirements --without-hashes --prod > requirements.txt
+	pdm export -f requirements --without-hashes > requirements-dev.txt
 
 .PHONY: clean mrproper

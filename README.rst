@@ -2,10 +2,15 @@
 INSTALL
 =======
 
-If you want to use Kerberos authentication you will need additional packages.::
+If you want to use Kerberos authentication you will need additional packages.
+
+Debian::
 
   sudo apt-get install -y libkrb5-dev krb5-config
 
+ArchLinux::
+
+  sudo pacman -S krb5
 
 ``ldeep`` is using Python3.::
 
@@ -19,6 +24,14 @@ For Kerberos, you will also need to configure the ``/etc/krb5.conf``.::
                 kdc = DC01.CORP.LOCAL
         }
 
+Local installation for development::
+
+  git clone https://github.com/franc-pentest/ldeep && cd ldeep
+  pdm install
+
+Run locally::
+
+  pdm run ldeep
 
 =====
 LDEEP
@@ -26,7 +39,7 @@ LDEEP
 
 Help is self-explanatory. Let's check it out::
 
-  $ ldeep -h                                                             
+  $ ldeep -h
   usage: ldeep [-h] [-o OUTFILE] {ldap,cache} ...
 
   optional arguments:
@@ -36,7 +49,7 @@ Help is self-explanatory. Let's check it out::
       --security_desc   Enable the retrieval of security descriptors in ldeep
                         results
 
-			
+
   Modes:
       Available modes
 
@@ -180,7 +193,7 @@ CACHE
 -----
 
 ::
-   
+
     $ ldeep cache -h
     usage: ldeep cache [-h] [-d DIR] -p PREFIX
                          {auth_policies,computers,conf,delegations,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone}
@@ -224,7 +237,7 @@ CACHE
         sddl                Returns the SDDL of an object given it's CN.
         silo                Get information about a specific `silo`.
         zone                Return the records of a DNS zone.
-   
+
 
 
 =====
@@ -333,7 +346,6 @@ Upcoming
 * ADCS enumeration
 * Sites and subnets
 * Project tree
-* Python package
 * Useful Kerberos delegation information
 * Any ideas?
 
