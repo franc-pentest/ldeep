@@ -125,6 +125,27 @@ class Ldeep(Command):
                     except:
                         print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
                     print(f"Infrastructure master    {dc_name}.{domain_fqdn}")
+                # sccm primary and secondary sites
+                elif "container" in record["objectClass"] and "nTSecurityDescriptor" in record.keys():
+                    for ace in record['nTSecurityDescriptor']['DACL']['ACEs']:
+                        # going for domain SID
+                        if ace['SID'].startswith("S-1-5-21") and not ace['SID'].endswith(("-512", "-519")):
+                            # looking for GenericAll ACE
+                            if ace['Access Required']['Write DAC'] == True and ace['Access Required']['Write Owner'] == True:
+                                # resolve SID
+                                try:
+                                    sid = ace.get('SID')
+                                    if not sid:
+                                        continue
+                                    res = self.engine.resolve_sid(sid)
+                                    for item in res:
+                                        name = item['dNSHostName']
+                                        print(f"Primary/Secondary Site: {name}")
+                                except:
+                                    print(f"Primary/Secondary Site: {sid}")
+                # sccm distribution points
+                elif "mSSMSManagementPoint" in record["objectClass"]:
+                    print(f"Distribution point: {record['dNSHostName']}")
 
                 if self.engine.page_size > 0 and k % self.engine.page_size == 0:
                     sleep(self.engine.throttle)
@@ -515,7 +536,45 @@ class Ldeep(Command):
             verbose
         )
 
-    # subnet_dn not used, TODO: remove?
+    def list_sccm(self, kwargs):
+        """
+        List servers related to SCCM infrastructure (Primary/Secondary Sites and Distribution Points).
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+
+        # Primary/Secondary Sites
+        if verbose:
+            self.engine.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
+            attributes = ['*', '+', 'ntSecurityDescriptor']
+        else:
+            attributes = ["objectClass", "ntSecurityDescriptor"]
+
+        results = self.display(
+            self.engine.query(
+                self.engine.PRIMARY_SCCM_FILTER(),
+                attributes,
+            ),
+            verbose
+        )
+
+        # Distribution points
+        if verbose:
+            self.engine.set_controls()
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = ["objectClass", "dNSHostName"]
+
+        results = self.display(
+            self.engine.query(
+                self.engine.DP_SCCM_FILTER(),
+                attributes,
+            ),
+            verbose
+        )
+
     def list_subnets(self, kwargs):
         """
         List sites and associated subnets.
@@ -544,7 +603,6 @@ class Ldeep(Command):
             site_dn = ""
             site_name = ""
             site_description = ""
-            # subnet_dn = ""
             subnet_name = ""
             subnet_description = ""
             for entry in entries:
@@ -553,7 +611,6 @@ class Ldeep(Command):
                 site_description = entry["description"][0] if entry["description"] else ""
                 subnet_entries = self.engine.query(self.engine.SUBNET_FILTER(site_dn), attributes, base=','.join(["CN=Sites,CN=Configuration", self.engine.base_dn]))
                 for subnet in subnet_entries:
-                    # subnet_dn = subnet["distinguishedName"] if subnet["distinguishedName"] else ""
                     subnet_name = subnet["name"] if subnet["name"] else ""
                     subnet_description = subnet["description"][0] if subnet["description"] else ""
                     servers = self.engine.query("(objectClass=server)", ['cn'], base=site_dn)

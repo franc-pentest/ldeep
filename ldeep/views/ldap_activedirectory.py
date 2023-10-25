@@ -141,6 +141,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     SITES_FILTER = lambda _: "(objectClass=site)"
     SUBNET_FILTER = lambda _, s: f"(SiteObject={s})"
     PKI_FILTER = lambda _: "(objectClass=pKIEnrollmentService)"
+    PRIMARY_SCCM_FILTER = lambda _: "(cn=System Management)"
+    DP_SCCM_FILTER = lambda _: "(objectClass=mssmsmanagementpoint)"
     USER_ALL_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user))"
     USER_SPN_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt)))"
     USER_ACCOUNT_CONTROL_FILTER = lambda _, n: f"(&(objectCategory=Person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:={n}))"
