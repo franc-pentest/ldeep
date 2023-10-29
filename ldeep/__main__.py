@@ -138,9 +138,8 @@ class Ldeep(Command):
                                     if not sid:
                                         continue
                                     res = self.engine.resolve_sid(sid)
-                                    for item in res:
-                                        name = item['dNSHostName']
-                                        print(f"Primary/Secondary Site: {name}")
+                                    name = next(res)['dNSHostName']
+                                    print(f"Primary/Secondary Site: {name}")
                                 except:
                                     print(f"Primary/Secondary Site: {sid}")
                 # sccm distribution points
@@ -546,8 +545,8 @@ class Ldeep(Command):
         verbose = kwargs.get("verbose", False)
 
         # Primary/Secondary Sites
+        self.engine.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
         if verbose:
-            self.engine.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
             attributes = ['*', '+', 'ntSecurityDescriptor']
         else:
             attributes = ["objectClass", "ntSecurityDescriptor"]
@@ -561,19 +560,22 @@ class Ldeep(Command):
         )
 
         # Distribution points
+        self.engine.set_controls()
         if verbose:
-            self.engine.set_controls()
             attributes = self.engine.all_attributes()
         else:
             attributes = ["objectClass", "dNSHostName"]
 
-        results = self.display(
-            self.engine.query(
-                self.engine.DP_SCCM_FILTER(),
-                attributes,
-            ),
-            verbose
-        )
+        try:
+            results = self.display(
+                self.engine.query(
+                    self.engine.DP_SCCM_FILTER(),
+                    attributes,
+                ),
+                verbose
+            )
+        except Exception as e:
+            error(f"SCCM may not be installed: {e}")
 
     def list_subnets(self, kwargs):
         """
@@ -814,7 +816,7 @@ class Ldeep(Command):
                                 if not sid:
                                     continue
                                 res = self.engine.resolve_sid(sid)
-                                name = res[0]['sAMAccountName']
+                                name = next(res)['sAMAccountName']
                                 print(f"{name}:rbcd:{sam}")
                             except Exception:
                                 print(f"{sid}:rbcd:{sam}")
