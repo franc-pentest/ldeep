@@ -1044,7 +1044,7 @@ class Ldeep(Command):
 
         results = self.engine.get_sddl(f"(anr={anr})")
 
-        self.display(results, True, False)
+        self.display([dict(results[0])], True, False)
 
     def get_silo(self, kwargs):
         """
