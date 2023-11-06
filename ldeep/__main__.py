@@ -551,13 +551,17 @@ class Ldeep(Command):
         else:
             attributes = ["objectClass", "ntSecurityDescriptor"]
 
-        results = self.display(
-            self.engine.query(
-                self.engine.PRIMARY_SCCM_FILTER(),
-                attributes,
-            ),
-            verbose
-        )
+        try:
+            results = self.display(
+                self.engine.query(
+                    self.engine.PRIMARY_SCCM_FILTER(),
+                    attributes,
+                ),
+                verbose
+            )
+        except Exception as e:
+            print(f"SCCM may not be installed")
+            return
 
         # Distribution points
         self.engine.set_controls()
@@ -575,7 +579,8 @@ class Ldeep(Command):
                 verbose
             )
         except Exception as e:
-            error(f"SCCM may not be installed: {e}")
+            print(f"SCCM may not be installed")
+            return
 
     def list_subnets(self, kwargs):
         """
