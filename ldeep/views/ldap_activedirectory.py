@@ -331,8 +331,16 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             else:
                 if not self.ldap.bind():
                     raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
-                if method == "anonymous" and not server.schema:
-                    raise self.ActiveDirectoryLdapException("Unable to retrieve information with anonymous bind")
+                if method == "anonymous":
+                    anon_base = self.ldap.request['base'].split(',')
+                    for i,item in enumerate(anon_base):
+                        if item.startswith("DC="):
+                            anon_base = ','.join(anon_base[i:])
+                            break
+                    self.ldap.search(search_base=anon_base, search_filter='(&(objectClass=domain))', search_scope='SUBTREE', attributes='*')
+
+                    if len(self.ldap.entries) == 0:
+                        raise self.ActiveDirectoryLdapException("Unable to retrieve information with anonymous bind")
         except LDAPSocketOpenError:
             raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}")
         except LDAPSocketSendError:
@@ -716,6 +724,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         except Exception as e:
             raise self.ActiveDirectoryLdapException(e)
         return result
+
     def create_user(self, user, password):
         """
         Create a user account on the domain.
