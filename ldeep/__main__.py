@@ -20,6 +20,7 @@ from ldeep.utils import error, info, Logger, resolve as utils_resolve
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldap3.protocol.formatters.formatters import format_sid
 from ldap3.core import results as coreResults
+from ldap3.core.exceptions import LDAPAttributeError, LDAPObjectClassError
 
 import sys
 
@@ -653,13 +654,16 @@ class Ldeep(Command):
         verbose = kwargs.get("verbose", False)
         attributes = ALL if verbose else ["cn", "objectClass"]
 
-        self.display(
-            self.engine.query(
-                self.engine.AUTH_POLICIES_FILTER(),
-                attributes, base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
-            ),
-            verbose
-        )
+        try:
+            self.display(
+                self.engine.query(
+                    self.engine.AUTH_POLICIES_FILTER(),
+                    attributes, base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
+                ),
+                verbose
+            )
+        except LDAPObjectClassError as e:
+            print(f"Error: {e}. The domain's functional level may be too old")
 
     def list_silos(self, kwargs):
         """
@@ -672,13 +676,16 @@ class Ldeep(Command):
         verbose = kwargs.get("verbose", False)
         attributes = ALL if verbose else ["cn", "objectClass"]
 
-        self.display(
-            self.engine.query(
-                self.engine.SILOS_FILTER(),
-                attributes, base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
-            ),
-            verbose
-        )
+        try:
+            self.display(
+                self.engine.query(
+                    self.engine.SILOS_FILTER(),
+                    attributes, base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
+                ),
+                verbose
+            )
+        except LDAPObjectClassError as e:
+            print(f"Error: {e}. The domain's functional level may be too old")
 
     def list_smsa(self, kwargs):
         """
@@ -762,7 +769,7 @@ class Ldeep(Command):
                 verbose
                 )
         except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
-            error(e)
+            print(f'Error: {e}')
 
     def list_delegations(self, kwargs):
         """
@@ -778,25 +785,40 @@ class Ldeep(Command):
 
         attributes = ALL if verbose else ["sAMAccountName", "userAccountControl"]
 
-        if filter_ == "all":
-            if not verbose:
-                attributes.extend([
-                    "msDS-AllowedToDelegateTo",
-                    "msDS-AllowedToActOnBehalfOfOtherIdentity"
-                ])
-            entries = self.engine.query(self.engine.ALL_DELEGATIONS_FILTER(), attributes)
-        elif filter_ == "unconstrained":
-            entries = self.engine.query(self.engine.UNCONSTRAINED_DELEGATION_FILTER(), attributes)
-        elif filter_ == "constrained":
-            if not verbose:
-                attributes.append("msDS-AllowedToDelegateTo")
-            entries = self.engine.query(self.engine.CONSTRAINED_DELEGATION_FILTER(), attributes)
-        elif filter_ == "rbcd":
-            if not verbose:
-                attributes.append("msDS-AllowedToActOnBehalfOfOtherIdentity")
-            entries = self.engine.query(self.engine.RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER(), attributes)
-        else:
-            return None
+        try:
+            if filter_ == "all":
+                if not verbose:
+                    attributes.extend([
+                        "msDS-AllowedToDelegateTo",
+                        "msDS-AllowedToActOnBehalfOfOtherIdentity"
+                    ])
+                entries = self.engine.query(self.engine.ALL_DELEGATIONS_FILTER(), attributes)
+            elif filter_ == "unconstrained":
+                entries = self.engine.query(self.engine.UNCONSTRAINED_DELEGATION_FILTER(), attributes)
+            elif filter_ == "constrained":
+                if not verbose:
+                    attributes.append("msDS-AllowedToDelegateTo")
+                entries = self.engine.query(self.engine.CONSTRAINED_DELEGATION_FILTER(), attributes)
+            elif filter_ == "rbcd":
+                if not verbose:
+                    attributes.append("msDS-AllowedToActOnBehalfOfOtherIdentity")
+                entries = self.engine.query(self.engine.RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER(), attributes)
+            else:
+                return None
+            
+            # Force the actual LDAP request to be done there, to catch potential LDAPAttributeError errors related
+            # to an old domain functional level. We don't want to miss the other delegation types because of RBCD
+            entries = list(entries)
+        except LDAPAttributeError as e:
+            if filter_ == "rbcd":
+                print(f"Error: {e}. The domain's functional level may be too old")
+                return
+            
+            # If "delegations all" was used, redo the request without RBCD
+            if "msDS-AllowedToActOnBehalfOfOtherIdentity" in attributes:
+                attributes = list(filter(lambda a: a != "msDS-AllowedToActOnBehalfOfOtherIdentity", attributes))
+                entries = self.engine.query(self.engine.ALL_DELEGATIONS_FILTER(), attributes)
+
 
         if verbose:
             self.display(entries, verbose)
@@ -845,7 +867,7 @@ class Ldeep(Command):
         try:
             results = self.engine.query(self.engine.BITLOCKERKEY_FILTER(), attributes)
         except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
-            error(e)
+            print(f'Error: {e}')
 
         self.display(results, verbose)
 
@@ -1073,11 +1095,16 @@ class Ldeep(Command):
         else:
             return None
 
-        results = list(self.engine.query(
-            self.engine.SILO_FILTER(silo),
-            attributes,
-            base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn]))
-        )
+        try:
+            results = list(self.engine.query(
+                self.engine.SILO_FILTER(silo),
+                attributes,
+                base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn]))
+            )
+        except LDAPObjectClassError as e:
+            print(f"Error: {e}. The domain's functional level may be too old")
+            return
+        
         if not results:
             error(f"Silo {silo} does not exists")
 
