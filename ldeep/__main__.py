@@ -300,8 +300,8 @@ class Ldeep(Command):
         try:
             entries = self.engine.get_gmsa(attributes)
         except LDAPAttributeError as e:
-            print(f"Error: {e}. The domain's functional level may be too old")
-            return
+            error(f"{e}. The domain's functional level may be too old")
+            entries = []
         
         if verbose:
             self.display(entries, verbose)
@@ -557,17 +557,15 @@ class Ldeep(Command):
         else:
             attributes = ["objectClass", "ntSecurityDescriptor"]
 
+        results = self.engine.query(
+            self.engine.PRIMARY_SCCM_FILTER(),
+            attributes,
+        )
+
         try:
-            results = self.display(
-                self.engine.query(
-                    self.engine.PRIMARY_SCCM_FILTER(),
-                    attributes,
-                ),
-                verbose
-            )
+            self.display(results, verbose)
         except Exception as e:
-            print(f"SCCM may not be installed")
-            return
+            error(e, close_array=verbose)
 
         # Distribution points
         self.engine.set_controls()
@@ -576,17 +574,15 @@ class Ldeep(Command):
         else:
             attributes = ["objectClass", "dNSHostName"]
 
+        results = self.engine.query(
+            self.engine.DP_SCCM_FILTER(),
+            attributes,
+        )
+
         try:
-            results = self.display(
-                self.engine.query(
-                    self.engine.DP_SCCM_FILTER(),
-                    attributes,
-                ),
-                verbose
-            )
-        except Exception as e:
-            print(f"SCCM may not be installed")
-            return
+            self.display(results, verbose)
+        except LDAPObjectClassError as e:
+            error(f"{e}. SCCM may not be installed", close_array=verbose)
 
     def list_subnets(self, kwargs):
         """
@@ -668,7 +664,8 @@ class Ldeep(Command):
                 verbose
             )
         except LDAPObjectClassError as e:
-            print(f"Error: {e}. The domain's functional level may be too old")
+            error(f"{e}. The domain's functional level may be too old", close_array=verbose)
+
 
     def list_silos(self, kwargs):
         """
@@ -690,7 +687,7 @@ class Ldeep(Command):
                 verbose
             )
         except LDAPObjectClassError as e:
-            print(f"Error: {e}. The domain's functional level may be too old")
+            error(f"{e}. The domain's functional level may be too old", close_array=verbose)
 
     def list_smsa(self, kwargs):
         """
@@ -705,13 +702,16 @@ class Ldeep(Command):
         attributes = ALL if verbose else ["sAMAccountName", "msDS-HostServiceAccountBL"]
         entries = self.engine.query(self.engine.SMSA_FILTER(), attributes)
 
-        if verbose:
-            self.display(entries, verbose)
-        else:
-            for entry in entries:
-                sam = entry['sAMAccountName']
-                for host in entry["msDS-HostServiceAccountBL"]:
-                    print(f'{sam}:{host}')
+        try:
+            if verbose:
+                self.display(entries, verbose)
+            else:
+                for entry in entries:
+                    sam = entry['sAMAccountName']
+                    for host in entry["msDS-HostServiceAccountBL"]:
+                        print(f'{sam}:{host}')
+        except LDAPObjectClassError as e:
+            error(f"{e}. The domain's functional level may be too old", close_array=verbose)
 
     def list_shadow_principals(self, kwargs):
         """
@@ -732,8 +732,8 @@ class Ldeep(Command):
             else:
                 for entry in entries:
                     print(f"User {entry['member'][0]} added to Group {format_sid(entry['msDS-ShadowPrincipalSid'])}")
-        except:
-            print("Can't retrieve shadow principals")
+        except (LDAPAttributeError, LDAPObjectClassError) as e:
+            error(f"{e}. The domain's functional level may be too old", close_array=verbose)
 
     def list_fsmo(self, kwargs):
         """
@@ -749,32 +749,38 @@ class Ldeep(Command):
         else:
             attributes = ["objectClass", "fSMORoleOwner"]
 
+        results = self.engine.query(
+            self.engine.FSMO_DOMAIN_NAMING_FILTER(),
+            attributes,
+            base=','.join(["CN=Partitions,CN=Configuration", self.engine.base_dn])
+        )
+
         try:
-            self.display(
-                self.engine.query(
-                    self.engine.FSMO_DOMAIN_NAMING_FILTER(),
-                    attributes,
-                    base=','.join(["CN=Partitions,CN=Configuration", self.engine.base_dn])
-                    ),
-                verbose
-                )
-            self.display(
-                self.engine.query(
-                    self.engine.FSMO_SCHEMA_FILTER(),
-                    attributes,
-                    base=','.join(["CN=Schema,CN=Configuration", self.engine.base_dn])
-                    ),
-                verbose
-                )
-            self.display(
-                self.engine.query(
-                    self.engine.FSMO_DOMAIN_FILTER(),
-                    attributes
-                    ),
-                verbose
-                )
-        except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
-            print(f'Error: {e}')
+            self.display(results, verbose)
+        except Exception as e:
+            error(f'{e}', close_array=verbose)
+
+        results = self.engine.query(
+            self.engine.FSMO_SCHEMA_FILTER(),
+            attributes,
+            base=','.join(["CN=Schema,CN=Configuration", self.engine.base_dn])
+        )
+
+        try:
+            self.display(results, verbose)
+        except Exception as e:
+            error(f'{e}', close_array=verbose)
+
+        results = self.engine.query(
+            self.engine.FSMO_DOMAIN_FILTER(),
+            attributes
+        )
+
+        try:
+            self.display(results, verbose)
+        except Exception as e:
+            error(f'{e}', close_array=verbose)
+
 
     def list_delegations(self, kwargs):
         """
@@ -816,7 +822,7 @@ class Ldeep(Command):
             entries = list(entries)
         except LDAPAttributeError as e:
             if filter_ == "rbcd":
-                print(f"Error: {e}. The domain's functional level may be too old")
+                error(f"{e}. The domain's functional level may be too old")
                 return
             
             # If "delegations all" was used, redo the request without RBCD
@@ -870,11 +876,9 @@ class Ldeep(Command):
             attributes = ["objectClass", "msFVE-RecoveryPassword"]
 
         try:
-            results = self.engine.query(self.engine.BITLOCKERKEY_FILTER(), attributes)
-        except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
-            print(f'Error: {e}')
-
-        self.display(results, verbose)
+            self.display(self.engine.query(self.engine.BITLOCKERKEY_FILTER(), attributes), verbose)
+        except LDAPObjectClassError as e:
+            error(f"{e}. The domain's functional level may be too old", close_array=verbose)
 
     # GETTERS #
 
