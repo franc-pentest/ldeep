@@ -297,7 +297,12 @@ class Ldeep(Command):
         else:
             attributes = ["sAMAccountName", "msDS-GroupMSAMembership", "objectClass"] + hidden_attributes
 
-        entries = self.engine.get_gmsa(attributes)
+        try:
+            entries = self.engine.get_gmsa(attributes)
+        except LDAPAttributeError as e:
+            print(f"Error: {e}. The domain's functional level may be too old")
+            return
+        
         if verbose:
             self.display(entries, verbose)
         else:
