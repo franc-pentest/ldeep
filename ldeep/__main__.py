@@ -138,8 +138,11 @@ class Ldeep(Command):
                                     sid = ace.get('SID')
                                     if not sid:
                                         continue
-                                    res = self.engine.resolve_sid(sid)
-                                    name = next(res)['dNSHostName']
+                                    res = next(self.engine.resolve_sid(sid))
+                                    if 'group' in res['objectClass']:
+                                        name = f"{res['sAMAccountName']} (group)"
+                                    else:
+                                        name = res['dNSHostName']
                                     print(f"Primary/Secondary Site: {name}")
                                 except:
                                     print(f"Primary/Secondary Site: {sid}")
