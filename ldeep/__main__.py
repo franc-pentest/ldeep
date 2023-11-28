@@ -1455,11 +1455,13 @@ def main():
                 method = "SIMPLE"
             else:
                 error("Lack of authentication options: either Kerberos, Certificate, Username with Password (can be a NTLM hash) or Anonymous.")
+                sys.exit(1)
 
             query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.pfx_file, args.pfx_pass, args.cert_pem, args.key_pem, method, args.throttle, args.page_size)
 
         except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
             error(e)
+            sys.exit(1)
 
     # If `security_desc` are requested, enable LDAP Security Descriptor flags and modify the default attributes
     # In cache mode, the security_desc corresponding JSON field will be kept
