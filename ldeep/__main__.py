@@ -206,6 +206,8 @@ class Ldeep(Command):
             results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]), attributes)
         elif filter_ == "passwordexpired":
             results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["PASSWORD_EXPIRED"]), attributes)
+        elif filter_ == "passwordnotrequired":
+            results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["PASSWD_NOTREQD"]), attributes)
         elif filter_ == "nokrbpreauth":
             results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["DONT_REQ_PREAUTH"]), attributes)
         elif filter_ == "reversible":
