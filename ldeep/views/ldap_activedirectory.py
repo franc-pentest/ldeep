@@ -100,7 +100,7 @@ def format_dnsrecord(raw_value):
                 target = inet_ntoa(data)
             else:
                 # how, ugly
-                data = data.decode('unicode-escape')
+                data = data.decode('unicode-escape', errors='replace')
                 target = ''.join([c for c in data if ord(c) > 31 or ord(c) == 9])
             return "%s %s" % (recordname, target)
 
