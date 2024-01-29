@@ -330,7 +330,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     exit(1)
             else:
                 if not self.ldap.bind():
-                    raise self.ActiveDirectoryLdapException(f"Unable to bind to the LDAP server: {self.ldap.result['message']}")
+                    raise self.ActiveDirectoryLdapException(f"Unable to bind to the LDAP server: {self.ldap.result['description']} ({self.ldap.result['message']})")
                 if method == "anonymous":
                     anon_base = self.ldap.request['base'].split(',')
                     for i,item in enumerate(anon_base):
