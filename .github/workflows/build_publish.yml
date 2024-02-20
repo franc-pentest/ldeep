@@ -29,8 +29,14 @@ jobs:
         with:
           tag_name: ${{ env.version }}
           files: dist/*
-      - name: Upload to PyPI
+
+  pypi-publish:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    permissions:
+      id-token: write
+      - name: Publish release distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          password: ${{ secrets.PYPI_KEY }}
           packages_dir: sdist/
