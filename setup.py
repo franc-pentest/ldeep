@@ -20,7 +20,7 @@ setup(
 	url="https://github.com/franc-pentest/ldeep",
 	license="MIT",
 	description="In-depth ldap enumeration utility",
-	long_description=codecs.open("README.rst", "rb", "utf8").read(),
+	long_description=''.join(open("README.rst").readlines()[15:]),
 
 	# Classifiers (see https://pypi.python.org/pypi?%3Aaction=list_classifiers)
 	classifiers=[
