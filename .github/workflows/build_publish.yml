@@ -33,6 +33,6 @@ jobs:
           tag_name: ${{ env.version }}
           files: dist/*
       - name: Publish release distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v4
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: sdist/
