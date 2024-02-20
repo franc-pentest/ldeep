@@ -1,4 +1,15 @@
 =======
+Project Status
+=======
+
+.. |Build status| image:: https://github.com/franc-pentest/ldeep/actions/workflows/build_publish.yml/badge.svg
+   :https://github.com/franc-pentest/ldeep/actions/workflows/build_publish.yml:
+.. |PyPi version| image:: https://badgen.net/pypi/v/ldeep
+   :https://pypi.org/project/ldeep/:
+.. |Download rate| image:: https://img.shields.io/pypi/dm/ldeep.svg
+   :https://pypi.org/project/ldeep/:
+
+=======
 INSTALL
 =======
 

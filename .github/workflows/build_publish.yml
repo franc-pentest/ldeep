@@ -1,4 +1,4 @@
-name: Version Update
+name: Build and publish
 on:
   push:
     branches:
