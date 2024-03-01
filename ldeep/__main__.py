@@ -1030,16 +1030,16 @@ class Ldeep(Command):
             @computer:string
                 Target computer where LAPS is set
         """
-        computer = kwargs["computer"] if kwargs["computer"] else "*"
+        computer = kwargs.get("computer", "*")
         verbose = kwargs.get("verbose", False)
 
         attributes = ALL if verbose else ["dNSHostName", "ms-Mcs-AdmPwd", "ms-Mcs-AdmPwdExpirationTime"]
 
         try:
+            # LAPSv1
             entries = self.engine.query(self.engine.LAPS_FILTER(computer), attributes)
             for entry in entries:
                 if not verbose:
-                    # TODO: deal with self.display for better code
                     cn = entry['dNSHostName']
                     password = entry['ms-Mcs-AdmPwd']
                     try:
@@ -1050,8 +1050,26 @@ class Ldeep(Command):
                     print(f'{cn} {password} {expiration_date}')
                 else:
                     self.display(entries, verbose)
+        except LDAPAttributeError:
+            try:
+                # LAPSv2
+                attributes = ALL if verbose else ["dNSHostName", "msLAPS-EncryptedPassword", "msLAPS-PasswordExpirationTime"]
+                entries = self.engine.query(self.engine.LAPS2_FILTER(computer), attributes)
+                computers = list(entries)
+                computer_count = len(computers)
+                if computer_count > 0:
+                    print("LAPSv2 detected, password decryption is not implemented")
+                    if not verbose:
+                        for c in computers:
+                            if c['msLAPS-EncryptedPassword']:
+                                print(f"{c['dNSHostName']}:::{b64encode(c['msLAPS-EncryptedPassword'])}")
+                            else:
+                                print(f"{c['dNSHostName']}")
+            except Exception as e:
+                print(e)
+                error("No LAPS related attribute has been detected")
         except Exception as e:
-            error(e)
+            error(f"{e}. No LAPS attribute or not enough permission to read it.")
 
     def get_object(self, kwargs):
         """
