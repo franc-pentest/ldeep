@@ -922,12 +922,11 @@ class Ldeep(Command):
         results = list(self.engine.query(self.engine.GROUP_DN_FILTER(group), ["distinguishedName", "objectSid"]))
         if results:
             group_dn = results[0]["distinguishedName"]
+            primary_group_id = results[0]["objectSid"].split('-')[-1]
+            results = self.engine.query(self.engine.ACCOUNTS_IN_GROUP_FILTER(primary_group_id, group_dn))
+            self.display(results, verbose)
         else:
             error("Group {group} does not exists".format(group=group))
-
-        primary_group_id = results[0]["objectSid"].split('-')[-1]
-        results = self.engine.query(self.engine.ACCOUNTS_IN_GROUP_FILTER(primary_group_id, group_dn))
-        self.display(results, verbose)
 
     def get_memberships(self, kwargs):
         """
@@ -979,6 +978,8 @@ class Ldeep(Command):
                 results = list(self.engine.query(self.engine.PRIMARY_GROUP_ID(pid)))
                 if results:
                     print(results[0]["dn"])
+        if len(list(results)) == 0:
+            error("User {account} does not exists".format(account=account))
 
     def get_from_sid(self, kwargs):
         """
