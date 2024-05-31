@@ -1,6 +1,6 @@
-=======
+==============
 Project Status
-=======
+==============
 
 .. image:: https://github.com/franc-pentest/ldeep/actions/workflows/build_publish.yml/badge.svg
    :target: https://github.com/franc-pentest/ldeep/actions/workflows/build_publish.yml
@@ -11,6 +11,7 @@ Project Status
 .. image:: https://img.shields.io/pypi/dm/ldeep.svg
    :alt: Download rate
    :target: https://pypi.org/project/ldeep/
+
 
 
 =======
