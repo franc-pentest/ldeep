@@ -513,7 +513,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     if "dn" in entry:
                         d = entry["attributes"]
                         d["dn"] = entry["dn"]
-                        result_set.append(d)
+                        result_set.append(dict(d))
 
         except LDAPOperationResult as e:
             raise self.ActiveDirectoryLdapException(e)
