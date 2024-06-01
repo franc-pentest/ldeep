@@ -24,15 +24,16 @@ jobs:
         run: sudo apt-get install -y libkrb5-dev
       - name: Build release assets
         run: |
-          pip install pex wheel
-          python3 setup.py sdist -d sdist
-          python3 setup.py bdist_pex
+          pip install pex wheel pdm
+          pdm build -d sdist --no-wheel
+          pdm build -d dist --no-sdist
+          pex -r requirements.txt --disable-cache -f dist/ -o ldeep-${{ env.version }} -e ldeep.__main__ ldeep
       - name: Create the release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.version }}
-          files: dist/*
-      - name: Publish release distributions to PyPI
+          files: ldeep-${{ env.version }}
+      - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: sdist/
