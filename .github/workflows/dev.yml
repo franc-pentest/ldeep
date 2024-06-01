@@ -52,7 +52,8 @@ jobs:
         run: pdm install --prod
 
       - name: Build
-        run: python3 -m nuitka --assume-yes-for-downloads --onefile .venv/Scripts/ldeep.exe
+        run: tar xf .venv/Scripts/ldeep.exe
+      - run: python3 -m nuitka --assume-yes-for-downloads --onefile .venv/Scripts/__main__.py
       - run: mv ldeep.exe ldeep_windows-amd64.exe
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
