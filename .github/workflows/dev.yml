@@ -25,7 +25,6 @@ jobs:
         run: pdm install --prod
 
       - name: Build
-        run: 
         run: python3.12 -m nuitka --onefile .venv/bin/ldeep
 
       - run: mv ldeep.bin ldeep_linux-amd64
