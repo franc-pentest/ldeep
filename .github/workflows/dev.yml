@@ -21,11 +21,11 @@ jobs:
       - name: Nuitka
         run: python3.12 -m pip install nuitka pdm
 
-      - name: Installs deps and package into venv
-        run: pdm install --prod
-
       - name: Install libkrb5-dev
         run: sudo apt-get install -y libkrb5-dev
+
+      - name: Installs deps and package into venv
+        run: pdm install --prod
 
       - name: Build
         run: python3.12 -m nuitka --onefile .venv/bin/ldeep
@@ -52,7 +52,7 @@ jobs:
         run: pdm install --prod
 
       - name: Build
-        run: python3 -m nuitka --assume-yes-for-downloads --onefile .venv/bin/ldeep.exe
+        run: python3 -m nuitka --assume-yes-for-downloads --onefile .venv/Scripts/ldeep.exe
       - run: mv ldeep.exe ldeep_windows-amd64.exe
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
