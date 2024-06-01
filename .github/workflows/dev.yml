@@ -9,21 +9,76 @@ permissions:
   contents: read
 
 jobs:
-  checks:
-    name: Linter Checks
-    runs-on: ubuntu-latest
-
+  linux-build:
+    name: Linux Build
+    runs-on: "ubuntu-latest"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: "3.12"
 
-      - name: Python Black
-        uses: psf/black@stable
+      - name: Nuitka
+        run: python3.12 -m pip install nuitka pex
+
+      - name: Installs deps and package into venv
+        run: pdm install --prod
+
+      - name: Build
+        run: 
+        run: python3.12 -m nuitka --onefile .venv/bin/ldeep
+
+      - run: mv ldeep.bin ldeep_linux-amd64
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
         with:
-          src: ./ldeep
-          options: --check --diff
+          name: linux
+          path: ldeep_linux-amd64
+
+  windows-build:
+    name: Windows Build
+    runs-on: "windows-latest"
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+      - name: Nuitka
+        run: python3 -m pip install nuitka
+
+      - name: Installs deps and package into venv
+        run: pdm install --prod
+
+      - name: Build
+        run: python3 -m nuitka --assume-yes-for-downloads --onefile .venv/bin/ldeep
+      - run: mv ldeep.exe ldeep_windows-amd64.exe
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows
+          path: ldeep_windows-amd64.exe
+
+  macos-build:
+    name: MacOS Build
+    runs-on: "macos-latest"
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Nuitka
+        run: python3.12 -m pip install nuitka
+
+      - name: Installs deps and package into venv
+        run: pdm install --prod
+
+      - name: Build
+        run: python3.12 -m nuitka --onefile .venv/bin/ldeep
+
+      - run: mv ldeep.bin ldeep_macos-amd64
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos
+          path: ldeep_macos-amd64
