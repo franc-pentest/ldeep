@@ -28,9 +28,10 @@ jobs:
         run: pdm install --prod
 
       - name: Build
-        run: python3.12 -m nuitka --onefile .venv/bin/ldeep
+        run: |
+          python3.12 -m nuitka --onefile .venv/bin/ldeep
+          mv ldeep.bin ldeep_linux-amd64
 
-      - run: mv ldeep.bin ldeep_linux-amd64
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -52,9 +53,12 @@ jobs:
         run: pdm install --prod
 
       - name: Build
-        run: tar xf .venv/Scripts/ldeep.exe
-      - run: python3 -m nuitka --assume-yes-for-downloads --onefile .venv/Scripts/__main__.py
-      - run: mv ldeep.exe ldeep_windows-amd64.exe
+        run: |
+          cd .venv/Scripts
+          tar xf ldeep.exe
+          cd ../../
+          python3 -m nuitka --assume-yes-for-downloads --onefile .venv/Scripts/__main__.py
+          mv ldeep.exe ldeep_windows-amd64.exe
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -77,9 +81,10 @@ jobs:
         run: pdm install --prod
 
       - name: Build
-        run: python3.12 -m nuitka --onefile .venv/bin/ldeep
+        run: |
+          python3.12 -m nuitka --onefile .venv/bin/ldeep
+          mv ldeep.bin ldeep_macos-amd64
 
-      - run: mv ldeep.bin ldeep_macos-amd64
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
