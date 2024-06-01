@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
 
       - name: Nuitka
-        run: python3.12 -m pip install nuitka pex
+        run: python3.12 -m pip install nuitka pdm
 
       - name: Installs deps and package into venv
         run: pdm install --prod
@@ -43,7 +43,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Nuitka
-        run: python3 -m pip install nuitka
+        run: python3 -m pip install nuitka pdm
 
       - name: Installs deps and package into venv
         run: pdm install --prod
@@ -67,7 +67,7 @@ jobs:
           python-version: "3.12"
 
       - name: Nuitka
-        run: python3.12 -m pip install nuitka
+        run: python3.12 -m pip install nuitka pdm
 
       - name: Installs deps and package into venv
         run: pdm install --prod
