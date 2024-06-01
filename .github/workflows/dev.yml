@@ -57,7 +57,7 @@ jobs:
           cd .venv/Scripts
           tar xf ldeep.exe
           cd ../../
-          python3 -m nuitka --assume-yes-for-downloads --onefile .venv/Scripts/__main__.py
+          python3 -m nuitka --assume-yes-for-downloads --output-filename=ldeep.exe --onefile .venv/Scripts/__main__.py
           mv ldeep.exe ldeep_windows-amd64.exe
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
