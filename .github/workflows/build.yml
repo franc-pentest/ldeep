@@ -2,9 +2,9 @@ name: Build Tests
 
 on:
   workflow_dispatch:
-    branches: [dev]
+    branches: [master]
   push:
-    branches: [dev]
+    branches: [master]
     paths:
       - '**.py'
       - 'pdm.lock'

@@ -2,7 +2,7 @@ name: Release and PyPi
 on:
   push:
     branches:
-    - 'master'
+    - 'release'
     paths:
     - 'VERSION'
 
