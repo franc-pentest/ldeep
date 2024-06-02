@@ -25,12 +25,13 @@ jobs:
         run: sudo apt-get install -y libkrb5-dev
 
       - name: Installs deps and package into venv
-        run: pdm install --prod
+        run : |
+          pdm export -f requirements --without-hashes --prod > requirements.txt
+          python3.12 -m pip install -r requirements.txt
 
       - name: Build
         run: |
-          source .venv/bin/activate
-          python3.12 -m nuitka --onefile .venv/bin/ldeep
+          python3.12 -m nuitka --onefile --output-filename=ldeep.bin ldeep/__main__.py
           mv ldeep.bin ldeep_linux-amd64
 
       - name: Upload Artifacts
@@ -51,15 +52,13 @@ jobs:
         run: python3 -m pip install nuitka pdm
 
       - name: Installs deps and package into venv
-        run: pdm install --prod
+        run: |
+          python3.12 -m nuitka --onefile --output-filename=ldeep.bin ldeep/__main__.py
+          mv ldeep.bin ldeep_macos-amd64
 
       - name: Build
         run: |
-          .\venv\Scripts\activate
-          cd .venv/Scripts
-          tar xf ldeep.exe
-          cd ../../
-          python3 -m nuitka --assume-yes-for-downloads --output-filename=ldeep.exe --onefile .venv/Scripts/__main__.py
+          python3 -m nuitka --assume-yes-for-downloads --output-filename=ldeep.exe --onefile ldeep/__main__.py
           mv ldeep.exe ldeep_windows-amd64.exe
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
@@ -80,12 +79,13 @@ jobs:
         run: python3.12 -m pip install nuitka pdm
 
       - name: Installs deps and package into venv
-        run: pdm install --prod
+        run: |
+          pdm export -f requirements --without-hashes --prod > requirements.txt
+          python3.12 -m pip install -r requirements.txt
 
       - name: Build
         run: |
-          source .venv/bin/activate
-          python3.12 -m nuitka --onefile .venv/bin/ldeep
+          python3.12 -m nuitka --onefile --output-filename=ldeep.bin ldeep/__main__.py
           mv ldeep.bin ldeep_macos-amd64
 
       - name: Upload Artifacts

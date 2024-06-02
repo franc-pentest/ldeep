@@ -58,6 +58,9 @@ exe = [
 publishing = [
   "twine >= 4.0.2, < 5"
 ]
+dev = [
+    "nuitka>=2.3",
+]
 
 [tool.flake8]
 max-line-length = 120
