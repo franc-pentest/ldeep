@@ -9,7 +9,6 @@ authors = [
 dependencies = [
     "commandparse >= 1.1.1, < 2",
     "cryptography == 39.0.1",
-    "dnspython >= 1.15.0, < 2",
     "gssapi >= 1.8.0, < 2",
     "ldap3 >= 2.5.1, < 3",
     "oscrypto >= 1.3.0, < 2",
@@ -18,6 +17,7 @@ dependencies = [
     "six >= 1.16.0, < 2",
     "termcolor >= 2.3.0, < 3",
     "tqdm >= 4.26.0, < 5",
+    "dnspython>=2.6.1",
 ]
 requires-python = ">=3.8.1"
 readme = "README.rst"
