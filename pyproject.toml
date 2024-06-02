@@ -63,5 +63,4 @@ dev = [
 ]
 
 [tool.black]
-check = true
 diff = true
