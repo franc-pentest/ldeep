@@ -698,7 +698,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             sam = entry["sAMAccountName"]
             data = entry["msDS-ManagedPassword"]
             readers = entry["msDS-GroupMSAMembership"]
-
             # Find principals who can read the password
             try:
                 readers_sd = parse_ntSecurityDescriptor(readers)
@@ -717,7 +716,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                         pass
             except Exception:
                 pass
-
             blob = MSDS_MANAGEDPASSWORD_BLOB()
             try:
                 blob.fromString(data)
