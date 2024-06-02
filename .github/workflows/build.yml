@@ -8,6 +8,7 @@ on:
     paths:
       - '**.py'
       - 'pdm.lock'
+      - VERSION
 
 permissions:
   id-token: write

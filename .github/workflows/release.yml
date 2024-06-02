@@ -3,8 +3,6 @@ on:
   push:
     branches:
     - 'release'
-    paths:
-    - 'VERSION'
 
 jobs:
   build:
