@@ -27,7 +27,7 @@ jobs:
 
       - name: Installs dev deps and package
         run : |
-          pdm export -v -f requirements --without-hashes --dev > requirements.txt
+          pdm export -f requirements --without-hashes --dev > requirements.txt
           python3.12 -m pip install -r requirements.txt
 
       - name: Build
@@ -68,7 +68,7 @@ jobs:
           path: ldeep_windows-amd64.exe
 
   macos-build:
-    name: MacOS Build
+    name: MacOS ARM64 Build
     runs-on: "macos-latest"
     steps:
       - uses: actions/checkout@v3
