@@ -5,7 +5,7 @@ asn1crypto==1.5.1
 astroid==3.0.1
 cffi==1.16.0
 commandparse==1.1.2
-cryptography==39.0.1
+cryptography==42.0.4
 decorator==5.1.1
 dill==0.3.7
 dnspython==1.16.0
