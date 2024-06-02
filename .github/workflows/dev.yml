@@ -32,7 +32,7 @@ jobs:
 
       - name: Build
         run: |
-          python3.12 -m nuitka --onefile --output-filename=ldeep.bin ldeep/__main__.py
+          python3.12 -m nuitka --standalone --onefile --output-filename=ldeep.bin ldeep/__main__.py
           mv ldeep.bin ldeep_linux-amd64
 
       - name: Upload Artifacts
@@ -59,7 +59,7 @@ jobs:
 
       - name: Build
         run: |
-          python3 -m nuitka --assume-yes-for-downloads --output-filename=ldeep.exe --onefile ldeep/__main__.py
+          python3 -m nuitka --standalone --assume-yes-for-downloads --output-filename=ldeep.exe --onefile ldeep/__main__.py
           mv ldeep.exe ldeep_windows-amd64.exe
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
@@ -86,7 +86,7 @@ jobs:
 
       - name: Build
         run: |
-          python3.12 -m nuitka --onefile --output-filename=ldeep.bin ldeep/__main__.py
+          python3.12 -m nuitka --standalone --onefile --output-filename=ldeep.bin ldeep/__main__.py
           mv ldeep.bin ldeep_macos-amd64
 
       - name: Upload Artifacts
