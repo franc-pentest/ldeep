@@ -9,3 +9,8 @@ __pycache__
 
 # Python egg metadata, regenerated from source files by setuptools.
 /*.egg-info
+
+# PDM
+.venv
+.pdm-python
+.pdm-build/

@@ -12,7 +12,7 @@ from time import sleep
 from pyasn1.error import PyAsn1UnicodeDecodeError
 
 from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
-from ldeep.views.constants import USER_ACCOUNT_CONTROL, LDAP_SERVER_SD_FLAGS_OID_SEC_DESC
+from ldeep.views.constants import USER_ACCOUNT_CONTROL, LDAP_SERVER_SD_FLAGS_OID_SEC_DESC, FILETIME_TIMESTAMP_FIELDS, FOREST_LEVELS
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 
@@ -20,6 +20,7 @@ from ldeep.utils import error, info, Logger, resolve as utils_resolve
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldap3.protocol.formatters.formatters import format_sid
 from ldap3.core import results as coreResults
+from ldap3.core.exceptions import LDAPAttributeError, LDAPObjectClassError
 
 import sys
 
@@ -31,7 +32,7 @@ class Ldeep(Command):
         if format == "json":
             self.__display = self.__display_json
 
-    def display(self, records, verbose=False, specify_group=True):
+    def display(self, records, verbose=False, specify_group=True, extra_records=None):
         def default(o):
             if isinstance(o, date) or isinstance(o, datetime):
                 return o.isoformat()
@@ -51,16 +52,103 @@ class Ldeep(Command):
                     print(record["sAMAccountName"] + (" (group)" if specify_group else ""))
                 elif "user" in record["objectClass"]:
                     print(record["sAMAccountName"])
+                elif "organizationalUnit" in record["objectClass"] or "domain" in record["objectClass"] and extra_records:
+                    print(record["dn"])
+                    if record['gPLink']:
+                        guids = re_compile("{[^}]+}")
+                        gpo_guids = guids.findall(record["gPLink"])
+                        if len(gpo_guids) > 0:
+                            print("[gPLink]")
+                            print("* {}".format("\n* ".join([extra_records[g] if g in extra_records else g for g in gpo_guids])))
+                elif "groupPolicyContainer" in record["objectClass"]:
+                    print(f"{record['cn']}: {record['displayName']}")
                 elif "dnsNode" in record["objectClass"]:
                     print("{dc} {rec}".format(dc=record["dc"], rec=" ".join(record["dnsRecord"])))
                 elif "dnsZone" in record["objectClass"]:
                     print(record["dc"])
+                elif "domainDNS" in record['objectClass'] and 'fSMORoleOwner' in record.keys():
+                    try:
+                        dc_name = record["fSMORoleOwner"].split(",")[1].split("=")[1]
+                        domain_fqdn ='.'.join(record["fSMORoleOwner"].split(',')[-2:]).replace('DC=','')
+                    except:
+                        print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
+                    print(f"PDC                      {dc_name}.{domain_fqdn}")
+                elif "domainDNS" in record['objectClass']:
+                    for field, value in record.items():
+                        if field == "objectClass":
+                            continue
+                        if field == "lockOutObservationWindow" and isinstance(value, timedelta):
+                            value = int(value.total_seconds()) / 60
+                        elif field in FILETIME_TIMESTAMP_FIELDS.keys() and type(value) == int:
+                            value = int((fabs(float(value)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
+                        if field in FILETIME_TIMESTAMP_FIELDS.keys():
+                            value = f"{value} {FILETIME_TIMESTAMP_FIELDS[field][1]}"
+                        if field == "msDS-Behavior-Version" and isinstance(value, int):
+                            value = FOREST_LEVELS[record[field]]
+                        print(f"{field}: {value}")
                 elif "domain" in record["objectClass"]:
                     print(record["dn"])
                 elif "pKIEnrollmentService" in record["objectClass"]:
                     print(record["dNSHostName"])
                 elif "msDS-AuthNPolicy" in record["objectClass"] or "msDS-AuthNPolicySilo" in record["objectClass"]:
                     print(record["cn"])
+                elif "msFVE-RecoveryInformation" in record["objectClass"]:
+                    recovery_key = record["msFVE-RecoveryPassword"] if record["msFVE-RecoveryPassword"] else ""
+                    if ',' in record['dn']:
+                        if record['dn'].split(',')[1].upper().startswith("CN="):
+                            computer_name = record['dn'].split(',')[1].split('=',1)[1]
+                    print(f"Machine: {computer_name} | Key: {recovery_key}")
+                elif "crossRefContainer" in record["objectClass"]:
+                    try:
+                        dc_name = record["fSMORoleOwner"].split(",")[1].split("=")[1]
+                        domain_fqdn ='.'.join(record["fSMORoleOwner"].split(',')[-2:]).replace('DC=','')
+                    except:
+                        print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
+                    print(f"Domain naming master     {dc_name}.{domain_fqdn}")
+                elif "dMD" in record["objectClass"]:
+                    try:
+                        dc_name = record["fSMORoleOwner"].split(",")[1].split("=")[1]
+                        domain_fqdn ='.'.join(record["fSMORoleOwner"].split(',')[-2:]).replace('DC=','')
+                    except:
+                        print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
+                    print(f"Schema master            {dc_name}.{domain_fqdn}")
+                elif "rIDManager" in record["objectClass"]:
+                    try:
+                        dc_name = record["fSMORoleOwner"].split(",")[1].split("=")[1]
+                        domain_fqdn ='.'.join(record["fSMORoleOwner"].split(',')[-2:]).replace('DC=','')
+                    except:
+                        print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
+                    print(f"RID pool manager         {dc_name}.{domain_fqdn}")
+                elif "infrastructureUpdate" in record["objectClass"]:
+                    try:
+                        dc_name = record["fSMORoleOwner"].split(",")[1].split("=")[1]
+                        domain_fqdn ='.'.join(record["fSMORoleOwner"].split(',')[-2:]).replace('DC=','')
+                    except:
+                        print(f"Can't parse fSMORoleOwner {record['fSMORoleOwner']}")
+                    print(f"Infrastructure master    {dc_name}.{domain_fqdn}")
+                # sccm primary and secondary sites
+                elif "container" in record["objectClass"] and "nTSecurityDescriptor" in record.keys():
+                    for ace in record['nTSecurityDescriptor']['DACL']['ACEs']:
+                        # going for domain SID
+                        if ace['SID'].startswith("S-1-5-21") and not ace['SID'].endswith(("-512", "-519")):
+                            # looking for GenericAll ACE
+                            if ace['Access Required']['Write DAC'] == True and ace['Access Required']['Write Owner'] == True:
+                                # resolve SID
+                                try:
+                                    sid = ace.get('SID')
+                                    if not sid:
+                                        continue
+                                    res = next(self.engine.resolve_sid(sid))
+                                    if 'group' in res['objectClass']:
+                                        name = f"{res['sAMAccountName']} (group)"
+                                    else:
+                                        name = res['dNSHostName']
+                                    print(f"Primary/Secondary Site: {name}")
+                                except:
+                                    print(f"Primary/Secondary Site: {sid}")
+                # sccm distribution points
+                elif "mSSMSManagementPoint" in record["objectClass"]:
+                    print(f"Distribution point: {record['dNSHostName']}")
 
                 if self.engine.page_size > 0 and k % self.engine.page_size == 0:
                     sleep(self.engine.throttle)
@@ -118,6 +206,8 @@ class Ldeep(Command):
             results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]), attributes)
         elif filter_ == "passwordexpired":
             results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["PASSWORD_EXPIRED"]), attributes)
+        elif filter_ == "passwordnotrequired":
+            results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["PASSWD_NOTREQD"]), attributes)
         elif filter_ == "nokrbpreauth":
             results = self.engine.query(self.engine.USER_ACCOUNT_CONTROL_FILTER(USER_ACCOUNT_CONTROL["DONT_REQ_PREAUTH"]), attributes)
         elif filter_ == "reversible":
@@ -212,7 +302,12 @@ class Ldeep(Command):
         else:
             attributes = ["sAMAccountName", "msDS-GroupMSAMembership", "objectClass"] + hidden_attributes
 
-        entries = self.engine.get_gmsa(attributes)
+        try:
+            entries = self.engine.get_gmsa(attributes)
+        except LDAPAttributeError as e:
+            error(f"{e}. The domain's functional level may be too old")
+            entries = []
+        
         if verbose:
             self.display(entries, verbose)
         else:
@@ -234,88 +329,76 @@ class Ldeep(Command):
                 if not printed:
                     print(sam)
 
-    def list_domain_policy(self, _):
+    def list_domain_policy(self, kwargs):
         """
         Return the domain policy.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
         """
-        FILETIME_TIMESTAMP_FIELDS = {
-            "lockOutObservationWindow": (60, "mins"),
-            "lockoutDuration": (60, "mins"),
-            "maxPwdAge": (86400, "days"),
-            "minPwdAge": (86400, "days"),
-            "forceLogoff": (60, "mins")
-        }
+        verbose = kwargs.get("verbose", False)
 
-        FOREST_LEVELS = {
-            7: "Windows Server 2016",
-            6: "Windows Server 2012 R2",
-            5: "Windows Server 2012",
-            4: "Windows Server 2008 R2",
-            3: "Windows Server 2008",
-            2: "Windows Server 2003",
-            1: "Windows Server 2003 operating system through Windows Server 2016",
-            0: "Windows 2000 Server operating system through Windows Server 2008 operating system"
-        }
+        if verbose:
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = [
+                "objectClass",
+                "dc",
+                "distinguishedName",
+                "lockOutObservationWindow",
+                "lockoutDuration",
+                "lockoutThreshold",
+                "maxPwdAge",
+                "minPwdAge",
+                "minPwdLength",
+                "pwdHistoryLength",
+                "pwdProperties",
+                "ms-DS-MachineAccountQuota",
+                "msDS-Behavior-Version"
+                ]
 
-        FIELDS_TO_PRINT = [
-            "dc",
-            "distinguishedName",
-            "lockOutObservationWindow",
-            "lockoutDuration",
-            "lockoutThreshold",
-            "maxPwdAge",
-            "minPwdAge",
-            "minPwdLength",
-            "pwdHistoryLength",
-            "pwdProperties",
-            "ms-DS-MachineAccountQuota",
-            "msDS-Behavior-Version"]
+        self.display(self.engine.query(self.engine.DOMAIN_INFO_FILTER(), attributes), verbose)
 
-        policy = list(self.engine.query(self.engine.DOMAIN_INFO_FILTER()))
-        if policy:
-            policy = policy[0]
-            for field in FIELDS_TO_PRINT:
-                val = policy.get(field, None)
-                if val is None:
-                    continue
-
-                if field == "lockOutObservationWindow" and isinstance(val, timedelta):
-                    val = int(val.total_seconds()) / 60
-                elif field in FILETIME_TIMESTAMP_FIELDS.keys() and type(val) == int:
-                    val = int((fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0])
-                if field in FILETIME_TIMESTAMP_FIELDS.keys():
-                    val = "%d %s" % (val, FILETIME_TIMESTAMP_FIELDS[field][1])
-                if field == "msDS-Behavior-Version" and isinstance(val, int):
-                    val = "%s" % (FOREST_LEVELS[policy[field]])
-
-                print("%s: %s" % (field, val))
-
-    def list_ou(self, _):
+    def list_ou(self, kwargs):
         """
         Return the list of organizational units with linked GPO.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
         """
-        cn_re = re_compile("{[^}]+}")
+        verbose = kwargs.get("verbose", False)
+
+        if verbose:
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = ["objectClass", "gPLink"]
+
+        ous = self.engine.query(self.engine.OU_FILTER(), attributes)
         results = self.engine.query(self.engine.GPO_INFO_FILTER(), ["cn", "displayName"])
+
         gpos = {}
         for gpo in results:
             gpos[gpo["cn"]] = gpo["displayName"]
+        self.display(ous, verbose, extra_records=gpos)
 
-        results = self.engine.query(self.engine.OU_FILTER())
-        for result in results:
-            print(result["distinguishedName"])
-            if "gPLink" in result:
-                guids = cn_re.findall(result["gPLink"])
-                if len(guids) > 0:
-                    print("[gPLink]")
-                    print("* {}".format("\n* ".join([gpos[g] if g in gpos else g for g in guids])))
-
-    def list_gpo(self, _):
+    def list_gpo(self, kwargs):
         """
         Return the list of Group policy objects.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
         """
-        results = self.engine.query(self.engine.GPO_INFO_FILTER(), ["cn", "displayName"])
-        for gpo in results:
-            print("{cn}: {name}".format(cn=gpo["cn"], name=gpo["displayName"]))
+        verbose = kwargs.get("verbose", False)
+
+        if verbose:
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = ["objectClass", "cn", "displayName"]
+
+        results = self.display(self.engine.query(self.engine.GPO_INFO_FILTER(), attributes), verbose)
 
     def list_pso(self, _):
         """
@@ -463,7 +546,49 @@ class Ldeep(Command):
             verbose
         )
 
-    # subnet_dn not used, TODO: remove?
+    def list_sccm(self, kwargs):
+        """
+        List servers related to SCCM infrastructure (Primary/Secondary Sites and Distribution Points).
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+
+        # Primary/Secondary Sites
+        self.engine.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
+        if verbose:
+            attributes = ['*', '+', 'ntSecurityDescriptor']
+        else:
+            attributes = ["objectClass", "ntSecurityDescriptor"]
+
+        results = self.engine.query(
+            self.engine.PRIMARY_SCCM_FILTER(),
+            attributes,
+        )
+
+        try:
+            self.display(results, verbose)
+        except Exception as e:
+            error(e, close_array=verbose)
+
+        # Distribution points
+        self.engine.set_controls()
+        if verbose:
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = ["objectClass", "dNSHostName"]
+
+        results = self.engine.query(
+            self.engine.DP_SCCM_FILTER(),
+            attributes,
+        )
+
+        try:
+            self.display(results, verbose)
+        except LDAPObjectClassError as e:
+            error(f"{e}. SCCM may not be installed", close_array=verbose)
+
     def list_subnets(self, kwargs):
         """
         List sites and associated subnets.
@@ -492,7 +617,6 @@ class Ldeep(Command):
             site_dn = ""
             site_name = ""
             site_description = ""
-            # subnet_dn = ""
             subnet_name = ""
             subnet_description = ""
             for entry in entries:
@@ -501,7 +625,6 @@ class Ldeep(Command):
                 site_description = entry["description"][0] if entry["description"] else ""
                 subnet_entries = self.engine.query(self.engine.SUBNET_FILTER(site_dn), attributes, base=','.join(["CN=Sites,CN=Configuration", self.engine.base_dn]))
                 for subnet in subnet_entries:
-                    # subnet_dn = subnet["distinguishedName"] if subnet["distinguishedName"] else ""
                     subnet_name = subnet["name"] if subnet["name"] else ""
                     subnet_description = subnet["description"][0] if subnet["description"] else ""
                     servers = self.engine.query("(objectClass=server)", ['cn'], base=site_dn)
@@ -537,13 +660,17 @@ class Ldeep(Command):
         verbose = kwargs.get("verbose", False)
         attributes = ALL if verbose else ["cn", "objectClass"]
 
-        self.display(
-            self.engine.query(
-                self.engine.AUTH_POLICIES_FILTER(),
-                attributes, base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
-            ),
-            verbose
-        )
+        try:
+            self.display(
+                self.engine.query(
+                    self.engine.AUTH_POLICIES_FILTER(),
+                    attributes, base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
+                ),
+                verbose
+            )
+        except LDAPObjectClassError as e:
+            error(f"{e}. The domain's functional level may be too old", close_array=verbose)
+
 
     def list_silos(self, kwargs):
         """
@@ -556,13 +683,16 @@ class Ldeep(Command):
         verbose = kwargs.get("verbose", False)
         attributes = ALL if verbose else ["cn", "objectClass"]
 
-        self.display(
-            self.engine.query(
-                self.engine.SILOS_FILTER(),
-                attributes, base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
-            ),
-            verbose
-        )
+        try:
+            self.display(
+                self.engine.query(
+                    self.engine.SILOS_FILTER(),
+                    attributes, base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn])
+                ),
+                verbose
+            )
+        except LDAPObjectClassError as e:
+            error(f"{e}. The domain's functional level may be too old", close_array=verbose)
 
     def list_smsa(self, kwargs):
         """
@@ -577,13 +707,16 @@ class Ldeep(Command):
         attributes = ALL if verbose else ["sAMAccountName", "msDS-HostServiceAccountBL"]
         entries = self.engine.query(self.engine.SMSA_FILTER(), attributes)
 
-        if verbose:
-            self.display(entries, verbose)
-        else:
-            for entry in entries:
-                sam = entry['sAMAccountName']
-                for host in entry["msDS-HostServiceAccountBL"]:
-                    print(f'{sam}:{host}')
+        try:
+            if verbose:
+                self.display(entries, verbose)
+            else:
+                for entry in entries:
+                    sam = entry['sAMAccountName']
+                    for host in entry["msDS-HostServiceAccountBL"]:
+                        print(f'{sam}:{host}')
+        except LDAPObjectClassError as e:
+            error(f"{e}. The domain's functional level may be too old", close_array=verbose)
 
     def list_shadow_principals(self, kwargs):
         """
@@ -604,8 +737,55 @@ class Ldeep(Command):
             else:
                 for entry in entries:
                     print(f"User {entry['member'][0]} added to Group {format_sid(entry['msDS-ShadowPrincipalSid'])}")
-        except:
-            print("Can't retrieve shadow principals")
+        except (LDAPAttributeError, LDAPObjectClassError) as e:
+            error(f"{e}. The domain's functional level may be too old", close_array=verbose)
+
+    def list_fsmo(self, kwargs):
+        """
+        List FSMO roles.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+        if verbose:
+            attributes = ALL
+        else:
+            attributes = ["objectClass", "fSMORoleOwner"]
+
+        results = self.engine.query(
+            self.engine.FSMO_DOMAIN_NAMING_FILTER(),
+            attributes,
+            base=','.join(["CN=Partitions,CN=Configuration", self.engine.base_dn])
+        )
+
+        try:
+            self.display(results, verbose)
+        except Exception as e:
+            error(f'{e}', close_array=verbose)
+
+        results = self.engine.query(
+            self.engine.FSMO_SCHEMA_FILTER(),
+            attributes,
+            base=','.join(["CN=Schema,CN=Configuration", self.engine.base_dn])
+        )
+
+        try:
+            self.display(results, verbose)
+        except Exception as e:
+            error(f'{e}', close_array=verbose)
+
+        results = self.engine.query(
+            self.engine.FSMO_DOMAIN_FILTER(),
+            attributes
+        )
+
+        try:
+            self.display(results, verbose)
+        except Exception as e:
+            error(f'{e}', close_array=verbose)
+
 
     def list_delegations(self, kwargs):
         """
@@ -621,25 +801,40 @@ class Ldeep(Command):
 
         attributes = ALL if verbose else ["sAMAccountName", "userAccountControl"]
 
-        if filter_ == "all":
-            if not verbose:
-                attributes.extend([
-                    "msDS-AllowedToDelegateTo",
-                    "msDS-AllowedToActOnBehalfOfOtherIdentity"
-                ])
-            entries = self.engine.query(self.engine.ALL_DELEGATIONS_FILTER(), attributes)
-        elif filter_ == "unconstrained":
-            entries = self.engine.query(self.engine.UNCONSTRAINED_DELEGATION_FILTER(), attributes)
-        elif filter_ == "constrained":
-            if not verbose:
-                attributes.append("msDS-AllowedToDelegateTo")
-            entries = self.engine.query(self.engine.CONSTRAINED_DELEGATION_FILTER(), attributes)
-        elif filter_ == "rbcd":
-            if not verbose:
-                attributes.append("msDS-AllowedToActOnBehalfOfOtherIdentity")
-            entries = self.engine.query(self.engine.RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER(), attributes)
-        else:
-            return None
+        try:
+            if filter_ == "all":
+                if not verbose:
+                    attributes.extend([
+                        "msDS-AllowedToDelegateTo",
+                        "msDS-AllowedToActOnBehalfOfOtherIdentity"
+                    ])
+                entries = self.engine.query(self.engine.ALL_DELEGATIONS_FILTER(), attributes)
+            elif filter_ == "unconstrained":
+                entries = self.engine.query(self.engine.UNCONSTRAINED_DELEGATION_FILTER(), attributes)
+            elif filter_ == "constrained":
+                if not verbose:
+                    attributes.append("msDS-AllowedToDelegateTo")
+                entries = self.engine.query(self.engine.CONSTRAINED_DELEGATION_FILTER(), attributes)
+            elif filter_ == "rbcd":
+                if not verbose:
+                    attributes.append("msDS-AllowedToActOnBehalfOfOtherIdentity")
+                entries = self.engine.query(self.engine.RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER(), attributes)
+            else:
+                return None
+            
+            # Force the actual LDAP request to be done there, to catch potential LDAPAttributeError errors related
+            # to an old domain functional level. We don't want to miss the other delegation types because of RBCD
+            entries = list(entries)
+        except LDAPAttributeError as e:
+            if filter_ == "rbcd":
+                error(f"{e}. The domain's functional level may be too old")
+                return
+            
+            # If "delegations all" was used, redo the request without RBCD
+            if "msDS-AllowedToActOnBehalfOfOtherIdentity" in attributes:
+                attributes = list(filter(lambda a: a != "msDS-AllowedToActOnBehalfOfOtherIdentity", attributes))
+                entries = self.engine.query(self.engine.ALL_DELEGATIONS_FILTER(), attributes)
+
 
         if verbose:
             self.display(entries, verbose)
@@ -664,12 +859,31 @@ class Ldeep(Command):
                                 if not sid:
                                     continue
                                 res = self.engine.resolve_sid(sid)
-                                name = res[0]['sAMAccountName']
+                                name = next(res)['sAMAccountName']
                                 print(f"{name}:rbcd:{sam}")
                             except Exception:
                                 print(f"{sid}:rbcd:{sam}")
                 except Exception:
                     continue
+
+    def list_bitlockerkeys(self, kwargs):
+        """
+        Extract the bitlocker recovery keys.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+        if verbose:
+            attributes = ALL
+        else:
+            attributes = ["objectClass", "msFVE-RecoveryPassword"]
+
+        try:
+            self.display(self.engine.query(self.engine.BITLOCKERKEY_FILTER(), attributes), verbose)
+        except LDAPObjectClassError as e:
+            error(f"{e}. The domain's functional level may be too old", close_array=verbose)
 
     # GETTERS #
 
@@ -708,12 +922,11 @@ class Ldeep(Command):
         results = list(self.engine.query(self.engine.GROUP_DN_FILTER(group), ["distinguishedName", "objectSid"]))
         if results:
             group_dn = results[0]["distinguishedName"]
+            primary_group_id = results[0]["objectSid"].split('-')[-1]
+            results = self.engine.query(self.engine.ACCOUNTS_IN_GROUP_FILTER(primary_group_id, group_dn))
+            self.display(results, verbose)
         else:
             error("Group {group} does not exists".format(group=group))
-
-        primary_group_id = results[0]["objectSid"].split('-')[-1]
-        results = self.engine.query(self.engine.ACCOUNTS_IN_GROUP_FILTER(primary_group_id, group_dn))
-        self.display(results, verbose)
 
     def get_memberships(self, kwargs):
         """
@@ -765,6 +978,8 @@ class Ldeep(Command):
                 results = list(self.engine.query(self.engine.PRIMARY_GROUP_ID(pid)))
                 if results:
                     print(results[0]["dn"])
+        if len(list(results)) == 0:
+            error("User {account} does not exists".format(account=account))
 
     def get_from_sid(self, kwargs):
         """
@@ -816,16 +1031,16 @@ class Ldeep(Command):
             @computer:string
                 Target computer where LAPS is set
         """
-        computer = kwargs["computer"] if kwargs["computer"] else "*"
+        computer = kwargs.get("computer", "*")
         verbose = kwargs.get("verbose", False)
 
         attributes = ALL if verbose else ["dNSHostName", "ms-Mcs-AdmPwd", "ms-Mcs-AdmPwdExpirationTime"]
 
         try:
+            # LAPSv1
             entries = self.engine.query(self.engine.LAPS_FILTER(computer), attributes)
             for entry in entries:
                 if not verbose:
-                    # TODO: deal with self.display for better code
                     cn = entry['dNSHostName']
                     password = entry['ms-Mcs-AdmPwd']
                     try:
@@ -836,8 +1051,26 @@ class Ldeep(Command):
                     print(f'{cn} {password} {expiration_date}')
                 else:
                     self.display(entries, verbose)
+        except LDAPAttributeError:
+            try:
+                # LAPSv2
+                attributes = ALL if verbose else ["dNSHostName", "msLAPS-EncryptedPassword", "msLAPS-PasswordExpirationTime"]
+                entries = self.engine.query(self.engine.LAPS2_FILTER(computer), attributes)
+                computers = list(entries)
+                computer_count = len(computers)
+                if computer_count > 0:
+                    print("LAPSv2 detected, password decryption is not implemented")
+                    if not verbose:
+                        for c in computers:
+                            if c['msLAPS-EncryptedPassword']:
+                                print(f"{c['dNSHostName']}:::{b64encode(c['msLAPS-EncryptedPassword'])}")
+                            else:
+                                print(f"{c['dNSHostName']}")
+            except Exception as e:
+                print(e)
+                error("No LAPS related attribute has been detected")
         except Exception as e:
-            error(e)
+            error(f"{e}. No LAPS attribute or not enough permission to read it.")
 
     def get_object(self, kwargs):
         """
@@ -895,11 +1128,16 @@ class Ldeep(Command):
         else:
             return None
 
-        results = list(self.engine.query(
-            self.engine.SILO_FILTER(silo),
-            attributes,
-            base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn]))
-        )
+        try:
+            results = list(self.engine.query(
+                self.engine.SILO_FILTER(silo),
+                attributes,
+                base=','.join(["CN=AuthN Policy Configuration,CN=Services,CN=Configuration", self.engine.base_dn]))
+            )
+        except LDAPObjectClassError as e:
+            print(f"Error: {e}. The domain's functional level may be too old")
+            return
+        
         if not results:
             error(f"Silo {silo} does not exists")
 
@@ -1006,6 +1244,16 @@ class Ldeep(Command):
                     print(line)
                 sleep(delay / 1000)
 
+    def misc_whoami(self, kwargs):
+        """
+        Return user identity.
+        """
+        user = self.engine.ldap.extend.standard.who_am_i()
+        if user == None:
+            error("Can't retrieve user identiy")
+        else:
+            print(user[2:])
+
     # ACTION #
 
     def action_unlock(self, kwargs):
@@ -1060,7 +1308,7 @@ class Ldeep(Command):
         group = kwargs["group"]
 
         if self.engine.add_user_to_group(user, group):
-            info(f"User {user} sucessfully added to {group}")
+            info(f"User {user} successfully added to {group}")
         else:
             error(f"Unable to add {user} to {group}, check privileges or dn")
 
@@ -1078,7 +1326,7 @@ class Ldeep(Command):
         group = kwargs["group"]
 
         if self.engine.remove_user_from_group(user, group):
-            info(f"User {user} sucessfully removed from {group}")
+            info(f"User {user} successfully removed from {group}")
         else:
             error(f"Unable to remove {user} from {group}, check privileges or dn")
 
@@ -1102,7 +1350,7 @@ class Ldeep(Command):
             return
 
         if self.engine.create_computer(computer, password):
-            info(f"Computer {computer} sucessfully created wit password {password}")
+            info(f"Computer {computer} successfully created with password {password}")
         else:
             if self.engine.ldap.result['result'] == coreResults.RESULT_UNWILLING_TO_PERFORM:
                 error_code = int(self.engine.ldap.result['message'].split(':')[0].strip(), 16)
@@ -1114,6 +1362,46 @@ class Ldeep(Command):
                 print(f"User {self.engine.username} doesn't have right to create a machine account!")
             elif self.engine.ldap.result['result'] == list(coreResults.RESULT_CODES.keys())[36]:
                 print(f"Computer {computer} already exists")
+            else:
+                error_message = self.engine.ldap.result['message']
+                print(f"ERROR: {error_message}")
+
+    def action_create_user(self, kwargs):
+        """
+        Create a user account
+
+        Arguments:
+            #user_name:string
+                Name of user to add.
+            #user_pass:string
+                Password set to user account
+        """
+        user = kwargs["user_name"]
+        password = kwargs["user_pass"]
+
+        try:
+            self.engine.ldap.start_tls()
+        except Exception as e:
+            print(f"Can't create user, TLS needed: {e}")
+            return
+
+        if self.engine.create_user(user, password):
+            info(f"User {user} successfully created with password {password}")
+        else:
+            if self.engine.ldap.result['result'] == coreResults.RESULT_UNWILLING_TO_PERFORM:
+                error_code = int(self.engine.ldap.result['message'].split(':')[0].strip(), 16)
+                print(f"ERROR: error_code = {error_code}")
+                if error_code == 0x216D:
+                    print(f"Machine quota exceeded with account {self.engine.username}")
+                else:
+                    print(str(self.engine.ldap.result))
+            elif self.engine.ldap.result['result'] == coreResults.RESULT_INSUFFICIENT_ACCESS_RIGHTS:
+                print(f"User {self.engine.username} doesn't have right to create a user account!")
+            elif self.engine.ldap.result['result'] == list(coreResults.RESULT_CODES.keys())[36]:
+                print(f"User {user} already exists")
+            else:
+                error_message = self.engine.ldap.result['message']
+                print(f"ERROR: {error_message}")
 
 
 def main():
@@ -1147,6 +1435,7 @@ def main():
 
     certificate = ldap.add_argument_group("Certificate authentication")
     certificate.add_argument("--pfx-file", help="PFX file")
+    certificate.add_argument("--pfx-pass", help="PFX password")
     certificate.add_argument("--cert-pem", help="User certificate")
     certificate.add_argument("--key-pem", help="User private key")
 
@@ -1187,11 +1476,13 @@ def main():
                 method = "SIMPLE"
             else:
                 error("Lack of authentication options: either Kerberos, Certificate, Username with Password (can be a NTLM hash) or Anonymous.")
+                sys.exit(1)
 
-            query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.pfx_file, args.cert_pem, args.key_pem, method, args.throttle, args.page_size)
+            query_engine = LdapActiveDirectoryView(args.ldapserver, args.domain, args.base, args.username, args.password, args.ntlm, args.pfx_file, args.pfx_pass, args.cert_pem, args.key_pem, method, args.throttle, args.page_size)
 
         except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
             error(e)
+            sys.exit(1)
 
     # If `security_desc` are requested, enable LDAP Security Descriptor flags and modify the default attributes
     # In cache mode, the security_desc corresponding JSON field will be kept

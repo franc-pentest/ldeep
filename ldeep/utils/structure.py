@@ -1,6 +1,6 @@
 # SECUREAUTH LABS. Copyright 2018 SecureAuth Corporation. All rights reserved.
 #
-# This software is provided under under a slightly modified version
+# This software is provided under a slightly modified version
 # of the Apache Software License. See the accompanying LICENSE file
 # for more information.
 #
@@ -10,15 +10,15 @@ from struct import pack, unpack, calcsize
 from six import b, PY3
 
 class Structure:
-    """ sublcasses can define commonHdr and/or structure.
-        each of them is an tuple of either two: (fieldName, format) or three: (fieldName, ':', class) fields.
+    """ subclasses can define commonHdr and/or structure.
+        each of them is a tuple of either two: (fieldName, format) or three: (fieldName, ':', class) fields.
         [it can't be a dictionary, because order is important]
         
         where format specifies how the data in the field will be converted to/from bytes (string)
         class is the class to use when unpacking ':' fields.
 
         each field can only contain one value (or an array of values for *)
-           i.e. struct.pack('Hl',1,2) is valid, but format specifier 'Hl' is not (you must use 2 dfferent fields)
+           i.e. struct.pack('Hl',1,2) is valid, but format specifier 'Hl' is not (you must use 2 different fields)
 
         format specifiers:
           specifiers from module pack can be used with the same format 

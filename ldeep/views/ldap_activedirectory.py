@@ -10,7 +10,7 @@ from Cryptodome.Protocol.KDF import PBKDF2
 from ldap3 import Server, Connection, SASL, KERBEROS, NTLM, SUBTREE, ALL as LDAP3_ALL, BASE, DEREF_NEVER
 from ldap3 import SIMPLE
 from ldap3.protocol.formatters.formatters import format_sid
-from ldap3.core.exceptions import LDAPOperationResult, LDAPSocketOpenError, LDAPAttributeError
+from ldap3.core.exceptions import LDAPOperationResult, LDAPSocketOpenError, LDAPAttributeError, LDAPSocketSendError
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
 from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 from ldap3.extend.microsoft.addMembersToGroups import ad_add_members_to_groups as addUsersInGroups
@@ -100,7 +100,7 @@ def format_dnsrecord(raw_value):
                 target = inet_ntoa(data)
             else:
                 # how, ugly
-                data = data.decode('unicode-escape')
+                data = data.decode('unicode-escape', errors='replace')
                 target = ''.join([c for c in data if ord(c) > 31 or ord(c) == 9])
             return "%s %s" % (recordname, target)
 
@@ -140,7 +140,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     ZONE_FILTER = lambda _: "(objectClass=dnsNode)"
     SITES_FILTER = lambda _: "(objectClass=site)"
     SUBNET_FILTER = lambda _, s: f"(SiteObject={s})"
-    PKI_FILTER = lambda _: "(objectclass=pKIEnrollmentService)"
+    PKI_FILTER = lambda _: "(objectClass=pKIEnrollmentService)"
+    PRIMARY_SCCM_FILTER = lambda _: "(cn=System Management)"
+    DP_SCCM_FILTER = lambda _: "(objectClass=mssmsmanagementpoint)"
     USER_ALL_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user))"
     USER_SPN_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt)))"
     USER_ACCOUNT_CONTROL_FILTER = lambda _, n: f"(&(objectCategory=Person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:={n}))"
@@ -164,9 +166,14 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     AUTH_POLICIES_FILTER = lambda _: "(objectClass=msDS-AuthNPolicy)"
     SILOS_FILTER = lambda _: "(objectClass=msDS-AuthNPolicySilo)"
     SILO_FILTER = lambda _, s: f"(&(objectClass=msDS-AuthNPolicySilo)(cn={s}))"
-    LAPS_FILTER = lambda _, s: f"(&(objectCategory=computer)(ms-MCS-AdmPwd=*)(cn={s}))"
+    LAPS_FILTER = lambda _, s: f"(&(objectCategory=computer)(ms-Mcs-AdmPwdExpirationTime=*)(cn={s}))"
+    LAPS2_FILTER = lambda _, s: f"(&(objectCategory=computer)(msLAPS-PasswordExpirationTime=*)(cn={s}))"
     SMSA_FILTER = lambda _: "(ObjectClass=msDS-ManagedServiceAccount)"
-    SHADOW_PRINCIPALS_FILTER = lambda _: "(objectclass=msDS-ShadowPrincipal)"
+    BITLOCKERKEY_FILTER = lambda _: "(objectClass=msFVE-RecoveryInformation)"
+    FSMO_DOMAIN_NAMING_FILTER = lambda _: "(&(objectClass=crossRefContainer)(fSMORoleOwner=*))"
+    FSMO_SCHEMA_FILTER = lambda _: "(&(objectClass=dMD)(fSMORoleOwner=*))"
+    FSMO_DOMAIN_FILTER = lambda _: "(fSMORoleOwner=*)"
+    SHADOW_PRINCIPALS_FILTER = lambda _: "(objectClass=msDS-ShadowPrincipal)"
     UNCONSTRAINED_DELEGATION_FILTER = lambda _: f"(userAccountControl:1.2.840.113556.1.4.803:=524288)"
     CONSTRAINED_DELEGATION_FILTER = lambda _: f"(msDS-AllowedToDelegateTo=*)"
     RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER = lambda _: f"(msDS-AllowedToActOnBehalfOfOtherIdentity=*)"
@@ -175,7 +182,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     class ActiveDirectoryLdapException(Exception):
         pass
 
-    def __init__(self, server, domain="", base="", username="", password="", ntlm="", pfx_file="", cert_pem="", key_pem="", method="NTLM", throttle=0, page_size=1000):
+    def __init__(self, server, domain="", base="", username="", password="", ntlm="", pfx_file="", pfx_pass="", cert_pem="", key_pem="", method="NTLM", throttle=0, page_size=1000):
         """
         LdapActiveDirectoryView constructor.
         Initialize the connection with the LDAP server.
@@ -199,6 +206,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         self.password = password
         self.ntlm = ntlm
         self.pfx_file = pfx_file
+        self.pfx_pass = pfx_pass
         self.cert = cert_pem
         self.key = key_pem
         self.server = server
@@ -217,18 +225,26 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 exit(1)
             else:
                 if self.pfx_file:
-                    # TODO deal with pfx password protected
-                    with open(pfx_file, 'rb') as f:
-                        pfxdata = f.read()
                     from cryptography.hazmat.primitives.serialization import pkcs12
                     from cryptography.hazmat.primitives import serialization
-                    privkey, cert, extra_certs = pkcs12.load_key_and_certificates(pfxdata, None)
-                    key = privkey.private_bytes(
-                        encoding=serialization.Encoding.PEM,
-                        format=serialization.PrivateFormat.TraditionalOpenSSL,
-                        encryption_algorithm=serialization.NoEncryption(),
-                    )
-                    cert = cert.public_bytes(encoding=serialization.Encoding.PEM)
+                    with open(pfx_file, 'rb') as f:
+                        pfxdata = f.read()
+                    if self.pfx_pass:
+                        from oscrypto.keys import parse_pkcs12, parse_certificate, parse_private
+                        from oscrypto.asymmetric import rsa_pkcs1v15_sign, load_private_key, dump_openssl_private_key, dump_certificate
+                        if isinstance(self.pfx_pass, str):
+                            pfxpass = self.pfx_pass.encode()
+                        privkeyinfo, certinfo, _ = parse_pkcs12(pfxdata, password=pfxpass)
+                        key = dump_openssl_private_key(privkeyinfo, self.pfx_pass)
+                        cert = dump_certificate(certinfo, encoding='pem')
+                    else:
+                        privkey, cert, extra_certs = pkcs12.load_key_and_certificates(pfxdata, None)
+                        key = privkey.private_bytes(
+                            encoding=serialization.Encoding.PEM,
+                            format=serialization.PrivateFormat.TraditionalOpenSSL,
+                            encryption_algorithm=serialization.NoEncryption(),
+                        )
+                        cert = cert.public_bytes(encoding=serialization.Encoding.PEM)
                     try:
                         from tempfile import gettempdir
                         key_path = f'{gettempdir()}/ldeep_key'
@@ -236,10 +252,10 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                         with open(key_path, "wb") as f1, open(cert_path, "wb") as f2:
                             f1.write(key)
                             f2.write(cert)
-                        tls = ldap3.Tls(local_private_key_file=key_path, local_certificate_file=cert_path, validate=CERT_NONE)
                     except PermissionError:
                         print("Can't write key and cert to disk")
                         exit(1)
+                    tls = ldap3.Tls(local_private_key_file=key_path, local_certificate_file=cert_path, validate=CERT_NONE)
                 else:
                     tls = ldap3.Tls(local_private_key_file=self.key, local_certificate_file=self.cert, validate=CERT_NONE)
         else:
@@ -302,7 +318,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     if self.pfx_file:
                         os.remove(key_path)
                         os.remove(cert_path)
-                except ldap3.core.exceptions.LDAPSocketOpenError:
+                except LDAPSocketOpenError:
                     print("Cannot get private key data, corrupted key or wrong passphrase ?")
                     if self.pfx_file:
                         os.remove(key_path)
@@ -315,9 +331,21 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     exit(1)
             else:
                 if not self.ldap.bind():
-                    raise self.ActiveDirectoryLdapException("Unable to bind with provided information")
+                    raise self.ActiveDirectoryLdapException(f"Unable to bind to the LDAP server: {self.ldap.result['description']} ({self.ldap.result['message']})")
+                if method == "anonymous":
+                    anon_base = self.ldap.request['base'].split(',')
+                    for i,item in enumerate(anon_base):
+                        if item.startswith("DC="):
+                            anon_base = ','.join(anon_base[i:])
+                            break
+                    self.ldap.search(search_base=anon_base, search_filter='(&(objectClass=domain))', search_scope='SUBTREE', attributes='*')
+
+                    if len(self.ldap.entries) == 0:
+                        raise self.ActiveDirectoryLdapException("Unable to retrieve information with anonymous bind")
         except LDAPSocketOpenError:
             raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}")
+        except LDAPSocketSendError:
+            raise self.ActiveDirectoryLdapException(f"Unable to open connection with {self.server}, maybe LDAPS is not enabled ?")
 
         self.base_dn = base or server.info.other["defaultNamingContext"][0]
         self.fqdn = ".".join(map(lambda x: x.replace("DC=", ''), self.base_dn.split(',')))
@@ -411,7 +439,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
     def get_domain_sid(self):
         """
-        Return the current domain SID by issueing a LDAP request.
+        Return the current domain SID by issuing a LDAP request.
 
         @return the domain sid or None if a problem occurred.
         """
@@ -485,7 +513,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     if "dn" in entry:
                         d = entry["attributes"]
                         d["dn"] = entry["dn"]
-                        result_set.append(d)
+                        result_set.append(dict(d))
 
         except LDAPOperationResult as e:
             raise self.ActiveDirectoryLdapException(e)
@@ -681,7 +709,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         spns = [
             f"HOST/{computer}",
             f"HOST/{computer}.{self.domain}",
-            f"HOST/{computer}.{self.domain}",
             f"RestrictedKrbHost/{computer}",
             f"RestrictedKrbHost/{computer}.{self.domain}",
         ]
@@ -695,6 +722,36 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         }
         try:
             result = self.ldap.add(computer_dn, ["top", "person", "organizationalPerson", "user", "computer"], ucd)
+        except Exception as e:
+            raise self.ActiveDirectoryLdapException(e)
+        return result
+
+    def create_user(self, user, password):
+        """
+        Create a user account on the domain.
+
+        @user: the name of the create user.
+        @password: the password of the user to create.
+
+        @return the result code on the add action
+        """
+        user_dn = f'CN={user},CN=Users,{self.base_dn}'
+
+        ucd = {
+            'objectCategory': 'CN=Person,CN=Schema,CN=Configuration,%s' % self.base_dn,
+            'distinguishedName': user_dn,
+            'cn': user,
+            'sn': user,
+            'givenName': user,
+            'displayName': user,
+            'name': user,
+            'userAccountControl': 0x200, # NORMAL_ACCOUNT (decimal value: 512)
+            'accountExpires': 0,
+            'sAMAccountName': user,
+            'unicodePwd': ('"%s"' % password).encode('utf-16-le')
+        }
+        try:
+            result = self.ldap.add(user_dn, ["top", "person", "organizationalPerson", "user"], ucd)
         except Exception as e:
             raise self.ActiveDirectoryLdapException(e)
         return result

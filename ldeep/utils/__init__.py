@@ -11,9 +11,10 @@ def info(content):
 	__stderr__.write("%s\n" % colored("[+] " + str(content), "blue", attrs=["bold"]))
 
 
-def error(content):
+def error(content, close_array=False):
 	__stderr__.write("%s\n" % colored("[!] " + str(content), "red", attrs=["bold"]))
-	exit(1)
+	if close_array:
+		print("]")
 
 
 class Logger(object):
