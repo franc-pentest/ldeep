@@ -3,7 +3,7 @@
 
 asn1crypto==1.5.1
 cffi==1.16.0
-colorama==0.4.6; sys_platform == "win32" or platform_system == "Windows"
+colorama==0.4.6; platform_system == "Windows"
 commandparse==1.1.2
 cryptography==42.0.4
 decorator==5.1.1

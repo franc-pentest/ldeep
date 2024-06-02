@@ -47,11 +47,6 @@ requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 
 [tool.pdm.dev-dependencies]
-lint = [
-  "flake8 >= 6.1.0, < 7",
-  "Flake8-pyproject >= 1.2.3, < 2",
-  "pylint >= 3.0.1, < 4"
-]
 exe = [
     "pex>=2.0.3",
 ]
@@ -61,6 +56,6 @@ publishing = [
 dev = [
     "nuitka>=2.3",
 ]
-
-[tool.black]
-diff = true
+lint = [
+    "black>=24.4.2",
+]
