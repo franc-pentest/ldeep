@@ -27,6 +27,7 @@ mrproper: clean
 
 export:
 	pdm export -f requirements --without-hashes --prod > requirements.txt
-	pdm export -f requirements --without-hashes > requirements-dev.txt
+	pdm export -f requirements --without-hashes --dev > requirements-dev.txt
+	pdm lock
 
 .PHONY: clean mrproper
