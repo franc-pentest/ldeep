@@ -1,6 +1,6 @@
 name: Release and PyPi
 on:
-  push:
+  pull_request:
     branches:
     - 'release'
 
