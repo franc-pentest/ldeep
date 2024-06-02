@@ -29,4 +29,5 @@ jobs:
         run: python3.12 -m pip install pdm
 
       - name: Install dependencies
-        run: pdm install
+        run: |
+          PDM_NO_BINARY=':all:' pdm install

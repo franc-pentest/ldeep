@@ -5,6 +5,9 @@ on:
     branches: [dev]
   push:
     branches: [dev]
+    paths:
+      - '**.py'
+      - 'pdm.lock'
 
 permissions:
   id-token: write
