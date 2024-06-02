@@ -24,9 +24,9 @@ jobs:
       - name: Install libkrb5-dev
         run: sudo apt-get install -y libkrb5-dev
 
-      - name: Installs deps and package into venv
+      - name: Installs dev deps and package
         run : |
-          pdm export -f requirements --without-hashes --prod > requirements.txt
+          pdm export -f requirements --without-hashes --dev > requirements.txt
           python3.12 -m pip install -r requirements.txt
 
       - name: Build
@@ -51,10 +51,10 @@ jobs:
       - name: PDM
         run: python3 -m pip install pdm
 
-      - name: Installs deps and package into venv
+      - name: Installs dev deps and package
         run: |
-          python3 -m nuitka --onefile --output-filename=ldeep.bin ldeep/__main__.py
-          mv ldeep.bin ldeep_macos-amd64
+          pdm export -f requirements --without-hashes --dev > requirements.txt
+          python3 -m pip install -r requirements.txt
 
       - name: Build
         run: |
@@ -78,9 +78,9 @@ jobs:
       - name: PDM
         run: python3.12 -m pip install pdm
 
-      - name: Installs deps and package into venv
+      - name: Installs dev deps and package
         run: |
-          pdm export -f requirements --without-hashes --prod > requirements.txt
+          pdm export -f requirements --without-hashes --dev > requirements.txt
           python3.12 -m pip install -r requirements.txt
 
       - name: Build
