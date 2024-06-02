@@ -27,5 +27,5 @@ pylint==3.0.1
 six==1.16.0
 termcolor==2.3.0
 tomlkit==0.12.1
-tqdm==4.66.1
+tqdm==4.66.3
 
