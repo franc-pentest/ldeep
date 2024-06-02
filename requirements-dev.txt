@@ -20,7 +20,7 @@ platformdirs==3.11.0
 pyasn1==0.5.0
 pycodestyle==2.11.1
 pycparser==2.21
-pycryptodome==3.19.0
+pycryptodome==3.19.1
 pycryptodomex==3.19.0
 pyflakes==3.1.0
 pylint==3.0.1
