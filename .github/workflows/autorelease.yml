@@ -42,13 +42,13 @@ jobs:
         run: pdm build -d sdist --no-wheel
 
       - name: Upload Artifacts (binary)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: linux
           path: ldeep_linux-amd64
 
       - name: Upload Artifacts (sdist)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: sdist
           path: sdist/*
@@ -74,7 +74,7 @@ jobs:
           python3 -m nuitka --standalone --assume-yes-for-downloads --output-filename=ldeep.exe --onefile ldeep/__main__.py
           mv ldeep.exe ldeep_windows-amd64.exe
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows
           path: ldeep_windows-amd64.exe
@@ -102,7 +102,7 @@ jobs:
           mv ldeep.bin ldeep_macos-amd64
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macos
           path: ldeep_macos-amd64
