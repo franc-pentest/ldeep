@@ -31,16 +31,25 @@ jobs:
           pdm export -f requirements --without-hashes --dev > requirements.txt
           python3.12 -m pip install -r requirements.txt
 
-      - name: Build
+      - name: Build binary release
         run: |
           python3.12 -m nuitka --standalone --onefile --output-filename=ldeep.bin ldeep/__main__.py
           mv ldeep.bin ldeep_linux-amd64
 
-      - name: Upload Artifacts
+      - name: Build Source Distribution
+        run: pdm build -d sdist --no-wheel
+
+      - name: Upload Artifacts (binary)
         uses: actions/upload-artifact@v3
         with:
           name: linux
           path: ldeep_linux-amd64
+
+      - name: Upload Artifacts (sdist)
+        uses: actions/upload-artifact@v3
+        with:
+          name: sdist
+          path: sdist/*
 
   windows-build:
     name: Windows Build

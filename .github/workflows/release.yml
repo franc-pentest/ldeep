@@ -17,9 +17,6 @@ jobs:
       - name: Get local version
         run: echo "version=$(cat VERSION)" >> $GITHUB_ENV
 
-      - name: Build sdist
-        run: pdm build -d sdist --no-wheel
-
       - name: Create tag
         uses: rickstaa/action-create-tag@v1
         with:
