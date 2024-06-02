@@ -39,7 +39,7 @@ class Ldeep(Command):
 
     def __init__(self, query_engine, format="json"):
         self.engine = query_engine
-        if format == 'json':
+        if format == "json":
             self.__display = self.__display_json
 
     def display(self, records, verbose=False, specify_group=True, extra_records=None):
