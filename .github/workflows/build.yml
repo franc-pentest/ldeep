@@ -1,10 +1,13 @@
-name: Dev build and checks
+name: Build Tests
 
 on:
   workflow_dispatch:
     branches: [dev]
   push:
     branches: [dev]
+    paths:
+      - '**.py'
+      - 'pdm.lock'
 
 permissions:
   id-token: write

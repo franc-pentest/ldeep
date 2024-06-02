@@ -1,9 +1,16 @@
 from os import path
 from json import load as json_load
-from ldeep.views.activedirectory import ActiveDirectoryView, ALL, ALL_ATTRIBUTES, validate_guid, validate_sid
+from ldeep.views.activedirectory import (
+    ActiveDirectoryView,
+    ALL,
+    ALL_ATTRIBUTES,
+    validate_guid,
+    validate_sid,
+)
 from ldeep.views.constants import WELL_KNOWN_SIDS
 
 FILE_CONTENT_DICT = dict()
+
 
 class UnexpectedFormatException(Exception):
     pass
@@ -16,6 +23,7 @@ def eq(x, y):
     else:
         return x == y
 
+
 # respect the ANR field
 def eq_anr(record, value):
 
@@ -27,14 +35,26 @@ def eq_anr(record, value):
         elif isinstance(obj, str):
             return f(obj)
         else:
-            raise UnexpectedFormatException(f"Unexpected value, expected: dict, list or str, obtained: {type(obj)}.")
+            raise UnexpectedFormatException(
+                f"Unexpected value, expected: dict, list or str, obtained: {type(obj)}."
+            )
 
     validate = lambda x: x.lower().startswith(value.lower())
 
-    keys = ["displayName", "givenName", "legacyExchangeDN", "physicalDeliveryOfficeName", "proxyAddresses", "Name", "sAMAccountName", "sn"]
+    keys = [
+        "displayName",
+        "givenName",
+        "legacyExchangeDN",
+        "physicalDeliveryOfficeName",
+        "proxyAddresses",
+        "Name",
+        "sAMAccountName",
+        "sn",
+    ]
     for k in keys:
         if k in record and fmap(validate, record[k]):
             return True
+
 
 class CacheActiveDirectoryView(ActiveDirectoryView):
 
@@ -44,34 +64,42 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
     USER_ALL_FILTER = lambda _: {"files": ["users_all"]}
     USER_SPN_FILTER = lambda _: {"files": ["users_spn"]}
     COMPUTERS_FILTER = lambda _: {"files": ["machines"]}
-    ANR = lambda _, u: {"files": ["users_all", "groups", "machines"], "filter": lambda record: eq_anr(record, u)}
-    GROUP_DN_FILTER = lambda _, g: {"fmt": "json", "files": ["groups"], "filter": lambda x: eq(x["sAMAccountName"], g)}
+    ANR = lambda _, u: {
+        "files": ["users_all", "groups", "machines"],
+        "filter": lambda record: eq_anr(record, u),
+    }
+    GROUP_DN_FILTER = lambda _, g: {
+        "fmt": "json",
+        "files": ["groups"],
+        "filter": lambda x: eq(x["sAMAccountName"], g),
+    }
     ACCOUNTS_IN_GROUP_FILTER = lambda _, p, g: {
         "fmt": "json",
         "files": ["users_all", "groups", "machines"],
-        "filter": lambda x: ("primaryGroupID" in x and eq(p, x["primaryGroupID"])) or ("memberOf" in x and g in x["memberOf"])
+        "filter": lambda x: ("primaryGroupID" in x and eq(p, x["primaryGroupID"]))
+        or ("memberOf" in x and g in x["memberOf"]),
     }
     ACCOUNT_IN_GROUPS_FILTER = lambda _, u: {
         "fmt": "json",
         "files": ["users_all", "groups", "machines"],
-        "filter": lambda x: eq(x["sAMAccountName"], u)
+        "filter": lambda x: eq(x["sAMAccountName"], u),
     }
     DISTINGUISHED_NAME = lambda _, n: {
         "fmt": "json",
         "files": ["users_all", "groups", "machines"],
-        "filter": lambda x: eq(x["distinguishedName"], n)
+        "filter": lambda x: eq(x["distinguishedName"], n),
     }
     PRIMARY_GROUP_ID = lambda _, i: {
         "fmt": "json",
         "files": ["users_all", "groups", "machines"],
-        "filter": lambda x: x["objectSid"].endswith(f"-{i}")
+        "filter": lambda x: x["objectSid"].endswith(f"-{i}"),
     }
     AUTH_POLICIES_FILTER = lambda _: {"files": ["auth_policies"]}
     SILOS_FILTER = lambda _: {"files": ["silos"]}
     SILO_FILTER = lambda _, s: {
         "fmt": "json",
         "files": ["silos"],
-        "filter": lambda x: eq(x["cn"], s)
+        "filter": lambda x: eq(x["cn"], s),
     }
 
     # Not implemented:
@@ -107,7 +135,9 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         @prefix: prefix of the files
         """
         if not path.exists(cache_dir):
-            raise self.CacheActiveDirectoryDirNotFoundException(f"{cache_dir} doesn't exist.")
+            raise self.CacheActiveDirectoryDirNotFoundException(
+                f"{cache_dir} doesn't exist."
+            )
         self.path = cache_dir
         self.prefix = prefix
         self.fqdn, self.base_dn = self.__get_domain_info()
@@ -166,9 +196,8 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         # For each file, retrieve result based on an optional filter
         for fil in cachefilter["files"]:
             filename = "{prefix}_{file}.{ext}".format(
-                        prefix=self.prefix,
-                        file=fil,
-                        ext=fmt)
+                prefix=self.prefix, file=fil, ext=fmt
+            )
 
             # Two cases
             # all attributes are required thus we parse the JSON file
@@ -176,7 +205,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
                 if path.join(self.path, filename) in FILE_CONTENT_DICT:
                     json = FILE_CONTENT_DICT[path.join(self.path, filename)]
                 else:
-                    fp = open(path.join(self.path,filename))
+                    fp = open(path.join(self.path, filename))
                     json = json_load(fp)
                     if "ntSecurityDescriptor" not in self.attributes:
                         scrub_json_from_key(json, lambda x: x == "nTSecurityDescriptor")
@@ -194,7 +223,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
                 if path.join(self.path, filename) in FILE_CONTENT_DICT:
                     fp = FILE_CONTENT_DICT[path.join(self.path, filename)]
                 else:
-                    fp = open(path.join(self.path,filename))
+                    fp = open(path.join(self.path, filename))
                     FILE_CONTENT_DICT[path.join(self.path, filename)] = fp
                 if "filter" in cachefilter:
                     for line in fp:
@@ -219,11 +248,13 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         if sid in WELL_KNOWN_SIDS:
             return WELL_KNOWN_SIDS[sid]
         elif validate_sid(sid):
-            results = self.query({
-                "fmt": "json",
-                "files": ["users_all", "groups", "machines"],
-                "filter": lambda x: x["objectSid"] == sid
-            })
+            results = self.query(
+                {
+                    "fmt": "json",
+                    "files": ["users_all", "groups", "machines"],
+                    "filter": lambda x: x["objectSid"] == sid,
+                }
+            )
             if results:
                 return results
         raise self.ActiveDirectoryInvalidSID(f"SID: {sid}")
@@ -238,11 +269,13 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         @return the record corresponding to the guid queried.
         """
         if validate_guid(guid):
-            results = self.query({
-                "fmt": "json",
-                "files": ["users_all", "groups", "machines"],
-                "filter": lambda x: x["objectGUID"] == guid
-            })
+            results = self.query(
+                {
+                    "fmt": "json",
+                    "files": ["users_all", "groups", "machines"],
+                    "filter": lambda x: x["objectGUID"] == guid,
+                }
+            )
             if results:
                 return results
         raise self.ActiveDirectoryInvalidGUID(f"GUID: {guid}")

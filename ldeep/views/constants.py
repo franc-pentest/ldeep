@@ -1,4 +1,3 @@
-
 DNS_TYPES = {
     "ZERO": 0x0000,
     "A": 0x0001,
@@ -81,7 +80,7 @@ SAM_ACCOUNT_TYPE = {
     "SAM_TRUST_ACCOUNT": 0x30000002,
     "SAM_APP_BASIC_GROUP": 0x40000000,
     "SAM_APP_QUERY_GROUP": 0x40000001,
-    "SAM_ACCOUNT_TYPE_MAX": 0x7fffffff,
+    "SAM_ACCOUNT_TYPE_MAX": 0x7FFFFFFF,
 }
 
 PWD_PROPERTIES = {
@@ -90,7 +89,7 @@ PWD_PROPERTIES = {
     "DOMAIN_PASSWORD_NO_CLEAR_CHANGE": 0x4,
     "DOMAIN_LOCKOUT_ADMINS": 0x8,
     "DOMAIN_PASSWORD_STORE_CLEARTEXT": 0x10,
-    "DOMAIN_REFUSE_PASSWORD_CHANGE": 0x20
+    "DOMAIN_REFUSE_PASSWORD_CHANGE": 0x20,
 }
 
 TRUSTS_INFOS = {
@@ -105,7 +104,7 @@ TRUSTS_INFOS = {
     "USES_AES_KEYS": 0x100,
     "CROSS_ORGANIZATION_NO_TGT_DELEGATION": 0x200,
     "PIM_TRUST": 0x400,
-    "CROSS_ORGANIZATION_ENABLE_TGT_DELEGATION": 0x800
+    "CROSS_ORGANIZATION_ENABLE_TGT_DELEGATION": 0x800,
 }
 
 FOREST_LEVELS = {
@@ -116,47 +115,47 @@ FOREST_LEVELS = {
     3: "Windows Server 2008",
     2: "Windows Server 2003",
     1: "Windows Server 2003 operating system through Windows Server 2016",
-    0: "Windows 2000 Server operating system through Windows Server 2008 operating system"
+    0: "Windows 2000 Server operating system through Windows Server 2008 operating system",
 }
 
 WELL_KNOWN_SIDS = {
-    "S-1-5-32-544"    : r"BUILTIN\Administrators",
-    "S-1-5-32-545"    : r"BUILTIN\Users",
-    "S-1-5-32-546"    : r"BUILTIN\Guests",
-    "S-1-5-32-547"    : r"BUILTIN\Power Users",
-    "S-1-5-32-548"    : r"BUILTIN\Account Operators",
-    "S-1-5-32-549"    : r"BUILTIN\Server Operators",
-    "S-1-5-32-550"    : r"BUILTIN\Print Operators",
-    "S-1-5-32-551"    : r"BUILTIN\Backup Operators",
-    "S-1-5-32-552"    : r"BUILTIN\Replicators",
-    "S-1-5-64-10"    : r"BUILTIN\NTLM Authentication",
-    "S-1-5-64-14"    : r"BUILTIN\SChannel Authentication",
-    "S-1-5-64-21"    : r"BUILTIN\Digest Authentication",
-    "S-1-16-4096"    : r"BUILTIN\Low Mandatory Level",
-    "S-1-16-8192"    : r"BUILTIN\Medium Mandatory Level",
-    "S-1-16-8448"    : r"BUILTIN\Medium Plus Mandatory Level",
-    "S-1-16-12288"    : r"BUILTIN\High Mandatory Level",
-    "S-1-16-16384"    : r"BUILTIN\System Mandatory Level",
-    "S-1-16-20480"    : r"BUILTIN\Protected Process Mandatory Level",
-    "S-1-16-28672"    : r"BUILTIN\Secure Process Mandatory Level",
-    "S-1-5-32-554"    : r"BUILTIN\Pre-Windows 2000 Compatible Access",
-    "S-1-5-32-555"    : r"BUILTIN\Remote Desktop Users",
-    "S-1-5-32-556"    : r"BUILTIN\Network Configuration Operators",
-    "S-1-5-32-557"    : r"BUILTIN\Incoming Forest Trust Builders",
-    "S-1-5-32-558"    : r"BUILTIN\Performance Monitor Users",
-    "S-1-5-32-559"    : r"BUILTIN\Performance Log Users",
-    "S-1-5-32-560"    : r"BUILTIN\Windows Authorization Access Group",
-    "S-1-5-32-561"    : r"BUILTIN\Terminal Server License Servers",
-    "S-1-5-32-562"    : r"BUILTIN\Distributed COM Users",
-    "S-1-5-32-569"    : r"BUILTIN\Cryptographic Operators",
-    "S-1-5-32-573"    : r"BUILTIN\Event Log Readers",
-    "S-1-5-32-574"    : r"BUILTIN\Certificate Service DCOM Access",
-    "S-1-5-32-575"    : r"BUILTIN\RDS Remote Access Servers",
-    "S-1-5-32-576"    : r"BUILTIN\RDS Endpoint Servers",
-    "S-1-5-32-577"    : r"BUILTIN\RDS Management Servers",
-    "S-1-5-32-578"    : r"BUILTIN\Hyper-V Administrators",
-    "S-1-5-32-579"    : r"BUILTIN\Access Control Assistance Operators",
-    "S-1-5-32-580"    : r"BUILTIN\Remote Management Users",
+    "S-1-5-32-544": r"BUILTIN\Administrators",
+    "S-1-5-32-545": r"BUILTIN\Users",
+    "S-1-5-32-546": r"BUILTIN\Guests",
+    "S-1-5-32-547": r"BUILTIN\Power Users",
+    "S-1-5-32-548": r"BUILTIN\Account Operators",
+    "S-1-5-32-549": r"BUILTIN\Server Operators",
+    "S-1-5-32-550": r"BUILTIN\Print Operators",
+    "S-1-5-32-551": r"BUILTIN\Backup Operators",
+    "S-1-5-32-552": r"BUILTIN\Replicators",
+    "S-1-5-64-10": r"BUILTIN\NTLM Authentication",
+    "S-1-5-64-14": r"BUILTIN\SChannel Authentication",
+    "S-1-5-64-21": r"BUILTIN\Digest Authentication",
+    "S-1-16-4096": r"BUILTIN\Low Mandatory Level",
+    "S-1-16-8192": r"BUILTIN\Medium Mandatory Level",
+    "S-1-16-8448": r"BUILTIN\Medium Plus Mandatory Level",
+    "S-1-16-12288": r"BUILTIN\High Mandatory Level",
+    "S-1-16-16384": r"BUILTIN\System Mandatory Level",
+    "S-1-16-20480": r"BUILTIN\Protected Process Mandatory Level",
+    "S-1-16-28672": r"BUILTIN\Secure Process Mandatory Level",
+    "S-1-5-32-554": r"BUILTIN\Pre-Windows 2000 Compatible Access",
+    "S-1-5-32-555": r"BUILTIN\Remote Desktop Users",
+    "S-1-5-32-556": r"BUILTIN\Network Configuration Operators",
+    "S-1-5-32-557": r"BUILTIN\Incoming Forest Trust Builders",
+    "S-1-5-32-558": r"BUILTIN\Performance Monitor Users",
+    "S-1-5-32-559": r"BUILTIN\Performance Log Users",
+    "S-1-5-32-560": r"BUILTIN\Windows Authorization Access Group",
+    "S-1-5-32-561": r"BUILTIN\Terminal Server License Servers",
+    "S-1-5-32-562": r"BUILTIN\Distributed COM Users",
+    "S-1-5-32-569": r"BUILTIN\Cryptographic Operators",
+    "S-1-5-32-573": r"BUILTIN\Event Log Readers",
+    "S-1-5-32-574": r"BUILTIN\Certificate Service DCOM Access",
+    "S-1-5-32-575": r"BUILTIN\RDS Remote Access Servers",
+    "S-1-5-32-576": r"BUILTIN\RDS Endpoint Servers",
+    "S-1-5-32-577": r"BUILTIN\RDS Management Servers",
+    "S-1-5-32-578": r"BUILTIN\Hyper-V Administrators",
+    "S-1-5-32-579": r"BUILTIN\Access Control Assistance Operators",
+    "S-1-5-32-580": r"BUILTIN\Remote Management Users",
 }
 
 FILETIME_FIELDS = [
@@ -166,25 +165,23 @@ FILETIME_FIELDS = [
     "lastLogonTimestamp",
     "pwdLastSet",
     "accountExpires",
-    "lockoutTime"
+    "lockoutTime",
 ]
 
-DATETIME_FIELDS = [
-    "dSCorePropagationData",
-    "whenChanged",
-    "whenCreated"
-]
+DATETIME_FIELDS = ["dSCorePropagationData", "whenChanged", "whenCreated"]
 
 FILETIME_TIMESTAMP_FIELDS = {
     "lockOutObservationWindow": (60, "mins"),
     "lockoutDuration": (60, "mins"),
     "maxPwdAge": (86400, "days"),
     "minPwdAge": (86400, "days"),
-    "forceLogoff": (60, "mins")
+    "forceLogoff": (60, "mins"),
 }
 
-LDAP_SERVER_SD_FLAGS_OID_SEC_DESC = [('1.2.840.113556.1.4.801', True, b'\x30\x03\x02\x01\x07')]
+LDAP_SERVER_SD_FLAGS_OID_SEC_DESC = [
+    ("1.2.840.113556.1.4.801", True, b"\x30\x03\x02\x01\x07")
+]
 
-LOGON_SAM_LOGON_RESPONSE_EX = b'\x17\x00'
+LOGON_SAM_LOGON_RESPONSE_EX = b"\x17\x00"
 
-GMSA_ENCRYPTION_CONSTANTS = b'\x6b\x65\x72\x62\x65\x72\x6f\x73\x7b\x9b\x5b\x2b\x93\x13\x2b\x93\x5c\x9b\xdc\xda\xd9\x5c\x98\x99\xc4\xca\xe4\xde\xe6\xd6\xca\xe4'
+GMSA_ENCRYPTION_CONSTANTS = b"\x6b\x65\x72\x62\x65\x72\x6f\x73\x7b\x9b\x5b\x2b\x93\x13\x2b\x93\x5c\x9b\xdc\xda\xd9\x5c\x98\x99\xc4\xca\xe4\xde\xe6\xd6\xca\xe4"

@@ -26,7 +26,8 @@ mrproper: clean
 	@rm -rf *.egg-info
 
 export:
+	pdm lock
 	pdm export -f requirements --without-hashes --prod > requirements.txt
-	pdm export -f requirements --without-hashes > requirements-dev.txt
+	pdm export -f requirements --without-hashes --dev > requirements-dev.txt
 
 .PHONY: clean mrproper

@@ -1,10 +1,11 @@
-name: Build and publish
+name: Release and PyPi
 on:
   push:
     branches:
     - 'master'
     paths:
     - 'VERSION'
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,25 +15,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+
       - name: Get local version
         run: echo "version=$(cat VERSION)" >> $GITHUB_ENV
+
+      - name: Build sdist
+        run: pdm build -d sdist --no-wheel
+
       - name: Create tag
         uses: rickstaa/action-create-tag@v1
         with:
           tag: ${{ env.version }}
-      - name: Install libkrb5-dev
-        run: sudo apt-get install -y libkrb5-dev
-      - name: Build release assets
-        run: |
-          pip install pex wheel pdm
-          pdm build -d sdist --no-wheel
-          pdm build -d dist --no-sdist
-          pex -r requirements.txt --disable-cache -f dist/ -o ldeep-${{ env.version }} -e ldeep.__main__ ldeep
+
+      - name: Download all workflow run artifacts
+        uses: actions/download-artifact@v4
+
       - name: Create the release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.version }}
-          files: ldeep-${{ env.version }}
+          files: |
+            linux/ldeep_linux-amd64
+            windows/ldeep_windows-amd64.exe
+            macos/ldeep_macos-amd64
+
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
