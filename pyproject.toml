@@ -62,19 +62,6 @@ dev = [
     "nuitka>=2.3",
 ]
 
-[tool.flake8]
-max-line-length = 120
-per-file-ignores = [
-  'ldeep/views/ldap_activedirectory.py:E731' # lambda stuff
-]
-extend-ignore = ['W191', 'E501', 'E402', 'E731', 'C103']
-
-[tool.pylint.format]
-# String used as indentation unit. This is usually "    " (4 spaces) or "\t" (1
-# tab).
-indent-string = "\\t"
-# Maximum number of characters on a single line.
-max-line-length = 120
-# Number of spaces of indent required inside a hanging or continued line.
-indent-after-paren = 1
-
+[tool.black]
+check = true
+diff = true

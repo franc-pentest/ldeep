@@ -1,4 +1,3 @@
-
 from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
 from ldap3.protocol.formatters.validators import validate_sid, validate_guid
 
@@ -10,12 +9,12 @@ validate_guid = validate_guid
 
 
 class ActiveDirectoryView(object):
-	"""
-	Manage a view of a Active Directory.
-	"""
+    """
+    Manage a view of a Active Directory.
+    """
 
-	class ActiveDirectoryInvalidSID(Exception):
-		pass
+    class ActiveDirectoryInvalidSID(Exception):
+        pass
 
-	class ActiveDirectoryInvalidGUID(Exception):
-		pass
+    class ActiveDirectoryInvalidGUID(Exception):
+        pass
