@@ -3,12 +3,8 @@ name: Build Tests
 on:
   workflow_dispatch:
     branches: [master]
-  push:
-    branches: [master]
-    paths:
-      - '**.py'
-      - 'pdm.lock'
-      - VERSION
+  pull-request:
+    branches: [release]
 
 permissions:
   id-token: write
