@@ -14,65 +14,97 @@ Project Status
 
 
 
-=======
-INSTALL
-=======
+============
+Installation
+============
 
-If you want to use Kerberos authentication you will need additional packages.
+To use Kerberos, `ldeep` needs to build native extensions and some headers could be required:
 
 Debian::
 
-  sudo apt-get install -y libkrb5-dev krb5-config
+  sudo apt-get install -y libkrb5-dev krb5-config gcc python-devel
 
 ArchLinux::
 
   sudo pacman -S krb5
 
-``ldeep`` is using Python3.::
+-------------------------------------------
+Install from pypi (latest released version)
+-------------------------------------------
 
-	pip3 install git+https://github.com/franc-pentest/ldeep
+::
+
+  python -m pip install ldeep
 
 
-For Kerberos, you will also need to configure the ``/etc/krb5.conf``.::
+-------------------------------------------
+Install from GitHub (current state of master branch)
+-------------------------------------------
 
-  [realms]
-        CORP.LOCAL = {
-                kdc = DC01.CORP.LOCAL
-        }
+::
 
-Local installation for development::
+  python -m pip install git+https://github.com/franc-pentest/ldeep
 
+===========
+Development
+===========
+
+Clone the project and install the backend build system `pdm`::
+
+  python -m pip install pdm
   git clone https://github.com/franc-pentest/ldeep && cd ldeep
+
+___________________________
+Install an isolated version
+___________________________
+
+Clone and install dependencies::
+
   pdm install
 
 Run locally::
 
   pdm run ldeep
 
+----------------------------------
+Install the package in your system
+----------------------------------
+
+::
+
+  python -m pip install .
+
+------------------------------------
+Build source and wheel distributions
+------------------------------------
+
+::
+
+  python -m build
+
 =====
-LDEEP
+ldeep
 =====
 
 Help is self-explanatory. Let's check it out::
 
   $ ldeep -h
-  usage: ldeep [-h] [-o OUTFILE] {ldap,cache} ...
+  usage: ldeep [-h] [--version] [-o OUTFILE] [--security_desc] {ldap,cache} ...
 
-  optional arguments:
-      -h, --help            show this help message and exit
-      -o OUTFILE, --outfile OUTFILE
-                        Store the results in a file
-      --security_desc   Enable the retrieval of security descriptors in ldeep
-                        results
+  options:
+    -h, --help            show this help message and exit
+    --version             show program's version number and exit
+    -o OUTFILE, --outfile OUTFILE
+                          Store the results in a file
+    --security_desc       Enable the retrieval of security descriptors in ldeep results
+
+  Mode:
+    Available modes
+
+    {ldap,cache}          Backend engine to retrieve data
 
 
-  Modes:
-      Available modes
-
-      {ldap,cache}          Mode to query
-
-
-Ldeep can either run against an Active Directory LDAP server or locally on saved files::
+`ldeep` can either run against an Active Directory LDAP server or locally on saved files::
 
   $ ldeep ldap -u Administrator -p 'password' -d winlab -s ldap://10.0.0.1 all backup/winlab
   [+] Retrieving auth_policies output
@@ -125,13 +157,15 @@ LDAP
 ::
 
     $ ldeep ldap -h
-    usage: ldeep ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--pfx-file PFX_FILE] [--cert-pem CERT_PEM] [--key-pem KEY_PEM] [-a]
-                        {auth_policies,computers,conf,delegations,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,add_to_group,modify_password,remove_from_group,unlock}
-                        ...
+    usage: ldeep ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [--throttle THROTTLE] [--page_size PAGE_SIZE]
+                      [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--pfx-file PFX_FILE] [--pfx-pass PFX_PASS] [--cert-pem CERT_PEM]
+                      [--key-pem KEY_PEM] [-a]
+                      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,create_computer,create_user,modify_password,remove_from_group,unlock}
+                      ...
 
     LDAP mode
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       -d DOMAIN, --domain DOMAIN
                             The domain as NetBIOS or FQDN
@@ -140,13 +174,10 @@ LDAP
       -b BASE, --base BASE  LDAP base for query (by default, this value is pulled from remote Ldap)
       -t {ntlm,simple}, --type {ntlm,simple}
                             Authentication type: ntlm (default) or simple
-      --throttle THROTTLE   Add a throttle between queries to sneak under detection
-                            thresholds (in seconds between queries: argument to the sleep
-                            function)
+      --throttle THROTTLE   Add a throttle between queries to sneak under detection thresholds (in seconds between queries:
+                            argument to the sleep function)
       --page_size PAGE_SIZE
-                            Configure the page size used by the engine to query the LDAP
-                            server (default: 1000)
-
+                            Configure the page size used by the engine to query the LDAP server (default: 1000)
 
     NTLM authentication:
       -u USERNAME, --username USERNAME
@@ -156,10 +187,11 @@ LDAP
       -H NTLM, --ntlm NTLM  NTLM hashes, format is LMHASH:NTHASH
 
     Kerberos authentication:
-      -k, --kerberos        For Kerberos authentication, ticket file should be pointed by $KRB5CCNAME env variable
+      -k, --kerberos        For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable
 
     Certificate authentication:
       --pfx-file PFX_FILE   PFX file
+      --pfx-pass PFX_PASS   PFX password
       --cert-pem CERT_PEM   User certificate
       --key-pem KEY_PEM     User private key
 
@@ -169,13 +201,14 @@ LDAP
     commands:
       available commands
 
-      {auth_policies,computers,conf,delegations,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,add_to_group,modify_password,remove_from_group,unlock}
+      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,create_computer,create_user,modify_password,remove_from_group,unlock}
         auth_policies       List the authentication policies configured in the Active Directory.
         bitlockerkeys       Extract the bitlocker recovery keys.
         computers           List the computer hostnames and resolve them if --resolve is specify.
         conf                Dump the configuration partition of the Active Directory.
         delegations         List accounts configured for any kind of delegation.
         domain_policy       Return the domain policy.
+        fsmo                List FSMO roles.
         gmsa                List the gmsa accounts and retrieve NT hash if possible.
         gpo                 Return the list of Group policy objects.
         groups              List the groups.
@@ -183,6 +216,8 @@ LDAP
         ou                  Return the list of organizational units with linked GPO.
         pkis                List pkis.
         pso                 List the Password Settings Objects.
+        sccm                List servers related to SCCM infrastructure (Primary/Secondary Sites and Distribution Points).
+        shadow_principals   List the shadow principals and the groups associated with.
         silos               List the silos configured in the Active Directory.
         smsa                List the smsa accounts and the machines they are associated with.
         subnets             List sites and associated subnets.
@@ -191,6 +226,7 @@ LDAP
         zones               List the DNS zones configured in the Active Directory.
         from_guid           Return the object associated with the given `guid`.
         from_sid            Return the object associated with the given `sid`.
+        laps                Return the LAPS passwords. If a target is specified, only retrieve the LAPS password for this one.
         memberships         List the group for which `account` belongs to.
         membersof           List the members of `group`.
         object              Return the records containing `object` in a CN.
@@ -200,10 +236,14 @@ LDAP
         all                 Collect and store computers, domain_policy, zones, gpo, groups, ou, users, trusts, pso information
         enum_users          Anonymously enumerate users with LDAP pings.
         search              Query the LDAP with `filter` and retrieve ALL or `attributes` if specified.
+        whoami              Return user identity.
         add_to_group        Add `user` to `group`.
+        create_computer     Create a computer account
+        create_user         Create a user account
         modify_password     Change `user`'s password.
         remove_from_group   Remove `user` from `group`.
         unlock              Unlock `user`.
+
 
 CACHE
 -----
@@ -212,12 +252,12 @@ CACHE
 
     $ ldeep cache -h
     usage: ldeep cache [-h] [-d DIR] -p PREFIX
-                         {auth_policies,computers,conf,delegations,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone}
-                         ...
+                       {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone}
+                       ...
 
     Cache mode
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       -d DIR, --dir DIR     Use saved JSON files in specified directory as cache
       -p PREFIX, --prefix PREFIX
@@ -226,12 +266,14 @@ CACHE
     commands:
       available commands
 
-      {auth_policies,computers,conf,delegations,domain_policy,gmsa,gpo,groups,machines,ou,pkis,pso,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,memberships,membersof,object,sddl,silo,zone}
+      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone}
         auth_policies       List the authentication policies configured in the Active Directory.
+        bitlockerkeys       Extract the bitlocker recovery keys.
         computers           List the computer hostnames and resolve them if --resolve is specify.
         conf                Dump the configuration partition of the Active Directory.
         delegations         List accounts configured for any kind of delegation.
         domain_policy       Return the domain policy.
+        fsmo                List FSMO roles.
         gmsa                List the gmsa accounts and retrieve NT hash if possible.
         gpo                 Return the list of Group policy objects.
         groups              List the groups.
@@ -239,6 +281,8 @@ CACHE
         ou                  Return the list of organizational units with linked GPO.
         pkis                List pkis.
         pso                 List the Password Settings Objects.
+        sccm                List servers related to SCCM infrastructure (Primary/Secondary Sites and Distribution Points).
+        shadow_principals   List the shadow principals and the groups associated with.
         silos               List the silos configured in the Active Directory.
         smsa                List the smsa accounts and the machines they are associated with.
         subnets             List sites and associated subnets.
@@ -247,6 +291,7 @@ CACHE
         zones               List the DNS zones configured in the Active Directory.
         from_guid           Return the object associated with the given `guid`.
         from_sid            Return the object associated with the given `sid`.
+        laps                Return the LAPS passwords. If a target is specified, only retrieve the LAPS password for this one.
         memberships         List the group for which `account` belongs to.
         membersof           List the members of `group`.
         object              Return the records containing `object` in a CN.
@@ -256,9 +301,10 @@ CACHE
 
 
 
-=====
-USAGE
-=====
+
+==============
+Usage examples
+==============
 
 Listing users without verbosity::
 
@@ -353,6 +399,18 @@ Using this last command line switch, you have persistent output in both verbose 
 	winlab.local_dump_gpo.lst            winlab.local_dump_ou.lst       winlab.local_dump_users.json  winlab.local_dump_zones.lst
 
 The the cache mode can be used to query some other information.
+
+
+--------------------------
+Usage with Kerberos config
+---------------------------
+
+For Kerberos, you will also need to configure the ``/etc/krb5.conf``.::
+
+  [realms]
+        CORP.LOCAL = {
+                kdc = DC01.CORP.LOCAL
+        }
 
 ========
 Upcoming
