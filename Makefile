@@ -8,18 +8,16 @@ $(EXEC): $(SRC)
 	pdm build --no-sdist
 	pex -r requirements.txt --disable-cache -f dist/ -o $@ -e ldeep.__main__ ldeep
 
-release: $(SRC)
-	git tag $(shell cat VERSION)
-	git push origin $(shell cat VERSION)
-	pdm build --no-wheel
-	twine upload dist/*
+pypi: $(SRC)
+	pdm build -d sdist --no-wheel
+	twine upload sdist/*
 
-release-test: $(SRC)
-	pdm build --no-wheel
-	twine upload --repository testpypi dist/*
+pypi-test: $(SRC)
+	pdm build -d sdist --no-wheel
+	twine upload --repository testpypi sdist/*
 
 clean:
-	@rm -rf build/ dist/
+	@rm -rf build/ sdist/
 
 mrproper: clean
 	@find . -name *.pyc -exec rm '{}' \;
