@@ -132,7 +132,7 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos
+          name: macos-amd
           path: ldeep_macos-amd64
 
   tagged-release:
@@ -163,7 +163,7 @@ jobs:
             linux/ldeep_linux-amd64
             windows/ldeep_windows-amd64.exe
             macos/ldeep_macos-arm64
-            macos/ldeep_macos-amd64
+            macos-am/ldeep_macos-amd64
 
       - name: Upload to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
