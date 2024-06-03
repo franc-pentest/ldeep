@@ -1,6 +1,6 @@
 [project]
 name = "ldeep"
-version = "1.0.42"
+dynamic = ["version"]
 description = "In-depth ldap enumeration utility"
 authors = [
   {name = "b0z", email = "bastien@faure.io"},
@@ -19,7 +19,7 @@ dependencies = [
     "termcolor >= 2.3.0, < 3",
     "tqdm >= 4.26.0, < 5",
 ]
-requires-python = ">=3.8.1"
+requires-python = ">=3.8.1,<3.13"
 readme = "README.rst"
 license = {text = "MIT"}
 keywords = [
@@ -36,6 +36,10 @@ classifiers = [
   "Topic :: Security",
 ]
 
+[tool.pdm.dynamic]
+version = "file"
+path = "VERSION"
+
 [project.urls]
 Homepage = "https://github.com/franc-pentest/ldeep"
 
@@ -48,7 +52,7 @@ build-backend = "pdm.backend"
 
 [tool.pdm.dev-dependencies]
 exe = [
-    "pex>=2.0.3",
+    "pex>=2.3.1",
 ]
 publishing = [
     "twine>=5.1.0",
