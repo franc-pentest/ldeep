@@ -2,8 +2,8 @@
 Project Status
 ==============
 
-.. image:: https://github.com/franc-pentest/ldeep/actions/workflows/build.yml/badge.svg
-   :target: https://github.com/franc-pentest/ldeep/actions/workflows/build.yml
+.. image:: https://github.com/franc-pentest/ldeep/actions/workflows/autorelease.yml/badge.svg
+   :target: https://github.com/franc-pentest/ldeep/actions/workflows/autorelease.yml
    :alt: Build status
 .. image:: https://badgen.net/pypi/v/ldeep
    :target: https://pypi.org/project/ldeep/
