@@ -38,9 +38,9 @@ Install from pypi (latest released version)
   python -m pip install ldeep
 
 
--------------------------------------------
+----------------------------------------------------
 Install from GitHub (current state of master branch)
--------------------------------------------
+----------------------------------------------------
 
 ::
 
