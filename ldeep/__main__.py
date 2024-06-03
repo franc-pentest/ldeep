@@ -23,6 +23,7 @@ from ldeep.views.constants import (
     FILETIME_TIMESTAMP_FIELDS,
     FOREST_LEVELS,
 )
+from ldeep import __version__
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 
@@ -1756,6 +1757,11 @@ class Ldeep(Command):
 
 def main():
     parser = ArgumentParser()
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s {version}".format(version=__version__),
+    )
     parser.add_argument(
         "-o", "--outfile", default="", help="Store the results in a file"
     )

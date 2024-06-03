@@ -36,9 +36,9 @@ classifiers = [
   "Topic :: Security",
 ]
 
-[tool.pdm.dynamic]
-version = "file"
-path = "VERSION"
+[tool.pdm.version]
+source = "call"
+getter = "ldeep:get_version"
 
 [project.urls]
 Homepage = "https://github.com/franc-pentest/ldeep"
