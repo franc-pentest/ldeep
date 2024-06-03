@@ -28,6 +28,7 @@ ArchLinux::
 
   sudo pacman -S krb5
 
+
 -------------------------------------------
 Install from pypi (latest released version)
 -------------------------------------------
@@ -56,7 +57,7 @@ Clone the project and install the backend build system `pdm`::
 
 ___________________________
 Install an isolated version
-___________________________
+---------------------------
 
 Clone and install dependencies::
 
