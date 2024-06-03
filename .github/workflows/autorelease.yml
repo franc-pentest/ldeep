@@ -17,8 +17,8 @@ jobs:
     name: Linux Build
     runs-on: "ubuntu-latest"
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -57,8 +57,8 @@ jobs:
     name: Windows Build
     runs-on: "windows-latest"
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: PDM
@@ -83,8 +83,8 @@ jobs:
     name: MacOS ARM64 Build
     runs-on: "macos-latest"
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Get local version
         run: echo "version=$(cat VERSION)" >> $GITHUB_ENV
@@ -126,7 +126,7 @@ jobs:
         uses: actions/download-artifact@v4
 
       - name: Create the release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.version }}
           generate_release_notes: true
