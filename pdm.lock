@@ -5,7 +5,7 @@
 groups = ["default", "lint", "exe", "publishing", "dev"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:ce44a0384b4df5e9882ced000a09828bc524b0cd5374ca290b62ef5eba87c4b3"
+content_hash = "sha256:85beb8e84b3a55585c318b54b06658e5fafa3b4d68d030b1c0b859199de03759"
 
 [[package]]
 name = "asn1crypto"
@@ -910,8 +910,8 @@ files = [
 
 [[package]]
 name = "twine"
-version = "4.0.2"
-requires_python = ">=3.7"
+version = "5.1.0"
+requires_python = ">=3.8"
 summary = "Collection of utilities for publishing packages on PyPI"
 groups = ["publishing"]
 dependencies = [
@@ -926,8 +926,8 @@ dependencies = [
     "urllib3>=1.26.0",
 ]
 files = [
-    {file = "twine-4.0.2-py3-none-any.whl", hash = "sha256:929bc3c280033347a00f847236564d1c52a3e61b1ac2516c97c48f3ceab756d8"},
-    {file = "twine-4.0.2.tar.gz", hash = "sha256:9e102ef5fdd5a20661eb88fad46338806c3bd32cf1db729603fe3697b1bc83c8"},
+    {file = "twine-5.1.0-py3-none-any.whl", hash = "sha256:fe1d814395bfe50cfbe27783cb74efe93abeac3f66deaeb6c8390e4e92bacb43"},
+    {file = "twine-5.1.0.tar.gz", hash = "sha256:4d74770c88c4fcaf8134d2a6a9d863e40f08255ff7d8e2acb3cbbd57d25f6e9d"},
 ]
 
 [[package]]

@@ -51,7 +51,7 @@ exe = [
     "pex>=2.0.3",
 ]
 publishing = [
-  "twine >= 4.0.2, < 5"
+    "twine>=5.1.0",
 ]
 dev = [
     "nuitka>=2.3",
