@@ -8,7 +8,7 @@ authors = [
 ]
 dependencies = [
     "commandparse >= 1.1.1, < 2",
-    "cryptography==42.0.4",
+    "cryptography>=42.0.7",
     "dnspython >= 1.15.0",
     "gssapi >= 1.8.0, < 2",
     "ldap3 >= 2.5.1, < 3",

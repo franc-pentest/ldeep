@@ -5,7 +5,7 @@ asn1crypto==1.5.1
 cffi==1.16.0
 colorama==0.4.6; platform_system == "Windows"
 commandparse==1.1.2
-cryptography==42.0.4
+cryptography==42.0.7
 decorator==5.1.1
 dnspython==2.6.1
 gssapi==1.8.3
