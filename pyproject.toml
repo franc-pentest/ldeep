@@ -38,7 +38,7 @@ classifiers = [
 
 [tool.pdm.build]
 includes = [
-  "ldeep/**",
+  "ldeep/**/*.py",
   "VERSION",
 ]
 
