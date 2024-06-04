@@ -152,6 +152,7 @@ Help is self-explanatory. Let's check it out::
 
 These two modes have different options:
 
+----
 LDAP
 ----
 
@@ -246,6 +247,8 @@ LDAP
         unlock              Unlock `user`.
 
 
+
+-----
 CACHE
 -----
 
@@ -404,7 +407,7 @@ The the cache mode can be used to query some other information.
 
 --------------------------
 Usage with Kerberos config
----------------------------
+--------------------------
 
 For Kerberos, you will also need to configure the ``/etc/krb5.conf``.::
 

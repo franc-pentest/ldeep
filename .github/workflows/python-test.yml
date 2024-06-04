@@ -3,7 +3,7 @@ name: Python Unit Tests
 on:
   pull_request:
     branches:
-      - dev
+      - master
 
 jobs:
   unit-test:
@@ -25,8 +25,13 @@ jobs:
           src: ./ldeep
           options: --check --diff
 
-      - name: Set up PDM
-        run: python3.12 -m pip install pdm
+      - name: Set up PDM and Twine
+        run: python3.12 -m pip install pdm twine
+
+      - name: Check sdist with Twine
+        run: |
+          pdm build -d sdist --no-wheel
+          twince check --strict sdist/*
 
       - name: Install dependencies
         run: |
