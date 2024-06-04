@@ -36,6 +36,12 @@ classifiers = [
   "Topic :: Security",
 ]
 
+[tool.pdm.build]
+includes = [
+  "ldeep/**",
+  "VERSION",
+]
+
 [tool.pdm.version]
 source = "call"
 getter = "ldeep:get_version"
