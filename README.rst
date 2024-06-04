@@ -55,7 +55,7 @@ Clone the project and install the backend build system `pdm`::
   python -m pip install pdm
   git clone https://github.com/franc-pentest/ldeep && cd ldeep
 
-___________________________
+---------------------------
 Install an isolated version
 ---------------------------
 
