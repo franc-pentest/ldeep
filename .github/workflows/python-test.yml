@@ -31,7 +31,7 @@ jobs:
       - name: Check sdist with Twine
         run: |
           pdm build -d sdist --no-wheel
-          twince check --strict sdist/*
+          twine check --strict sdist/*
 
       - name: Install dependencies
         run: |
