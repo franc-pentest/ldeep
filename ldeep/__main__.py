@@ -259,7 +259,7 @@ class Ldeep(Command):
         Arguments:
             @verbose:bool
                 Results will contain full information
-            @filter:string = ["all", "spn", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired", "nokrbpreauth", "reversible"]
+            @filter:string = ["all", "spn", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired", "passwordnotrequired", "nokrbpreauth", "reversible"]
         """
         verbose = kwargs.get("verbose", False)
         filter_ = kwargs.get("filter", "all")
