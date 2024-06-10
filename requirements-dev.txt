@@ -29,7 +29,7 @@ mdurl==0.1.2
 more-itertools==10.2.0
 mypy-extensions==1.0.0
 nh3==0.2.17
-nuitka==2.3
+nuitka==2.3.2
 ordered-set==4.1.0
 oscrypto==1.3.0
 packaging==24.0
