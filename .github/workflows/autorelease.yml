@@ -63,7 +63,7 @@ jobs:
         run: python3 -m pip install pdm
 
       - name: Installs dev deps and package
-        run: PDM_BUILD_SCM_VERSION=$(cat VERSION) pdm install --dev
+        run: $env:PDM_BUILD_SCM_VERSION=gc "VERSION"; pdm install --dev
 
       - name: Build
         run: |
