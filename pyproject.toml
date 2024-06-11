@@ -41,19 +41,8 @@ source = "scm"
 write_to = "ldeep/_version.py"
 write_template = "__version__ = '{}'"
 
-[project.urls]
-Homepage = "https://github.com/franc-pentest/ldeep"
-
-[project.scripts]
-ldeep = "ldeep.__main__:main"
-
-[build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
-
 [tool.pdm.dev-dependencies]
 exe = [
-    "pex>=2.3.1",
 ]
 publishing = [
     "twine>=5.1.0",
@@ -64,3 +53,13 @@ dev = [
 lint = [
     "black>=24.4.2",
 ]
+[project.urls]
+Homepage = "https://github.com/franc-pentest/ldeep"
+
+[project.scripts]
+ldeep = "ldeep.__main__:main"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+

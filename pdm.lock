@@ -5,7 +5,7 @@
 groups = ["default", "lint", "exe", "publishing", "dev"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:d6f7eeccc1157c7f7b7e37f272e813bf793ca8041fdd9ffe89c25d588c0d0404"
+content_hash = "sha256:43c615e19898564cc1ff43b7b37d8450b42643abada4aa0ad728c554cec1d414"
 
 [[package]]
 name = "asn1crypto"
@@ -631,17 +631,6 @@ groups = ["lint"]
 files = [
     {file = "pathspec-0.12.1-py3-none-any.whl", hash = "sha256:a0d503e138a4c123b27490a4f7beda6a01c6f288df0e4a8b79c7eb0dc7b4cc08"},
     {file = "pathspec-0.12.1.tar.gz", hash = "sha256:a482d51503a1ab33b1c67a6c3813a26953dbdc71c31dacaef9a838c4e29f5712"},
-]
-
-[[package]]
-name = "pex"
-version = "2.3.1"
-requires_python = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,<3.13,>=2.7"
-summary = "The PEX packaging toolchain."
-groups = ["exe"]
-files = [
-    {file = "pex-2.3.1-py2.py3-none-any.whl", hash = "sha256:64692a5bf6f298403aab930d22f0d836ae4736c5bc820e262e9092fe8c56f830"},
-    {file = "pex-2.3.1.tar.gz", hash = "sha256:d1264c91161c21139b454744c8053e25b8aad2d15da89232181b4f38f3f54575"},
 ]
 
 [[package]]
