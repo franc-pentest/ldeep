@@ -36,15 +36,10 @@ classifiers = [
   "Topic :: Security",
 ]
 
-[tool.pdm.build]
-includes = [
-  "ldeep/**/*.py",
-  "VERSION",
-]
-
 [tool.pdm.version]
-source = "call"
-getter = "ldeep:get_version"
+source = "scm"
+write_to = "ldeep/_version.py"
+write_template = "__version__ = '{}'"
 
 [project.urls]
 Homepage = "https://github.com/franc-pentest/ldeep"

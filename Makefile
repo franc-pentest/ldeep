@@ -1,19 +1,14 @@
-EXEC = ldeep.bin
-
 SRC = $(wildcard ./ldeep/*.py)
 
-all: $(EXEC)
+all: build
 
-$(EXEC): $(SRC)
-	pdm build --no-sdist
-	pex -r requirements.txt --disable-cache -f dist/ -o $@ -e ldeep.__main__ ldeep
+build:
+	pdm build -d sdist
 
 pypi: $(SRC)
-	pdm build -d sdist --no-wheel
 	twine upload sdist/*
 
 pypi-test: $(SRC)
-	pdm build -d sdist --no-wheel
 	twine upload --repository testpypi sdist/*
 
 clean:
@@ -28,4 +23,4 @@ export:
 	pdm export -f requirements --without-hashes --prod > requirements.txt
 	pdm export -f requirements --without-hashes --dev > requirements-dev.txt
 
-.PHONY: clean mrproper
+.PHONY: clean mrproper build

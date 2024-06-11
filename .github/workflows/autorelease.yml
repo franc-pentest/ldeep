@@ -29,17 +29,15 @@ jobs:
         run: sudo apt-get install -y libkrb5-dev
 
       - name: Installs dev deps and package
-        run : |
-          pdm export -f requirements --without-hashes --dev > requirements.txt
-          python3.12 -m pip install -r requirements.txt
+        run : PDM_BUILD_SCM_VERSION=$(cat VERSION) pdm install --dev
 
       - name: Build binary release
         run: |
-          python3.12 -m nuitka --standalone --onefile --output-filename=ldeep.bin ldeep/__main__.py
+          pdm run python3.12 -m nuitka --standalone --onefile --output-filename=ldeep.bin ldeep/__main__.py
           mv ldeep.bin ldeep_linux-amd64
 
       - name: Build Source Distribution
-        run: pdm build -d sdist --no-wheel
+        run: PDM_BUILD_SCM_VERSION=$(cat VERSION) pdm build -d sdist --no-wheel
 
       - name: Upload Artifacts (binary)
         uses: actions/upload-artifact@v4
@@ -65,13 +63,11 @@ jobs:
         run: python3 -m pip install pdm
 
       - name: Installs dev deps and package
-        run: |
-          pdm export -f requirements --without-hashes --dev > requirements.txt
-          python3 -m pip install -r requirements.txt
+        run: PDM_BUILD_SCM_VERSION=$(cat VERSION) pdm install --dev
 
       - name: Build
         run: |
-          python3 -m nuitka --standalone --assume-yes-for-downloads --output-filename=ldeep.exe --onefile ldeep/__main__.py
+          pdm run python3 -m nuitka --standalone --assume-yes-for-downloads --output-filename=ldeep.exe --onefile ldeep/__main__.py
           mv ldeep.exe ldeep_windows-amd64.exe
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -92,13 +88,11 @@ jobs:
         run: python3.12 -m pip install pdm
 
       - name: Installs dev deps and package
-        run: |
-          pdm export -f requirements --without-hashes --dev > requirements.txt
-          python3.12 -m pip install -r requirements.txt
+        run: PDM_BUILD_SCM_VERSION=$(cat VERSION) pdm install --dev
 
       - name: Build
         run: |
-          python3.12 -m nuitka --standalone --onefile --output-filename=ldeep.bin ldeep/__main__.py
+          pdm run python3.12 -m nuitka --standalone --onefile --output-filename=ldeep.bin ldeep/__main__.py
           mv ldeep.bin ldeep_macos-arm64
 
       - name: Upload Artifacts
@@ -120,13 +114,11 @@ jobs:
         run: python3.12 -m pip install pdm
 
       - name: Installs dev deps and package
-        run: |
-          pdm export -f requirements --without-hashes --dev > requirements.txt
-          python3.12 -m pip install -r requirements.txt
+        run: PDM_BUILD_SCM_VERSION=$(cat VERSION) pdm install --dev
 
       - name: Build
         run: |
-          python3.12 -m nuitka --standalone --onefile --output-filename=ldeep.bin ldeep/__main__.py
+          pdm run python3.12 -m nuitka --standalone --onefile --output-filename=ldeep.bin ldeep/__main__.py
           mv ldeep.bin ldeep_macos-amd64
 
       - name: Upload Artifacts

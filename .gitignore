@@ -14,3 +14,4 @@ __pycache__
 .venv
 .pdm-python
 .pdm-build/
+ldeep/_version.py
