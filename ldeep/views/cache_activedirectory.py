@@ -26,7 +26,6 @@ def eq(x, y):
 
 # respect the ANR field
 def eq_anr(record, value):
-
     def fmap(f, obj):
         if isinstance(obj, dict):
             return any(fmap(f, sub) for sub in obj.values())
@@ -57,7 +56,6 @@ def eq_anr(record, value):
 
 
 class CacheActiveDirectoryView(ActiveDirectoryView):
-
     # Constant functions (first arg -> self but we don't need it)
     USER_LOCKED_FILTER = lambda _: {"files": ["users_locked"]}
     GROUPS_FILTER = lambda _: {"files": ["groups"]}

@@ -37,7 +37,6 @@ import sys
 
 
 class Ldeep(Command):
-
     def __init__(self, query_engine, format="json"):
         self.engine = query_engine
         if format == "json":

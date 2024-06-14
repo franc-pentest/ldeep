@@ -17,7 +17,6 @@ def error(content, close_array=False):
 
 
 class Logger(object):
-
     def __init__(self, outfile=None, quiet=False):
         self.quiet = quiet
         self.terminal = __stdout__
@@ -36,7 +35,6 @@ class Logger(object):
 
 
 class ResolverThread(object):
-
     def __init__(self, dns_server):
         self.dns_server = dns_server
         self.resolutions = []
