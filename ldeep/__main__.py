@@ -37,7 +37,6 @@ import sys
 
 
 class Ldeep(Command):
-
     def __init__(self, query_engine, format="json"):
         self.engine = query_engine
         if format == "json":
@@ -580,7 +579,8 @@ class Ldeep(Command):
 
                 if field in FILETIME_TIMESTAMP_FIELDS.keys():
                     val = int(
-                        (fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0]
+                        (fabs(float(val)) / 10**7)
+                        / FILETIME_TIMESTAMP_FIELDS[field][0]
                     )
                     val = "{val} {typ}".format(
                         val=val, typ=FILETIME_TIMESTAMP_FIELDS[field][1]

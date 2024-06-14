@@ -506,7 +506,12 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             )
 
         self.base_dn = base or server.info.other["defaultNamingContext"][0]
-        self.fqdn = ".".join(map(lambda x: x.replace("DC=", ''), filter(lambda x: x.startswith("DC="), self.base_dn.split(','))))
+        self.fqdn = ".".join(
+            map(
+                lambda x: x.replace("DC=", ""),
+                filter(lambda x: x.startswith("DC="), self.base_dn.split(",")),
+            )
+        )
         self.search_scope = SUBTREE
 
     def set_controls(self, controls=[]):
@@ -679,7 +684,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         return result_set
 
     def get_gmsa(self, attributes):
-
         try:
             self.ldap.start_tls()
         except Exception as e:
