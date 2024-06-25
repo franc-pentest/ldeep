@@ -424,7 +424,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     server,
                     authentication=SASL,
                     sasl_mechanism=KERBEROS,
-                    session_security=ENCRYPT
+                    session_security=ENCRYPT,
                 )
         elif method == "Certificate":
             self.ldap = Connection(server)
