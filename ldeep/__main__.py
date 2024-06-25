@@ -1660,18 +1660,12 @@ class Ldeep(Command):
 
         Arguments:
             #computer_name:string
-                Name of computer to add.
+                Name of computer to add (no '$' needed).
             #computer_pass:string
                 Password set to computer account
         """
         computer = kwargs["computer_name"]
         password = kwargs["computer_pass"]
-
-        try:
-            self.engine.ldap.start_tls()
-        except Exception as e:
-            print(f"Can't create computer, TLS needed: {e}")
-            return
 
         if self.engine.create_computer(computer, password):
             info(f"Computer {computer} successfully created with password {password}")
@@ -1715,12 +1709,6 @@ class Ldeep(Command):
         """
         user = kwargs["user_name"]
         password = kwargs["user_pass"]
-
-        try:
-            self.engine.ldap.start_tls()
-        except Exception as e:
-            print(f"Can't create user, TLS needed: {e}")
-            return
 
         if self.engine.create_user(user, password):
             info(f"User {user} successfully created with password {password}")

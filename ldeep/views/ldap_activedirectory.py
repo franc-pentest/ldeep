@@ -17,6 +17,8 @@ from ldap3 import (
     ALL as LDAP3_ALL,
     BASE,
     DEREF_NEVER,
+    TLS_CHANNEL_BINDING,
+    ENCRYPT,
 )
 from ldap3 import SIMPLE
 from ldap3.protocol.formatters.formatters import format_sid
@@ -413,7 +415,17 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             server = Server(self.server, get_info=LDAP3_ALL)
 
         if method == "Kerberos":
-            self.ldap = Connection(server, authentication=SASL, sasl_mechanism=KERBEROS)
+            if self.server.startswith("ldaps"):
+                self.ldap = Connection(
+                    server, authentication=SASL, sasl_mechanism=KERBEROS
+                )
+            else:
+                self.ldap = Connection(
+                    server,
+                    authentication=SASL,
+                    sasl_mechanism=KERBEROS,
+                    session_security=ENCRYPT,
+                )
         elif method == "Certificate":
             self.ldap = Connection(server)
         elif method == "anonymous":
@@ -430,26 +442,60 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     print(e)
                     print("Incorrect hash, format is LMHASH:NTHASH")
                     exit(1)
-            self.ldap = Connection(
-                server,
-                user=f"{domain}\\{username}",
-                password=ntlm,
-                authentication=NTLM,
-                check_names=True,
-            )
+            if self.server.startswith("ldaps"):
+                self.ldap = Connection(
+                    server,
+                    user=f"{domain}\\{username}",
+                    password=ntlm,
+                    channel_binding=TLS_CHANNEL_BINDING,
+                    authentication=NTLM,
+                    check_names=True,
+                )
+            else:
+                self.ldap = Connection(
+                    server,
+                    user=f"{domain}\\{username}",
+                    password=ntlm,
+                    session_security=ENCRYPT,
+                    authentication=NTLM,
+                    check_names=True,
+                )
         elif method == "SIMPLE":
-            if not password:
-                print("Password is required (-p)")
-                exit(1)
             if "." in domain:
                 domain, _, _ = domain.partition(".")
-            self.ldap = Connection(
-                server,
-                user=f"{domain}\\{username}",
-                password=password,
-                authentication=SIMPLE,
-                check_names=True,
-            )
+            if self.server.startswith("ldaps"):
+                if not password:
+                    print("Password is required (-p)")
+                    exit(1)
+                self.ldap = Connection(
+                    server,
+                    user=f"{domain}\\{username}",
+                    password=password,
+                    authentication=SIMPLE,
+                    check_names=True,
+                )
+            else:
+                if not ntlm:
+                    print(
+                        "Please authenticate using the NT hash for simple bind without ldaps"
+                    )
+                    exit(1)
+                try:
+                    lm, nt = ntlm.split(":")
+                    lm = "aad3b435b51404eeaad3b435b51404ee" if not lm else lm
+                    ntlm = f"{lm}:{nt}"
+                except Exception as e:
+                    print(e)
+                    print("Incorrect hash, format is LMHASH:NTHASH")
+                    exit(1)
+                self.ldap = Connection(
+                    server,
+                    user=f"{domain}\\{username}",
+                    password=ntlm,
+                    session_security=ENCRYPT,
+                    authentication=NTLM,
+                    check_names=True,
+                )
 
         try:
             if method == "Certificate":
