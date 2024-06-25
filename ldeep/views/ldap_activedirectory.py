@@ -416,9 +416,16 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
         if method == "Kerberos":
             if self.server.startswith("ldaps"):
-                self.ldap = Connection(server, authentication=SASL, sasl_mechanism=KERBEROS)
+                self.ldap = Connection(
+                    server, authentication=SASL, sasl_mechanism=KERBEROS
+                )
             else:
-                self.ldap = Connection(server, authentication=SASL, sasl_mechanism=KERBEROS, session_security=ENCRYPT)
+                self.ldap = Connection(
+                    server,
+                    authentication=SASL,
+                    sasl_mechanism=KERBEROS,
+                    session_security=ENCRYPT
+                )
         elif method == "Certificate":
             self.ldap = Connection(server)
         elif method == "anonymous":
@@ -469,7 +476,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 )
             else:
                 if not ntlm:
-                    print("Please authenticate using the NT hash for simple bind without ldaps")
+                    print(
+                        "Please authenticate using the NT hash for simple bind without ldaps"
+                    )
                     exit(1)
                 try:
                     lm, nt = ntlm.split(":")
