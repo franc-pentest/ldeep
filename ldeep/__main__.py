@@ -1654,6 +1654,24 @@ class Ldeep(Command):
         else:
             error(f"Unable to remove {user} from {group}, check privileges or dn")
 
+    def action_change_uac(self, kwargs):
+        """
+        Change user account control
+
+        Arguments:
+            #user:string
+                Target user (dn format). Ex: "CN=bob,CN=Users,DC=CORP,DC=LOCAL"
+            #uac:string
+                UAC integer value. Ex: 512 for NORMAL_ACCOUNT
+        """
+        user = kwargs["user"]
+        uac = kwargs["uac"]
+
+        if self.engine.change_uac(user, uac):
+            info(f"UAC successfully changed for {user}")
+        else:
+            error(f"Unable to change UAC for {user}, check privileges or dn")
+
     def action_create_computer(self, kwargs):
         """
         Create a computer account

@@ -19,6 +19,7 @@ from ldap3 import (
     DEREF_NEVER,
     TLS_CHANNEL_BINDING,
     ENCRYPT,
+    MODIFY_REPLACE,
 )
 from ldap3 import SIMPLE
 from ldap3.protocol.formatters.formatters import format_sid
@@ -872,6 +873,26 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         """
         try:
             return removeUsersInGroups(self.ldap, user_dn, group_dn, fix=True)
+        except ldap3.core.exceptions.LDAPInvalidDnError as e:
+            print(f"Unhandled exception: {e}")
+            # catch invalid group dn
+            return False
+
+    def change_uac(self, user_dn, uac):
+        """
+        Change userAccountControl.
+
+        @username: the target user of UAC change
+        @uac: the integer value for the userAccountControl. Ex: 512 for NORMAL_ACCOUNT
+
+        @return True if the UAC was successfully changed or False otherwise.
+        """
+        try:
+            # return connection.modify(user_dn, {'userAccountControl':[(ldap3.MODIFY_REPLACE, ["66048"])]}))
+            return self.ldap.modify(
+                user_dn, {"userAccountControl": [(MODIFY_REPLACE, [uac])]}
+            )
+            # return removeUsersInGroups(self.ldap, user_dn, group_dn, fix=True)
         except ldap3.core.exceptions.LDAPInvalidDnError as e:
             print(f"Unhandled exception: {e}")
             # catch invalid group dn
