@@ -1275,7 +1275,13 @@ class Ldeep(Command):
                 pid = result["primaryGroupID"]
                 results = list(self.engine.query(self.engine.PRIMARY_GROUP_ID(pid)))
                 if results:
-                    print(results[0]["dn"])
+                    dn = results[0]["dn"]
+                    print(dn)
+                    if recursive:
+                        already_printed.add(dn)
+                        s = lookup_groups(dn, 4, already_printed)
+                        already_printed.union(s)
+
         if len(list(results)) == 0:
             error("User {account} does not exists".format(account=account))
 
