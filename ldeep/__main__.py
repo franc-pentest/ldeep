@@ -586,6 +586,40 @@ class Ldeep(Command):
                     )
                 print("{field}: {val}".format(field=field, val=val))
 
+        # enum principals affected by PSO if unpriv
+        print("Unprivileged enumeration:")
+        print("principal:pso_name")
+        # users
+        attributes = ["objectClass", "cn", "sAMAccountName", "msDS-PSOApplied"]
+        entries = self.engine.query(self.engine.USER_ALL_FILTER(), attributes)
+        for entry in entries:
+            psos = entry.get("msDS-PSOApplied")
+            if psos:
+                for pso in psos:
+                    pso = next(
+                        map(
+                            lambda x: x.replace("CN=", ""),
+                            filter(lambda x: x.startswith("CN="), pso.split(",")),
+                        )
+                    )
+                    name = entry.get("sAMAccountName")
+                    print(f"{name}:{pso}")
+
+        # groups
+        entries = self.engine.query(self.engine.GROUPS_FILTER(), attributes)
+        for entry in entries:
+            psos = entry.get("msDS-PSOApplied")
+            if psos:
+                for pso in psos:
+                    pso = next(
+                        map(
+                            lambda x: x.replace("CN=", ""),
+                            filter(lambda x: x.startswith("CN="), pso.split(",")),
+                        )
+                    )
+                    name = entry.get("sAMAccountName")
+                    print(f"{name}:{pso}")
+
     def list_trusts(self, kwargs):
         """
         List the domain's trust relationships.
