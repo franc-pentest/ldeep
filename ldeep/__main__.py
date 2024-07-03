@@ -587,8 +587,7 @@ class Ldeep(Command):
                 print("{field}: {val}".format(field=field, val=val))
 
         # enum principals affected by PSO if unpriv
-        print("Unprivileged enumeration:")
-        print("principal:pso_name")
+        results = []
         # users
         attributes = ["objectClass", "cn", "sAMAccountName", "msDS-PSOApplied"]
         entries = self.engine.query(self.engine.USER_ALL_FILTER(), attributes)
@@ -603,7 +602,7 @@ class Ldeep(Command):
                         )
                     )
                     name = entry.get("sAMAccountName")
-                    print(f"{name}:{pso}")
+                    results.append(f"{name}:{pso}")
 
         # groups
         entries = self.engine.query(self.engine.GROUPS_FILTER(), attributes)
@@ -618,7 +617,12 @@ class Ldeep(Command):
                         )
                     )
                     name = entry.get("sAMAccountName")
-                    print(f"{name}:{pso}")
+                    results.append(f"{name}:{pso}")
+
+        if results:
+            print("Unprivileged enumeration:")
+            print("principal:pso_name")
+            print(*results, sep="\n")
 
     def list_trusts(self, kwargs):
         """
