@@ -586,6 +586,44 @@ class Ldeep(Command):
                     )
                 print("{field}: {val}".format(field=field, val=val))
 
+        # enum principals affected by PSO if unpriv
+        results = []
+        # users
+        attributes = ["objectClass", "cn", "sAMAccountName", "msDS-PSOApplied"]
+        entries = self.engine.query(self.engine.USER_ALL_FILTER(), attributes)
+        for entry in entries:
+            psos = entry.get("msDS-PSOApplied")
+            if psos:
+                for pso in psos:
+                    pso = next(
+                        map(
+                            lambda x: x.replace("CN=", ""),
+                            filter(lambda x: x.startswith("CN="), pso.split(",")),
+                        )
+                    )
+                    name = entry.get("sAMAccountName")
+                    results.append(f"{name}:{pso}")
+
+        # groups
+        entries = self.engine.query(self.engine.GROUPS_FILTER(), attributes)
+        for entry in entries:
+            psos = entry.get("msDS-PSOApplied")
+            if psos:
+                for pso in psos:
+                    pso = next(
+                        map(
+                            lambda x: x.replace("CN=", ""),
+                            filter(lambda x: x.startswith("CN="), pso.split(",")),
+                        )
+                    )
+                    name = entry.get("sAMAccountName")
+                    results.append(f"{name}:{pso}")
+
+        if results:
+            print("Unprivileged enumeration:")
+            print("principal:pso_name")
+            print(*results, sep="\n")
+
     def list_trusts(self, kwargs):
         """
         List the domain's trust relationships.
@@ -656,16 +694,19 @@ class Ldeep(Command):
         else:
             attributes = ALL
 
-        self.display(
-            self.engine.query(
-                self.engine.ZONES_FILTER(),
-                attributes,
-                base=",".join(
-                    ["CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn]
+        try:
+            self.display(
+                self.engine.query(
+                    self.engine.ZONES_FILTER(),
+                    attributes,
+                    base=",".join(
+                        ["CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn]
+                    ),
                 ),
-            ),
-            verbose,
-        )
+                verbose,
+            )
+        except:
+            error(f"Can't list zones", close_array=verbose)
 
     def list_pkis(self, kwargs):
         """
