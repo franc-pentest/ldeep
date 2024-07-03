@@ -656,16 +656,19 @@ class Ldeep(Command):
         else:
             attributes = ALL
 
-        self.display(
-            self.engine.query(
-                self.engine.ZONES_FILTER(),
-                attributes,
-                base=",".join(
-                    ["CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn]
+        try:
+            self.display(
+                self.engine.query(
+                    self.engine.ZONES_FILTER(),
+                    attributes,
+                    base=",".join(
+                        ["CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn]
+                    ),
                 ),
-            ),
-            verbose,
-        )
+                verbose,
+            )
+        except:
+            error(f"Can't list zones", close_array=verbose)
 
     def list_pkis(self, kwargs):
         """
