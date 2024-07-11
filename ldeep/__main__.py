@@ -70,25 +70,26 @@ class Ldeep(Command):
                     and extra_records
                 ):
                     print(record["dn"])
-                    if record["gPLink"]:
-                        guids = re_compile("{[^}]+}")
-                        gpo_guids = guids.findall(record["gPLink"])
-                        if len(gpo_guids) > 0:
-                            print("[gPLink]")
-                            print(
-                                "* {}".format(
-                                    "\n* ".join(
-                                        [
-                                            (
-                                                extra_records[g]
-                                                if g in extra_records
-                                                else g
-                                            )
-                                            for g in gpo_guids
-                                        ]
+                    if "gPLink" in record.keys():
+                        if record["gPLink"]:
+                            guids = re_compile("{[^}]+}")
+                            gpo_guids = guids.findall(record["gPLink"])
+                            if len(gpo_guids) > 0:
+                                print("[gPLink]")
+                                print(
+                                    "* {}".format(
+                                        "\n* ".join(
+                                            [
+                                                (
+                                                    extra_records[g]
+                                                    if g in extra_records
+                                                    else g
+                                                )
+                                                for g in gpo_guids
+                                            ]
+                                        )
                                     )
                                 )
-                            )
                 elif "groupPolicyContainer" in record["objectClass"]:
                     print(f"{record['cn']}: {record['displayName']}")
                 elif "dnsNode" in record["objectClass"]:
