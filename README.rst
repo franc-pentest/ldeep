@@ -22,7 +22,7 @@ To use Kerberos, `ldeep` needs to build native extensions and some headers could
 
 Debian::
 
-  sudo apt-get install -y libkrb5-dev krb5-config gcc python-devel
+  sudo apt-get install -y libkrb5-dev krb5-config gcc python3-dev
 
 ArchLinux::
 
