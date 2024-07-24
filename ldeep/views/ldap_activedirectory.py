@@ -844,7 +844,14 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             raise self.ActiveDirectoryLdapException("Zero or non uniq result")
         else:
             user = results[0]
-            return ad_modify_password(self.ldap, user["dn"], newpassword, None)
+            res = ad_modify_password(
+                self.ldap, user["dn"], newpassword, old_password=oldpassword
+            )
+            if res == False:
+                res = ad_modify_password(
+                    self.ldap, user["dn"], newpassword, old_password=None
+                )
+            return res
 
     def add_user_to_group(self, user_dn, group_dn):
         """
@@ -888,11 +895,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @return True if the UAC was successfully changed or False otherwise.
         """
         try:
-            # return connection.modify(user_dn, {'userAccountControl':[(ldap3.MODIFY_REPLACE, ["66048"])]}))
             return self.ldap.modify(
                 user_dn, {"userAccountControl": [(MODIFY_REPLACE, [uac])]}
             )
-            # return removeUsersInGroups(self.ldap, user_dn, group_dn, fix=True)
         except ldap3.core.exceptions.LDAPInvalidDnError as e:
             print(f"Unhandled exception: {e}")
             # catch invalid group dn
