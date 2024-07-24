@@ -203,7 +203,7 @@ LDAP
     commands:
       available commands
 
-      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,create_computer,create_user,modify_password,remove_from_group,unlock}
+      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,change_uac,create_computer,create_user,modify_password,remove_from_group,unlock}
         auth_policies       List the authentication policies configured in the Active Directory.
         bitlockerkeys       Extract the bitlocker recovery keys.
         computers           List the computer hostnames and resolve them if --resolve is specify.
@@ -240,6 +240,7 @@ LDAP
         search              Query the LDAP with `filter` and retrieve ALL or `attributes` if specified.
         whoami              Return user identity.
         add_to_group        Add `user` to `group`.
+        change_uac          Change user account control
         create_computer     Create a computer account
         create_user         Create a user account
         modify_password     Change `user`'s password.
