@@ -171,8 +171,8 @@ def parse_ace_access(input_buffer):
 
 
 ACEObjectFlags = {
-    "Object Type Present": 0b00000000000000000000000000000010,
-    "Inherited Object Type Present": 0b00000000000000000000000000000001,
+    "Object Type Present": 0b00000000000000000000000000000001,
+    "Inherited Object Type Present": 0b00000000000000000000000000000010,
 }
 
 
