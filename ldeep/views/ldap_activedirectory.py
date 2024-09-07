@@ -296,6 +296,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         cert_pem="",
         key_pem="",
         method="NTLM",
+        no_encryption=False,
         throttle=0,
         page_size=1000,
     ):
@@ -315,6 +316,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @password: Password to use for the authentication (for SIMPLE authentication)
         @ntlm: NTLM hash to use for the authentication (for NTLM authentication)
         @method: Either to use NTLM, SIMPLE, Kerberos or anonymous authentication.
+        @no_encryption: Either the communication is encrypted or not.
 
         @throw ActiveDirectoryLdapException when the connection or the bind does not work.
         """
@@ -325,6 +327,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         self.pfx_pass = pfx_pass
         self.cert = cert_pem
         self.key = key_pem
+        self.no_encryption = no_encryption
         self.server = server
         self.domain = domain
         self.hostnames = []
@@ -421,12 +424,19 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     server, authentication=SASL, sasl_mechanism=KERBEROS
                 )
             else:
-                self.ldap = Connection(
-                    server,
-                    authentication=SASL,
-                    sasl_mechanism=KERBEROS,
-                    session_security=ENCRYPT,
-                )
+                if self.no_encryption:
+                    self.ldap = Connection(
+                        server,
+                        authentication=SASL,
+                        sasl_mechanism=KERBEROS,
+                    )
+                else:
+                    self.ldap = Connection(
+                        server,
+                        authentication=SASL,
+                        sasl_mechanism=KERBEROS,
+                        session_security=ENCRYPT,
+                    )
         elif method == "Certificate":
             self.ldap = Connection(server)
         elif method == "anonymous":
@@ -444,23 +454,41 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     print("Incorrect hash, format is LMHASH:NTHASH")
                     exit(1)
             if self.server.startswith("ldaps"):
-                self.ldap = Connection(
-                    server,
-                    user=f"{domain}\\{username}",
-                    password=ntlm,
-                    channel_binding=TLS_CHANNEL_BINDING,
-                    authentication=NTLM,
-                    check_names=True,
-                )
+                if self.no_encryption:
+                    self.ldap = Connection(
+                        server,
+                        user=f"{domain}\\{username}",
+                        password=ntlm,
+                        authentication=NTLM,
+                        check_names=True,
+                    )
+                else:
+                    self.ldap = Connection(
+                        server,
+                        user=f"{domain}\\{username}",
+                        password=ntlm,
+                        authentication=NTLM,
+                        channel_binding=TLS_CHANNEL_BINDING,
+                        check_names=True,
+                    )
             else:
-                self.ldap = Connection(
-                    server,
-                    user=f"{domain}\\{username}",
-                    password=ntlm,
-                    session_security=ENCRYPT,
-                    authentication=NTLM,
-                    check_names=True,
-                )
+                if self.no_encryption:
+                    self.ldap = Connection(
+                        server,
+                        user=f"{domain}\\{username}",
+                        password=ntlm,
+                        authentication=NTLM,
+                        check_names=True,
+                    )
+                else:
+                    self.ldap = Connection(
+                        server,
+                        user=f"{domain}\\{username}",
+                        password=ntlm,
+                        authentication=NTLM,
+                        session_security=ENCRYPT,
+                        check_names=True,
+                    )
         elif method == "SIMPLE":
             if "." in domain:
                 domain, _, _ = domain.partition(".")
@@ -487,16 +515,25 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     ntlm = f"{lm}:{nt}"
                 except Exception as e:
                     print(e)
-                    print("Incorrect hash, format is LMHASH:NTHASH")
+                    print("Incorrect hash, format is [LMHASH]:NTHASH")
                     exit(1)
-                self.ldap = Connection(
-                    server,
-                    user=f"{domain}\\{username}",
-                    password=ntlm,
-                    session_security=ENCRYPT,
-                    authentication=NTLM,
-                    check_names=True,
-                )
+                if self.no_encryption:
+                    self.ldap = Connection(
+                        server,
+                        user=f"{domain}\\{username}",
+                        password=ntlm,
+                        authentication=NTLM,
+                        check_names=True,
+                    )
+                else:
+                    self.ldap = Connection(
+                        server,
+                        user=f"{domain}\\{username}",
+                        password=ntlm,
+                        authentication=NTLM,
+                        session_security=ENCRYPT,
+                        check_names=True,
+                    )
 
         try:
             if method == "Certificate":
