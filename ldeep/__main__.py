@@ -1864,6 +1864,13 @@ def main():
         type=int,
         help="Configure the page size used by the engine to query the LDAP server (default: 1000)",
     )
+    ldap.add_argument(
+        "-n",
+        "--no-encryption",
+        default=False,
+        action="store_true",
+        help="Encrypt the communication or not (default True)",
+    )
 
     cache.add_argument(
         "-d",
@@ -1964,6 +1971,7 @@ def main():
                 args.cert_pem,
                 args.key_pem,
                 method,
+                args.no_encryption,
                 args.throttle,
                 args.page_size,
             )
