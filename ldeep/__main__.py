@@ -1645,11 +1645,11 @@ class Ldeep(Command):
 
         Arguments:
             #user:string
-                User to unlock
+                Target user
             #newpassword:string
                 New password
-            #currpassword:string = None
-                Current password
+            @currpassword:string = None
+                Current password (might be optional according to privileges)
         """
         user = kwargs["user"]
         new = kwargs["newpassword"]
@@ -1661,7 +1661,7 @@ class Ldeep(Command):
             info("Password of {username} changed".format(username=user))
         else:
             error(
-                "Unable to change {username}'s password, check privileges or try with ldaps://".format(
+                "Unable to change {username}'s password, check privileges".format(
                     username=user
                 )
             )
