@@ -2,6 +2,7 @@ from sys import exit, _getframe
 from struct import unpack
 from socket import inet_ntoa
 from ssl import CERT_NONE
+from uuid import UUID
 
 from Cryptodome.Cipher import AES
 from Cryptodome.Hash import MD4, SHA1
@@ -220,6 +221,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     SITES_FILTER = lambda _: "(objectClass=site)"
     SUBNET_FILTER = lambda _, s: f"(SiteObject={s})"
     PKI_FILTER = lambda _: "(objectClass=pKIEnrollmentService)"
+    TEMPLATE_FILTER = lambda _: "(objectClass=pKICertificateTemplate)"
     PRIMARY_SCCM_FILTER = lambda _: "(cn=System Management)"
     DP_SCCM_FILTER = lambda _: "(objectClass=mssmsmanagementpoint)"
     USER_ALL_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user))"
@@ -683,6 +685,18 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 return dict(d)
 
         return filter(lambda x: x is not None, map(result, entry_generator))
+
+    def create_objecttype_guid_map(self):
+        self.objecttype_guid_map = dict()
+        sresult = self.ldap.extend.standard.paged_search(
+            self.ldap.server.info.other["schemaNamingContext"][0],
+            "(objectClass=*)",
+            attributes=["name", "schemaidguid"],
+        )
+        for res in sresult:
+            if res["attributes"]["schemaIDGUID"]:
+                guid = str(UUID(bytes_le=res["attributes"]["schemaIDGUID"]))
+                self.objecttype_guid_map[res["attributes"]["name"].lower()] = guid
 
     def get_domain_sid(self):
         """
