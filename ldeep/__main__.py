@@ -845,6 +845,7 @@ class Ldeep(Command):
 
                 # Enrollment Rights
                 enroll_principals = []
+                full_control_principals = []
                 write_owner_principals = []
                 write_dacl_principals = []
                 write_property_principals = []
@@ -854,16 +855,20 @@ class Ldeep(Command):
                     right = ""
                     sid = principal.get("SID")
                     try:
-                        res = next(self.engine.resolve_sid(sid))
-                        if "group" in res["objectClass"]:
-                            name = f"{res['sAMAccountName']} (group)"
-                        elif "user" in res["objectClass"]:
-                            name = f"{res['sAMAccountName']}"
-                        elif "computer" in res["objectClass"]:
-                            name = res["dNSHostName"]
+                        res = self.engine.resolve_sid(sid)
+                        if isinstance(res, str):
+                            name = res
                         else:
-                            # foreignSecurityPrincipal maybe other things ?
-                            pass
+                            res = next(res)
+                            if "group" in res["objectClass"]:
+                                name = f"{res['sAMAccountName']}"
+                            elif "user" in res["objectClass"]:
+                                name = f"{res['sAMAccountName']}"
+                            elif "computer" in res["objectClass"]:
+                                name = res["dNSHostName"]
+                            else:
+                                # foreignSecurityPrincipal maybe other things ?
+                                pass
                     except:
                         # we can't resolve the sid (delete or from another domain)
                         name = sid
@@ -881,6 +886,8 @@ class Ldeep(Command):
 
                     # Object Control Permissions
                     mask = principal.get("Raw Access Required")
+                    if mask & ADRights.get("GenericAll") == ADRights.get("GenericAll"):
+                        full_control_principals.append(name)
                     if mask & ADRights.get("WriteOwner") == ADRights.get("WriteOwner"):
                         write_owner_principals.append(name)
                     if mask & ADRights.get("WriteDacl") == ADRights.get("WriteDacl"):
@@ -902,10 +909,8 @@ class Ldeep(Command):
                                         k: v
                                         for v, k in self.engine.objecttype_guid_map.items()
                                     }
-                                    right_name = guid_to_object_map[right]
-                                write_property_principals.append(
-                                    f"{name} on {right_name}"
-                                )
+                                    right = guid_to_object_map[right]
+                                write_property_principals.append(f"{name} on {right}")
                             else:
                                 write_property_principals.append(name)
                         """
@@ -917,10 +922,11 @@ class Ldeep(Command):
                         """
 
                 print("Permissions")
-                print("  Enrollment Permissions")
-                print(f"{'    Enrollment Rights':<30}: {enroll_principals[0]}")
-                for enroll_principal in enroll_principals[1:]:
-                    print(f"{' ' * 32}{enroll_principal}")
+                if enroll_principals:
+                    print("  Enrollment Permissions")
+                    print(f"{'    Enrollment Rights':<30}: {enroll_principals[0]}")
+                    for enroll_principal in enroll_principals[1:]:
+                        print(f"{' ' * 32}{enroll_principal}")
 
                 # Object Control Permissions
                 print("  Object Control Permissions")
@@ -941,19 +947,32 @@ class Ldeep(Command):
                     name = owner_sid
 
                 print(f"{'    Owner':<30}: {name}")
-                print(
-                    f"{'    Write Owner Principals':<30}: {write_owner_principals[0]}"
-                )
-                for write_owner_principal in write_owner_principals[1:]:
-                    print(f"{' ' * 32}{write_owner_principal}")
-                print(f"{'    Write Dacl Principals':<30}: {write_dacl_principals[0]}")
-                for write_dacl_principal in write_dacl_principals[1:]:
-                    print(f"{' ' * 32}{write_dacl_principal}")
-                print(
-                    f"{'    Write Property Principals':<30}: {write_property_principals[0]}"
-                )
-                for write_property_principal in write_property_principals[1:]:
-                    print(f"{' ' * 32}{write_property_principal}")
+                if full_control_principals:
+                    # FIXME TODO
+                    print(
+                        f"{'    Full Control Principals':<30}: {full_control_principals[0]}"
+                    )
+                if write_owner_principals:
+                    print(
+                        f"{'    Write Owner Principals':<30}: {write_owner_principals[0]}"
+                    )
+                    for write_owner_principal in write_owner_principals[1:]:
+                        print(f"{' ' * 32}{write_owner_principal}")
+
+                if write_dacl_principals:
+                    print(
+                        f"{'    Write Dacl Principals':<30}: {write_dacl_principals[0]}"
+                    )
+                    for write_dacl_principal in write_dacl_principals[1:]:
+                        print(f"{' ' * 32}{write_dacl_principal}")
+
+                if write_property_principals:
+                    print(
+                        f"{'    Write Property Principals':<30}: {write_property_principals[0]}"
+                    )
+                    for write_property_principal in write_property_principals[1:]:
+                        print(f"{' ' * 32}{write_property_principal}")
+
                 print()
                 template_number += 1
 
