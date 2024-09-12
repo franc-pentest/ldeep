@@ -22,6 +22,11 @@ from ldeep.views.constants import (
     LDAP_SERVER_SD_FLAGS_OID_SEC_DESC,
     FILETIME_TIMESTAMP_FIELDS,
     FOREST_LEVELS,
+    OID_TO_STR_MAP,
+    AUTHENTICATING_EKUS,
+    MS_PKI_CERTIFICATE_NAME_FLAG,
+    EXTENDED_RIGHTS_NAME_MAP,
+    ADRights,
 )
 from ldeep._version import __version__
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
@@ -736,6 +741,221 @@ class Ldeep(Command):
             ),
             verbose,
         )
+
+    def list_templates(self, kwargs):
+        """
+        List certificate templates.
+        Arguments:
+            @enabled:bool
+                Results will only show enabled templates
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+        enabled = kwargs.get("enabled", False)
+
+        if verbose:
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = [
+                "name",
+                "displayName",
+                "pKIExpirationPeriod",
+                "msPKI-Certificate-Name-Flag",
+                "msPKI-RA-Signature",
+                "pKIExtendedKeyUsage",
+                "nTSecurityDescriptor",
+            ]
+
+        results = self.engine.query(
+            self.engine.TEMPLATE_FILTER(),
+            attributes,
+            base=",".join(
+                [
+                    "CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration",
+                    self.engine.base_dn,
+                ]
+            ),
+        )
+
+        attributes = ["certificateTemplates", "cn"]
+        pkis_infos = self.engine.query(
+            self.engine.PKI_FILTER(),
+            attributes,
+            base=",".join(
+                [
+                    "CN=Enrollment Services,CN=Public Key Services,CN=Services,CN=CONFIGURATION",
+                    self.engine.base_dn,
+                ]
+            ),
+        )
+
+        enabled_templates = {}
+        for pki in pkis_infos:
+            enabled_templates[pki.get("cn")] = pki.get("certificateTemplates")
+
+        if verbose:
+            self.display(results, verbose)
+            return
+        else:
+            template_number = 1
+            for result in results:
+                if (
+                    enabled
+                    and result.get("name") not in enabled_templates[pki.get("cn")]
+                ):
+                    continue
+                print(template_number)
+                print(f"{'Template Name':<30}: {result.get('name')}")
+                print(f"{'Display Name':<30}: {result.get('displayName')}")
+                for ca in enabled_templates:
+                    if result.get("name") in enabled_templates[ca]:
+                        print(f"{'Enabled':<30}: True")
+                        print(f"{'Certificate Authority':<30}: {ca}")
+                    else:
+                        print(f"{'Enabled':<30}: False")
+                ekus = []
+                client_auth = False
+                for eku in result.get("pKIExtendedKeyUsage"):
+                    if eku in AUTHENTICATING_EKUS.keys():
+                        client_auth = True
+                    ekus.append(OID_TO_STR_MAP[eku])
+                if result.get("pKIExtendedKeyUsage") == []:
+                    client_auth = True
+                print(f"{'Client Authentication':<30}: {client_auth}")
+
+                flag_mask = result.get("msPKI-Certificate-Name-Flag") & 0xFFFFFFFF
+                flags = []
+                for flag_name, flag_value in MS_PKI_CERTIFICATE_NAME_FLAG.items():
+                    if flag_mask & flag_value:
+                        flags.append(flag_name)
+                print(
+                    f"{'Enrollee Supplies Subject':<30}: {'ENROLLEE_SUPPLIES_SUBJECT' in flags}"
+                )
+                print(
+                    f"{'Requires Manager Approval':<30}: {result.get('msPKI-RA-Signature')>0}"
+                )
+
+                if ekus:
+                    print(f"{'Extended Key Usage':<30}: {ekus[0]}")
+                    for eku in ekus[1:]:
+                        print(f"{' ' * 32}{eku}")
+                else:
+                    print(f"{'Any Purpose':<30}: True")
+
+                # Enrollment Rights
+                enroll_principals = []
+                write_owner_principals = []
+                write_dacl_principals = []
+                write_property_principals = []
+                for principal in (
+                    result.get("nTSecurityDescriptor").get("DACL").get("ACEs")
+                ):
+                    right = ""
+                    sid = principal.get("SID")
+                    try:
+                        res = next(self.engine.resolve_sid(sid))
+                        if "group" in res["objectClass"]:
+                            name = f"{res['sAMAccountName']} (group)"
+                        elif "user" in res["objectClass"]:
+                            name = f"{res['sAMAccountName']}"
+                        elif "computer" in res["objectClass"]:
+                            name = res["dNSHostName"]
+                        else:
+                            # foreignSecurityPrincipal maybe other things ?
+                            pass
+                    except:
+                        # we can't resolve the sid (delete or from another domain)
+                        name = sid
+
+                    # extended rights
+                    if principal.get("GUID"):
+                        right = principal.get("GUID").lower().strip("{}")
+                        if right:
+                            if (
+                                right == EXTENDED_RIGHTS_NAME_MAP["Enroll"]
+                                or right
+                                == EXTENDED_RIGHTS_NAME_MAP["All-Extended-Rights"]
+                            ):
+                                enroll_principals.append(name)
+
+                    # Object Control Permissions
+                    mask = principal.get("Raw Access Required")
+                    if mask & ADRights.get("WriteOwner") == ADRights.get("WriteOwner"):
+                        write_owner_principals.append(name)
+                    if mask & ADRights.get("WriteDacl") == ADRights.get("WriteDacl"):
+                        write_dacl_principals.append(name)
+                    if mask & ADRights.get("WriteProperty") == ADRights.get(
+                        "WriteProperty"
+                    ):
+                        if (
+                            right != "0e10c968-78fb-11d2-90d4-00c04f79dc55"
+                            and right != "a05b8cc2-17bc-4802-a710-e7c15ab866a2"
+                        ):
+                            if (
+                                right
+                                and right != "00000000-0000-0000-0000-000000000000"
+                            ):
+                                self.engine.create_objecttype_guid_map()
+                                if right in self.engine.objecttype_guid_map.values():
+                                    guid_to_object_map = {
+                                        k: v
+                                        for v, k in self.engine.objecttype_guid_map.items()
+                                    }
+                                    right_name = guid_to_object_map[right]
+                                write_property_principals.append(
+                                    f"{name} on {right_name}"
+                                )
+                            else:
+                                write_property_principals.append(name)
+                        """
+                        add property for the following ?
+                        msPKI-Certificate-Name-Flag (add CT_FLAG_ENROLLEE_SUPPLIES_SUBJECT)
+                        msPKI-Enrollment-Flag (remove approval)
+                        pKIExtendedKeyUsage (never saw)
+                        msPKI-Certificate-Application-Policy (add Client Auth EKU)
+                        """
+
+                print("Permissions")
+                print("  Enrollment Permissions")
+                print(f"{'    Enrollment Rights':<30}: {enroll_principals[0]}")
+                for enroll_principal in enroll_principals[1:]:
+                    print(f"{' ' * 32}{enroll_principal}")
+
+                # Object Control Permissions
+                print("  Object Control Permissions")
+                owner_sid = result.get("nTSecurityDescriptor").get("Owner SID")
+                try:
+                    res = next(self.engine.resolve_sid(owner_sid))
+                    if "group" in res["objectClass"]:
+                        name = f"{res['sAMAccountName']} (group)"
+                    elif "user" in res["objectClass"]:
+                        name = f"{res['sAMAccountName']}"
+                    elif "computer" in res["objectClass"]:
+                        name = res["dNSHostName"]
+                    else:
+                        # foreignSecurityPrincipal maybe other things ?
+                        pass
+                except:
+                    # we can't resolve the sid (delete or from another domain)
+                    name = owner_sid
+
+                print(f"{'    Owner':<30}: {name}")
+                print(
+                    f"{'    Write Owner Principals':<30}: {write_owner_principals[0]}"
+                )
+                for write_owner_principal in write_owner_principals[1:]:
+                    print(f"{' ' * 32}{write_owner_principal}")
+                print(f"{'    Write Dacl Principals':<30}: {write_dacl_principals[0]}")
+                for write_dacl_principal in write_dacl_principals[1:]:
+                    print(f"{' ' * 32}{write_dacl_principal}")
+                print(
+                    f"{'    Write Property Principals':<30}: {write_property_principals[0]}"
+                )
+                for write_property_principal in write_property_principals[1:]:
+                    print(f"{' ' * 32}{write_property_principal}")
+                print()
+                template_number += 1
 
     def list_sccm(self, kwargs):
         """
