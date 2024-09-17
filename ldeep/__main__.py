@@ -1591,8 +1591,8 @@ class Ldeep(Command):
         try:
             # LAPSv1
             entries = self.engine.query(self.engine.LAPS_FILTER(computer), attributes)
-            for entry in entries:
-                if not verbose:
+            if not verbose:
+                for entry in entries:
                     cn = entry["dNSHostName"]
                     password = entry["ms-Mcs-AdmPwd"]
                     try:
@@ -1605,8 +1605,8 @@ class Ldeep(Command):
                     except Exception:
                         expiration_date = entry["ms-Mcs-AdmPwdExpirationTime"]
                     print(f"{cn} {password} {expiration_date}")
-                else:
-                    self.display(entries, verbose)
+            else:
+                self.display(entries, verbose)
         except LDAPAttributeError:
             try:
                 # LAPSv2
