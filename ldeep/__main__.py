@@ -1897,8 +1897,11 @@ class Ldeep(Command):
         if curr == "None":
             curr = None
 
-        if self.engine.modify_password(user, curr, new):
-            info("Password of {username} changed".format(username=user))
+        try:
+            if self.engine.modify_password(user, curr, new):
+                info("Password of {username} changed".format(username=user))
+        except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
+            error(f"{e}, check sAMAccountName")
         else:
             error(
                 "Unable to change {username}'s password, check privileges".format(
