@@ -754,6 +754,7 @@ class Ldeep(Command):
         verbose = kwargs.get("verbose", False)
         enabled = kwargs.get("enabled", False)
 
+        self.engine.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
         if verbose:
             attributes = self.engine.all_attributes()
         else:
