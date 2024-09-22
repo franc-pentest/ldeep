@@ -820,7 +820,10 @@ class Ldeep(Command):
                 for eku in result.get("pKIExtendedKeyUsage"):
                     if eku in AUTHENTICATING_EKUS.keys():
                         client_auth = True
-                    ekus.append(OID_TO_STR_MAP[eku])
+                    try:
+                        ekus.append(OID_TO_STR_MAP[eku])
+                    except KeyError:
+                        ekus.append(eku)
                 if result.get("pKIExtendedKeyUsage") == []:
                     client_auth = True
                 print(f"{'Client Authentication':<30}: {client_auth}")
