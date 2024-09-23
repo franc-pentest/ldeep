@@ -56,8 +56,16 @@ from ldeep.views.constants import (
     WELL_KNOWN_SIDS,
     LOGON_SAM_LOGON_RESPONSE_EX,
     GMSA_ENCRYPTION_CONSTANTS,
+    FUNCTIONAL_LEVELS,
+    LDAP_SERVER_SD_FLAGS_OID_SEC_DESC,
+    ObjectType,
 )
-from ldeep.utils.sddl import parse_ntSecurityDescriptor
+from ldeep.utils.sddl import (
+    parse_ntSecurityDescriptor,
+    is_dacl_protected,
+    getWindowsTimestamp,
+    processAces,
+)
 from ldeep.utils.structure import Structure
 from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
 
@@ -698,6 +706,35 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 guid = str(UUID(bytes_le=res["attributes"]["schemaIDGUID"]))
                 self.objecttype_guid_map[res["attributes"]["name"].lower()] = guid
 
+    def create_object_map(self):
+        self.object_map = dict()
+
+        attributes = ['distinguishedName', 'objectSid', 'objectClass']
+        users = self.query(self.USER_ALL_FILTER(), attributes)
+        for user in users:
+            if 'objectSid' in user.keys():
+                self.object_map[user['objectSid']] = {'type':'user', 'dn':user.get('distinguishedName')}
+                self.object_map[user['distinguishedName']] = {'type':'user', 'sid':user.get('objectSid')}
+
+        computers = self.query(self.COMPUTERS_FILTER(), attributes)
+        for computer in computers:
+            if 'objectSid' in computer.keys():
+                self.object_map[computer['objectSid']] = {'type':'computer', 'dn':computer.get('distinguishedName')}
+                self.object_map[computer['distinguishedName']] = {'type':'computer', 'sid':computer.get('objectSid')}
+
+        groups = self.query(self.GROUPS_FILTER(), attributes)
+        for group in groups:
+            if 'objectSid' in group.keys():
+                self.object_map[group['objectSid']] = {'type':'group', 'dn':group.get('distinguishedName')}
+                self.object_map[group['distinguishedName']] = {'type':'group', 'sid':group.get('objectSid')}
+
+        # not needed ?
+        #ous = self.query(self.OU_FILTER(), attributes)
+        #for ou in ous:
+        #    if 'objectSid' in ou.keys():
+        #        self.object_map[ou['objectSid']] = {'type':'ou', 'dn':ou.get('distinguishedName')}
+        #        self.object_map[ou['distinguishedName']] = {'type':'ou', 'sid':ou.get('objectSid')}
+
     def get_domain_sid(self):
         """
         Return the current domain SID by issuing a LDAP request.
@@ -1056,3 +1093,73 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         except Exception as e:
             raise self.ActiveDirectoryLdapException(e)
         return result
+
+    def bloodhound_domain(self):
+        """
+        Create the domain json file.
+        """
+        self.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
+        domain_info = self.query(self.DOMAIN_INFO_FILTER())
+        data = {}
+        data['data'] = []
+        for domain in domain_info:
+            domain_fqdn = domain.get("distinguishedName").replace("DC=","").replace(",",".")
+            domain_sid = domain.get('objectSid', '')
+            infos = {
+                'ObjectIdentifier': domain.get('objectSid'),
+                'Properties': {
+                    'name': domain_fqdn.upper(),
+                    'domain': domain_fqdn,
+                    'domainsid': domain_sid,
+                    'distinguishedname': domain.get('distinguishedName', '').upper(),
+                    'description': domain.get('description', None),
+                    'functionallevel': FUNCTIONAL_LEVELS.get(domain.get('msDS-Behavior-Version', )),
+                    "isaclprotected": is_dacl_protected(domain.get('nTSecurityDescriptor', 0).get('Raw Type', 0)),
+                    'whencreated': getWindowsTimestamp(domain.get('whenCreated', '0')),
+                    'collected': True,
+                },
+                'Trusts': [], #FIXME, TODO
+                'Aces': [],
+                # The below is all for GPO collection, unsupported as of now.
+                'Links': [],
+                'ChildObjects': [],
+                'GPOChanges': {
+                    'AffectedComputers': [],
+                    'DcomUsers': [],
+                    'LocalAdmins': [],
+                    'PSRemoteUsers': [],
+                    'RemoteDesktopUsers': []
+                },
+                'IsDeleted': domain.get('isDeleted', False),
+                'IsACLProtected': is_dacl_protected(domain.get('nTSecurityDescriptor', 0).get('Raw Type', 0)),
+                'ContainedBy': None, #FIXME, TODO
+            }
+
+            # ACEs now
+            infos['Aces'] = processAces(domain.get("nTSecurityDescriptor"), infos, ObjectType.DOMAIN, domain_fqdn, self.object_map , self.objecttype_guid_map)
+
+            data['data'].append(infos)
+        data['meta'] = {}
+        data['meta']['type'] = "domains"
+        data['meta']['count'] = len(data['data'])
+        data['meta']['version'] = 6
+        data['meta']['methods'] = 521215 # FIXME, TODO
+        import json
+        json_object = json.dumps(data)
+        with open(f"ldeep_domain_bhgenerated.json", "w") as outfile:
+            outfile.write(json_object)
+
+    def bloodhound_users(self):
+        pass
+
+    def bloodhound_computers(self):
+        pass
+
+    def bloodhound_groups(self):
+        pass
+
+    def bloodhound_ous(self):
+        pass
+
+    def bloodhound_gpos(self):
+        pass

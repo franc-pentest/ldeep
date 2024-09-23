@@ -1,3 +1,5 @@
+from enum import Enum
+
 DNS_TYPES = {
     "ZERO": 0x0000,
     "A": 0x0001,
@@ -118,8 +120,20 @@ FOREST_LEVELS = {
     0: "Windows 2000 Server operating system through Windows Server 2008 operating system",
 }
 
+FUNCTIONAL_LEVELS = {
+    0: "2000 Mixed/Native",
+    1: "2003 Interim",
+    2: "2003",
+    3: "2008",
+    4: "2008 R2",
+    5: "2012",
+    6: "2012 R2",
+    7: "2016"
+}
+
+
 WELL_KNOWN_SIDS = {
-    "S-1-5-11": "Authenticated Users",
+    "S-1-5-11": r"BUILTIN\Authenticated Users",
     "S-1-5-32-544": r"BUILTIN\Administrators",
     "S-1-5-32-545": r"BUILTIN\Users",
     "S-1-5-32-546": r"BUILTIN\Guests",
@@ -159,6 +173,73 @@ WELL_KNOWN_SIDS = {
     "S-1-5-32-580": r"BUILTIN\Remote Management Users",
 }
 
+WELLKNOWN_SIDS = {
+    "S-1-0": ("Null Authority", "USER"),
+    "S-1-0-0": ("Nobody", "USER"),
+    "S-1-1": ("World Authority", "USER"),
+    "S-1-1-0": ("Everyone", "GROUP"),
+    "S-1-2": ("Local Authority", "USER"),
+    "S-1-2-0": ("Local", "GROUP"),
+    "S-1-2-1": ("Console Logon", "GROUP"),
+    "S-1-3": ("Creator Authority", "USER"),
+    "S-1-3-0": ("Creator Owner", "USER"),
+    "S-1-3-1": ("Creator Group", "GROUP"),
+    "S-1-3-2": ("Creator Owner Server", "COMPUTER"),
+    "S-1-3-3": ("Creator Group Server", "COMPUTER"),
+    "S-1-3-4": ("Owner Rights", "GROUP"),
+    "S-1-4": ("Non-unique Authority", "USER"),
+    "S-1-5": ("NT Authority", "USER"),
+    "S-1-5-1": ("Dialup", "GROUP"),
+    "S-1-5-2": ("Network", "GROUP"),
+    "S-1-5-3": ("Batch", "GROUP"),
+    "S-1-5-4": ("Interactive", "GROUP"),
+    "S-1-5-6": ("Service", "GROUP"),
+    "S-1-5-7": ("Anonymous", "GROUP"),
+    "S-1-5-8": ("Proxy", "GROUP"),
+    "S-1-5-9": ("Enterprise Domain Controllers", "GROUP"),
+    "S-1-5-10": ("Principal Self", "USER"),
+    "S-1-5-11": ("Authenticated Users", "GROUP"),
+    "S-1-5-12": ("Restricted Code", "GROUP"),
+    "S-1-5-13": ("Terminal Server Users", "GROUP"),
+    "S-1-5-14": ("Remote Interactive Logon", "GROUP"),
+    "S-1-5-15": ("This Organization", "GROUP"),
+    "S-1-5-17": ("IUSR", "USER"),
+    "S-1-5-18": ("Local System", "USER"),
+    "S-1-5-19": ("NT Authority", "USER"),
+    "S-1-5-20": ("Network Service", "USER"),
+    "S-1-5-80-0": ("All Services ", "GROUP"),
+    "S-1-5-32-544": ("Administrators", "GROUP"),
+    "S-1-5-32-545": ("Users", "GROUP"),
+    "S-1-5-32-546": ("Guests", "GROUP"),
+    "S-1-5-32-547": ("Power Users", "GROUP"),
+    "S-1-5-32-548": ("Account Operators", "GROUP"),
+    "S-1-5-32-549": ("Server Operators", "GROUP"),
+    "S-1-5-32-550": ("Print Operators", "GROUP"),
+    "S-1-5-32-551": ("Backup Operators", "GROUP"),
+    "S-1-5-32-552": ("Replicators", "GROUP"),
+    "S-1-5-32-554": ("Pre-Windows 2000 Compatible Access", "GROUP"),
+    "S-1-5-32-555": ("Remote Desktop Users", "GROUP"),
+    "S-1-5-32-556": ("Network Configuration Operators", "GROUP"),
+    "S-1-5-32-557": ("Incoming Forest Trust Builders", "GROUP"),
+    "S-1-5-32-558": ("Performance Monitor Users", "GROUP"),
+    "S-1-5-32-559": ("Performance Log Users", "GROUP"),
+    "S-1-5-32-560": ("Windows Authorization Access Group", "GROUP"),
+    "S-1-5-32-561": ("Terminal Server License Servers", "GROUP"),
+    "S-1-5-32-562": ("Distributed COM Users", "GROUP"),
+    "S-1-5-32-568": ("IIS_IUSRS", "GROUP"),
+    "S-1-5-32-569": ("Cryptographic Operators", "GROUP"),
+    "S-1-5-32-573": ("Event Log Readers", "GROUP"),
+    "S-1-5-32-574": ("Certificate Service DCOM Access", "GROUP"),
+    "S-1-5-32-575": ("RDS Remote Access Servers", "GROUP"),
+    "S-1-5-32-576": ("RDS Endpoint Servers", "GROUP"),
+    "S-1-5-32-577": ("RDS Management Servers", "GROUP"),
+    "S-1-5-32-578": ("Hyper-V Administrators", "GROUP"),
+    "S-1-5-32-579": ("Access Control Assistance Operators", "GROUP"),
+    "S-1-5-32-580": ("Access Control Assistance Operators", "GROUP"),
+    "S-1-5-32-581": ("System Managed Accounts Group", "GROUP"),
+    "S-1-5-32-582": ("Storage Replica Administrators", "GROUP")
+}
+
 FILETIME_FIELDS = [
     "badPasswordTime",
     "lastLogon",
@@ -186,6 +267,78 @@ LDAP_SERVER_SD_FLAGS_OID_SEC_DESC = [
 LOGON_SAM_LOGON_RESPONSE_EX = b"\x17\x00"
 
 GMSA_ENCRYPTION_CONSTANTS = b"\x6b\x65\x72\x62\x65\x72\x6f\x73\x7b\x9b\x5b\x2b\x93\x13\x2b\x93\x5c\x9b\xdc\xda\xd9\x5c\x98\x99\xc4\xca\xe4\xde\xe6\xd6\xca\xe4"
+
+class ObjectType(Enum):
+    BASE = "base"
+    USER = "user"
+    COMPUTER = "computer"
+    GROUP = "group"
+    LOCALGROUP = "localgroup"
+    LOCALUSER = "localuser"
+    GPO = "gpo"
+    DOMAIN = "domain"
+    OU = "organizational-unit"
+    CONTAINER = "container"
+    CONFIGURATION = "configuration"
+    CERTTEMPLATE = "cert-template"
+    ROOTCA = "root-ca"
+    AIACA = "aia-ca"
+    ENTERPRISECA = "enterprise-ca"
+    NTAUTHSTORE = "ntauthstore"
+    ISSUANCEPOLICY = "issuancepolicy"
+
+class EdgeNames(Enum):
+    GenericWrite = "GenericWrite"
+    Owns = "Owns"
+    GenericAll = "GenericAll"
+    WriteDacl = "WriteDacl"
+    WriteOwner = "WriteOwner"
+    AddSelf = "AddSelf"
+    GetChanges = "GetChanges"
+    GetChangesAll = "GetChangesAll"
+    GetChangesInFilteredSet = "GetChangesInFilteredSet"
+    AllExtendedRights = "AllExtendedRights"
+    ForceChangePassword = "ForceChangePassword"
+    AddAllowedToAct = "AddAllowedToAct"
+    ReadLAPSPassword = "ReadLAPSPassword"
+    ReadGMSAPassword = "ReadGMSAPassword"
+    AddMember = "AddMember"
+    WriteSPN = "WriteSPN"
+    AddKeyCredentialLink = "AddKeyCredentialLink"
+    SQLAdmin = "SQLAdmin"
+    WriteAccountRestrictions = "WriteAccountRestrictions"
+    WritePKIEnrollmentFlag = "WritePKIEnrollmentFlag"
+    WritePKINameFlag = "WritePKINameFlag"
+    ManageCA = "ManageCA"
+    ManageCertificates = "ManageCertificates"
+    Enroll = "Enroll"
+    WriteGPLink = "WriteGPLink"
+
+class ACE(Enum):
+    CONTAINER_INHERIT_ACE       = 0x02
+    FAILED_ACCESS_ACE_FLAG      = 0x80
+    INHERIT_ONLY_ACE            = 0x08
+    INHERITED_ACE               = 0x10
+    NO_PROPAGATE_INHERIT_ACE    = 0x04
+    OBJECT_INHERIT_ACE          = 0x01
+    SUCCESSFUL_ACCESS_ACE_FLAG  = 0x04
+
+class ACEGuids(Enum):
+    DSReplicationGetChanges = "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"
+    DSReplicationGetChangesAll = "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"
+    DSReplicationGetChangesInFilteredSet = "89e95b76-444d-4c62-991a-0facbeda640c"
+    UserForceChangePassword = "00299570-246d-11d0-a768-00aa006e0529"
+    AllGuid = "00000000-0000-0000-0000-000000000000"
+    WriteMember = "bf9679c0-0de6-11d0-a285-00aa003049e2"
+    WriteAllowedToAct = "3f78c3e5-f79a-46bd-a0b8-9d18116ddc79"
+    WriteSPN = "f3a64788-5306-11d1-a9c5-0000f80367c1"
+    AddKeyPrincipal = "5b47d60f-6090-40b2-9f37-2a4de88f3063"
+    UserAccountRestrictions = "4c164200-20c0-11d0-a768-00aa006e0529"
+    PKINameFlag = "ea1dddc4-60ff-416e-8cc0-17cee534bce7"
+    PKIEnrollmentFlag = "d15ef7d8-f226-46db-ae79-b34e560bd12c"
+    Enroll = "0e10c968-78fb-11d2-90d4-00c04f79dc55"
+    AutoEnroll = "a05b8cc2-17bc-4802-a710-e7c15ab866a2"
+    WriteGPLink = "f30e3bbf-9ff0-11d1-b603-0000f80367c1"
 
 ADRights = {
     "GenericRead": 0x00020094,

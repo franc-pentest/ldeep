@@ -1861,6 +1861,26 @@ class Ldeep(Command):
         else:
             print(user[2:])
 
+    def misc_bloodhound(self, kwargs):
+        """
+        Generate bloodhound JSON files.
+
+        Arguments:
+            @version:int = 1
+                Bloodhound version (1 for legacy or 2 for CE).
+        """
+        version = kwargs["version"]
+
+        self.engine.create_objecttype_guid_map()
+        self.engine.create_object_map()
+
+        self.engine.bloodhound_domain()
+        self.engine.bloodhound_users()
+        self.engine.bloodhound_computers()
+        self.engine.bloodhound_groups()
+        self.engine.bloodhound_ous()
+        self.engine.bloodhound_gpos()
+
     # ACTION #
 
     def action_unlock(self, kwargs):
