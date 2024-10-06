@@ -81,9 +81,9 @@ class Ldeep(Command):
                             guids = re_compile("{[^}]+}")
                             gpo_guids = guids.findall(record["gPLink"])
                             if len(gpo_guids) > 0:
-                                print("[gPLink]")
+                                print("  [gPLink]:")
                                 print(
-                                    "* {}".format(
+                                    "    * {}".format(
                                         "\n* ".join(
                                             [
                                                 (
