@@ -782,11 +782,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         return result_set
 
     def get_gmsa(self, attributes):
-        try:
-            self.ldap.start_tls()
-        except Exception as e:
-            print(f"Can't retrieve gmsa, TLS needed: {e}")
-            return []
         entries = list(
             self.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes)
         )
@@ -797,25 +792,29 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         for entry in entries:
             sam = entry["sAMAccountName"]
             data = entry["msDS-ManagedPassword"]
-            readers = entry["msDS-GroupMSAMembership"]
-            # Find principals who can read the password
             try:
-                readers_sd = parse_ntSecurityDescriptor(readers)
-                entry["readers"] = []
-                for ace in readers_sd["DACL"]["ACEs"]:
-                    try:
-                        reader_object = list(self.resolve_sid(ace["SID"]))
-                        if reader_object:
-                            name = reader_object[0]["sAMAccountName"]
-                            if "group" in reader_object[0]["objectClass"]:
-                                name += " (group)"
-                            entry["readers"].append(name)
-                        else:
-                            entry["readers"].append(ace["SID"])
-                    except Exception:
-                        pass
+                readers = entry["msDS-GroupMSAMembership"]
             except Exception:
-                pass
+                readers = []
+            # Find principals who can read the password
+            if readers:
+                try:
+                    readers_sd = parse_ntSecurityDescriptor(readers)
+                    entry["readers"] = []
+                    for ace in readers_sd["DACL"]["ACEs"]:
+                        try:
+                            reader_object = list(self.resolve_sid(ace["SID"]))
+                            if reader_object:
+                                name = reader_object[0]["sAMAccountName"]
+                                if "group" in reader_object[0]["objectClass"]:
+                                    name += " (group)"
+                                entry["readers"].append(name)
+                            else:
+                                entry["readers"].append(ace["SID"])
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
             blob = MSDS_MANAGEDPASSWORD_BLOB()
             try:
                 blob.fromString(data)

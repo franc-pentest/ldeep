@@ -26,6 +26,7 @@ from ldeep.views.constants import (
     AUTHENTICATING_EKUS,
     MS_PKI_CERTIFICATE_NAME_FLAG,
     EXTENDED_RIGHTS_NAME_MAP,
+    MS_PKI_ENROLLMENT_FLAG,
     ADRights,
 )
 from ldeep._version import __version__
@@ -763,7 +764,7 @@ class Ldeep(Command):
                 "displayName",
                 "pKIExpirationPeriod",
                 "msPKI-Certificate-Name-Flag",
-                "msPKI-RA-Signature",
+                "msPKI-Enrollment-Flag",
                 "pKIExtendedKeyUsage",
                 "nTSecurityDescriptor",
             ]
@@ -813,6 +814,7 @@ class Ldeep(Command):
                     if result.get("name") in enabled_templates[ca]:
                         print(f"{'Enabled':<30}: True")
                         print(f"{'Certificate Authority':<30}: {ca}")
+                        break
                     else:
                         print(f"{'Enabled':<30}: False")
                 ekus = []
@@ -836,9 +838,11 @@ class Ldeep(Command):
                 print(
                     f"{'Enrollee Supplies Subject':<30}: {'ENROLLEE_SUPPLIES_SUBJECT' in flags}"
                 )
-                print(
-                    f"{'Requires Manager Approval':<30}: {result.get('msPKI-RA-Signature')>0}"
+                manager_approval = (
+                    result.get("msPKI-Enrollment-Flag")
+                    & MS_PKI_ENROLLMENT_FLAG["PEND_ALL_REQUESTS"]
                 )
+                print(f"{'Requires Manager Approval':<30}: {manager_approval>0}")
 
                 if ekus:
                     print(f"{'Extended Key Usage':<30}: {ekus[0]}")
@@ -1903,14 +1907,12 @@ class Ldeep(Command):
         try:
             if self.engine.modify_password(user, curr, new):
                 info("Password of {username} changed".format(username=user))
+            else:
+                error(
+                    f"Unable to change {user}'s password, check domain password policy or privileges"
+                )
         except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
             error(f"{e}, check sAMAccountName")
-        else:
-            error(
-                "Unable to change {username}'s password, check privileges".format(
-                    username=user
-                )
-            )
 
     def action_add_to_group(self, kwargs):
         """
