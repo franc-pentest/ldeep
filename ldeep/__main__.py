@@ -845,7 +845,9 @@ class Ldeep(Command):
                 )
                 print(f"{'Requires Manager Approval':<30}: {manager_approval>0}")
 
-                print(f"{'Template Schema Version':<30}: {result['msPKI-Template-Schema-Version']}")
+                print(
+                    f"{'Template Schema Version':<30}: {result['msPKI-Template-Schema-Version']}"
+                )
 
                 if ekus:
                     print(f"{'Extended Key Usage':<30}: {ekus[0]}")
