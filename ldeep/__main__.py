@@ -766,6 +766,7 @@ class Ldeep(Command):
                 "msPKI-Certificate-Name-Flag",
                 "msPKI-Enrollment-Flag",
                 "pKIExtendedKeyUsage",
+                "msPKI-Template-Schema-Version",
                 "nTSecurityDescriptor",
             ]
 
@@ -843,6 +844,8 @@ class Ldeep(Command):
                     & MS_PKI_ENROLLMENT_FLAG["PEND_ALL_REQUESTS"]
                 )
                 print(f"{'Requires Manager Approval':<30}: {manager_approval>0}")
+
+                print(f"{'Template Schema Version':<30}: {result['msPKI-Template-Schema-Version']}")
 
                 if ekus:
                     print(f"{'Extended Key Usage':<30}: {ekus[0]}")
