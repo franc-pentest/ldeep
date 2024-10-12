@@ -128,7 +128,7 @@ FUNCTIONAL_LEVELS = {
     4: "2008 R2",
     5: "2012",
     6: "2012 R2",
-    7: "2016"
+    7: "2016",
 }
 
 
@@ -237,7 +237,7 @@ WELLKNOWN_SIDS = {
     "S-1-5-32-579": ("Access Control Assistance Operators", "GROUP"),
     "S-1-5-32-580": ("Access Control Assistance Operators", "GROUP"),
     "S-1-5-32-581": ("System Managed Accounts Group", "GROUP"),
-    "S-1-5-32-582": ("Storage Replica Administrators", "GROUP")
+    "S-1-5-32-582": ("Storage Replica Administrators", "GROUP"),
 }
 
 FILETIME_FIELDS = [
@@ -268,6 +268,7 @@ LOGON_SAM_LOGON_RESPONSE_EX = b"\x17\x00"
 
 GMSA_ENCRYPTION_CONSTANTS = b"\x6b\x65\x72\x62\x65\x72\x6f\x73\x7b\x9b\x5b\x2b\x93\x13\x2b\x93\x5c\x9b\xdc\xda\xd9\x5c\x98\x99\xc4\xca\xe4\xde\xe6\xd6\xca\xe4"
 
+
 class ObjectType(Enum):
     BASE = "base"
     USER = "user"
@@ -286,6 +287,7 @@ class ObjectType(Enum):
     ENTERPRISECA = "enterprise-ca"
     NTAUTHSTORE = "ntauthstore"
     ISSUANCEPOLICY = "issuancepolicy"
+
 
 class EdgeNames(Enum):
     GenericWrite = "GenericWrite"
@@ -314,14 +316,16 @@ class EdgeNames(Enum):
     Enroll = "Enroll"
     WriteGPLink = "WriteGPLink"
 
+
 class ACE(Enum):
-    CONTAINER_INHERIT_ACE       = 0x02
-    FAILED_ACCESS_ACE_FLAG      = 0x80
-    INHERIT_ONLY_ACE            = 0x08
-    INHERITED_ACE               = 0x10
-    NO_PROPAGATE_INHERIT_ACE    = 0x04
-    OBJECT_INHERIT_ACE          = 0x01
-    SUCCESSFUL_ACCESS_ACE_FLAG  = 0x04
+    CONTAINER_INHERIT_ACE = 0x02
+    FAILED_ACCESS_ACE_FLAG = 0x80
+    INHERIT_ONLY_ACE = 0x08
+    INHERITED_ACE = 0x10
+    NO_PROPAGATE_INHERIT_ACE = 0x04
+    OBJECT_INHERIT_ACE = 0x01
+    SUCCESSFUL_ACCESS_ACE_FLAG = 0x04
+
 
 class ACEGuids(Enum):
     DSReplicationGetChanges = "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"
@@ -339,6 +343,7 @@ class ACEGuids(Enum):
     Enroll = "0e10c968-78fb-11d2-90d4-00c04f79dc55"
     AutoEnroll = "a05b8cc2-17bc-4802-a710-e7c15ab866a2"
     WriteGPLink = "f30e3bbf-9ff0-11d1-b603-0000f80367c1"
+
 
 ADRights = {
     "GenericRead": 0x00020094,

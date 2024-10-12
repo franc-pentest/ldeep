@@ -1874,7 +1874,7 @@ class Ldeep(Command):
         self.engine.create_objecttype_guid_map()
         self.engine.create_object_map()
 
-        self.engine.bloodhound_domain()
+        # self.engine.bloodhound_domain()
         self.engine.bloodhound_users()
         self.engine.bloodhound_computers()
         self.engine.bloodhound_groups()

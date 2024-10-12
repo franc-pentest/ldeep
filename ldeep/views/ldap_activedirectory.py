@@ -54,6 +54,7 @@ from ldeep.views.constants import (
     PWD_PROPERTIES,
     TRUSTS_INFOS,
     WELL_KNOWN_SIDS,
+    WELLKNOWN_SIDS,
     LOGON_SAM_LOGON_RESPONSE_EX,
     GMSA_ENCRYPTION_CONSTANTS,
     FUNCTIONAL_LEVELS,
@@ -64,6 +65,7 @@ from ldeep.utils.sddl import (
     parse_ntSecurityDescriptor,
     is_dacl_protected,
     getWindowsTimestamp,
+    convertIsoTimestamp,
     processAces,
 )
 from ldeep.utils.structure import Structure
@@ -255,6 +257,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     PRIMARY_GROUP_ID = lambda s, i: f"(objectSid={s.get_domain_sid()}-{i})"
     DOMAIN_INFO_FILTER = lambda _: "(objectClass=domain)"
     GPO_INFO_FILTER = lambda _: "(objectCategory=groupPolicyContainer)"
+    CONTAINER_INFO_FILTER = (
+        lambda _: "(|(objectCategory=Container)(objectClass=msExchSystemObjectsContainer)(objectClass=builtinDomain))"
+    )
     PSO_INFO_FILTER = lambda _: "(objectClass=msDS-PasswordSettings)"
     TRUSTS_INFO_FILTER = lambda _: "(objectCategory=trustedDomain)"
     OU_FILTER = lambda _: "(|(objectClass=OrganizationalUnit)(objectClass=domain))"
@@ -709,31 +714,77 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     def create_object_map(self):
         self.object_map = dict()
 
-        attributes = ['distinguishedName', 'objectSid', 'objectClass']
+        attributes = ["distinguishedName", "objectSid", "objectClass"]
         users = self.query(self.USER_ALL_FILTER(), attributes)
         for user in users:
-            if 'objectSid' in user.keys():
-                self.object_map[user['objectSid']] = {'type':'user', 'dn':user.get('distinguishedName')}
-                self.object_map[user['distinguishedName']] = {'type':'user', 'sid':user.get('objectSid')}
+            if "objectSid" in user.keys():
+                self.object_map[user["objectSid"]] = {
+                    "type": "user",
+                    "dn": user.get("distinguishedName"),
+                }
+                self.object_map[user["distinguishedName"]] = {
+                    "type": "user",
+                    "sid": user.get("objectSid"),
+                }
 
         computers = self.query(self.COMPUTERS_FILTER(), attributes)
         for computer in computers:
-            if 'objectSid' in computer.keys():
-                self.object_map[computer['objectSid']] = {'type':'computer', 'dn':computer.get('distinguishedName')}
-                self.object_map[computer['distinguishedName']] = {'type':'computer', 'sid':computer.get('objectSid')}
+            if "objectSid" in computer.keys():
+                self.object_map[computer["objectSid"]] = {
+                    "type": "computer",
+                    "dn": computer.get("distinguishedName"),
+                }
+                self.object_map[computer["distinguishedName"]] = {
+                    "type": "computer",
+                    "sid": computer.get("objectSid"),
+                }
 
         groups = self.query(self.GROUPS_FILTER(), attributes)
         for group in groups:
-            if 'objectSid' in group.keys():
-                self.object_map[group['objectSid']] = {'type':'group', 'dn':group.get('distinguishedName')}
-                self.object_map[group['distinguishedName']] = {'type':'group', 'sid':group.get('objectSid')}
+            if "objectSid" in group.keys():
+                self.object_map[group["objectSid"]] = {
+                    "type": "group",
+                    "dn": group.get("distinguishedName"),
+                }
+                self.object_map[group["distinguishedName"]] = {
+                    "type": "group",
+                    "sid": group.get("objectSid"),
+                }
 
-        # not needed ?
-        #ous = self.query(self.OU_FILTER(), attributes)
-        #for ou in ous:
-        #    if 'objectSid' in ou.keys():
-        #        self.object_map[ou['objectSid']] = {'type':'ou', 'dn':ou.get('distinguishedName')}
-        #        self.object_map[ou['distinguishedName']] = {'type':'ou', 'sid':ou.get('objectSid')}
+        # add default groups
+        self.object_map[group["objectSid"]] = {
+            "type": "group",
+            "dn": group.get("distinguishedName"),
+        }
+        self.object_map[group["distinguishedName"]] = {
+            "type": "group",
+            "sid": group.get("objectSid"),
+        }
+
+        attributes = ["distinguishedName", "objectGUID", "objectClass"]
+        containers = self.query(self.CONTAINER_INFO_FILTER(), attributes)
+        for container in containers:
+            if "objectGUID" in container.keys():
+                self.object_map[container["objectGUID"]] = {
+                    "type": "container",
+                    "dn": container.get("distinguishedName"),
+                }
+                self.object_map[container["distinguishedName"]] = {
+                    "type": "container",
+                    "sid": container.get("objectGUID"),
+                }
+
+        ous = self.query(self.OU_FILTER(), attributes)
+        for ou in ous:
+            if "objectGUID" in ou.keys():
+                self.object_map[ou["objectGUID"]] = {
+                    "type": "ou",
+                    "dn": ou.get("distinguishedName"),
+                }
+                self.object_map[ou["distinguishedName"]] = {
+                    "type": "ou",
+                    "sid": ou.get("objectGUID"),
+                }
 
     def get_domain_sid(self):
         """
@@ -1101,65 +1152,485 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         self.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
         domain_info = self.query(self.DOMAIN_INFO_FILTER())
         data = {}
-        data['data'] = []
+        data["data"] = []
         for domain in domain_info:
-            domain_fqdn = domain.get("distinguishedName").replace("DC=","").replace(",",".")
-            domain_sid = domain.get('objectSid', '')
+            domain_fqdn = (
+                domain.get("distinguishedName").replace("DC=", "").replace(",", ".")
+            )
+            domain_sid = domain.get("objectSid", "")
             infos = {
-                'ObjectIdentifier': domain.get('objectSid'),
-                'Properties': {
-                    'name': domain_fqdn.upper(),
-                    'domain': domain_fqdn,
-                    'domainsid': domain_sid,
-                    'distinguishedname': domain.get('distinguishedName', '').upper(),
-                    'description': domain.get('description', None),
-                    'functionallevel': FUNCTIONAL_LEVELS.get(domain.get('msDS-Behavior-Version', )),
-                    "isaclprotected": is_dacl_protected(domain.get('nTSecurityDescriptor', 0).get('Raw Type', 0)),
-                    'whencreated': getWindowsTimestamp(domain.get('whenCreated', '0')),
-                    'collected': True,
+                "ObjectIdentifier": domain.get("objectSid"),
+                "Properties": {
+                    "name": domain_fqdn.upper(),
+                    "domain": domain_fqdn,
+                    "domainsid": domain_sid,
+                    "distinguishedname": domain.get("distinguishedName", "").upper(),
+                    "description": domain.get("description", None),
+                    "functionallevel": FUNCTIONAL_LEVELS.get(
+                        domain.get(
+                            "msDS-Behavior-Version",
+                        )
+                    ),
+                    "isaclprotected": is_dacl_protected(
+                        domain.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                    ),
+                    "whencreated": getWindowsTimestamp(domain.get("whenCreated", "0")),
+                    "collected": True,
                 },
-                'Trusts': [], #FIXME, TODO
-                'Aces': [],
+                "Trusts": [],  # FIXME, TODO
                 # The below is all for GPO collection, unsupported as of now.
-                'Links': [],
-                'ChildObjects': [],
-                'GPOChanges': {
-                    'AffectedComputers': [],
-                    'DcomUsers': [],
-                    'LocalAdmins': [],
-                    'PSRemoteUsers': [],
-                    'RemoteDesktopUsers': []
+                "Links": [],
+                "ChildObjects": [],
+                "GPOChanges": {
+                    "AffectedComputers": [],
+                    "DcomUsers": [],
+                    "LocalAdmins": [],
+                    "PSRemoteUsers": [],
+                    "RemoteDesktopUsers": [],
                 },
-                'IsDeleted': domain.get('isDeleted', False),
-                'IsACLProtected': is_dacl_protected(domain.get('nTSecurityDescriptor', 0).get('Raw Type', 0)),
-                'ContainedBy': None, #FIXME, TODO
+                "IsDeleted": domain.get("isDeleted", False),
+                "IsACLProtected": is_dacl_protected(
+                    domain.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                ),
+                "ContainedBy": None,  # FIXME, TODO
+                "Aces": [],
             }
 
             # ACEs now
-            infos['Aces'] = processAces(domain.get("nTSecurityDescriptor"), infos, ObjectType.DOMAIN, domain_fqdn, self.object_map , self.objecttype_guid_map)
+            infos["Aces"] = processAces(
+                domain.get("nTSecurityDescriptor"),
+                infos,
+                ObjectType.DOMAIN,
+                domain_fqdn,
+                self.object_map,
+                self.objecttype_guid_map,
+            )
 
-            data['data'].append(infos)
-        data['meta'] = {}
-        data['meta']['type'] = "domains"
-        data['meta']['count'] = len(data['data'])
-        data['meta']['version'] = 6
-        data['meta']['methods'] = 521215 # FIXME, TODO
+            data["data"].append(infos)
+        data["meta"] = {}
+        data["meta"]["type"] = "domains"
+        data["meta"]["count"] = len(data["data"])
+        data["meta"]["version"] = 6
+        data["meta"]["methods"] = 521215  # FIXME, TODO
+        # return data, domain_fqdn
         import json
+
         json_object = json.dumps(data)
         with open(f"ldeep_domain_bhgenerated.json", "w") as outfile:
             outfile.write(json_object)
 
     def bloodhound_users(self):
-        pass
+        """
+        Create the users json file.
+        """
+        self.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
+        users_info = self.query(self.USER_ALL_FILTER())
+        data = {}
+        data["data"] = []
+        for user in users_info:
+            parts = user.get("distinguishedName").split(",")
+            domain_fqdn = ".".join(
+                [part.split("=")[1] for part in parts if part.startswith("DC=")]
+            )
+            domain_sid = "-".join(user.get("objectSid", "").split("-")[:7])
+            container = ",".join(parts[1:])
+            container_guid = self.object_map[container]["sid"].strip("{}").upper()
+            container_type = self.object_map[container]["type"].strip("{}").capitalize()
+            # if user.get('objectSid') == "S-1-5-21-361363594-1987475875-3919384990-1114":
+            #    breakpoint()
+            infos = {
+                "Properties": {
+                    "name": f"{user.get('sAMAccountName', '')}@{domain_fqdn}".upper(),
+                    "domain": domain_fqdn.upper(),
+                    "domainsid": domain_sid,
+                    "distinguishedname": user.get("distinguishedName", "").upper(),
+                    "samaccountname": user.get("sAMAccountName", ""),
+                    "description": user.get("description", None),
+                    "isaclprotected": is_dacl_protected(
+                        user.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                    ),
+                    "whencreated": getWindowsTimestamp(user.get("whenCreated", "0")),
+                    "sensitive": "NOT_DELEGATED" in user.get("userAccountControl", ""),
+                    "dontreqpreauth": "DONT_REQ_PREAUTH"
+                    in user.get("userAccountControl", ""),
+                    "passwordnotreqd": "PASSWD_NOTREQD"
+                    in user.get("userAccountControl", ""),
+                    "unconstraineddelegation": "TRUSTED_FOR_DELEGATION"
+                    in user.get("userAccountControl", ""),
+                    "pwdneverexpires": "DONT_EXPIRE_PASSWORD"
+                    in user.get("userAccountControl", ""),
+                    "enabled": "ACCOUNTDISABLE"
+                    not in user.get("userAccountControl", ""),
+                    "trustedtoauth": "TRUSTED_TO_AUTH_FOR_DELEGATION"
+                    in user.get("userAccountControl", ""),
+                    "lastlogon": convertIsoTimestamp(
+                        user.get("lastLogon", "0"), "lastlogon"
+                    ),  # FIXME
+                    "lastlogontimestamp": convertIsoTimestamp(
+                        user.get("lastLogonTimestamp", ""), "lastlogontimestamp"
+                    ),  # FIXME
+                    "pwdlastset": convertIsoTimestamp(
+                        user.get("pwdLastSet", ""), "pwdlastset"
+                    ),  # FIXME
+                    "serviceprincipalnames": (
+                        user.get("servicePrincipalName", [])
+                        if isinstance(user.get("servicePrincipalName", []), list)
+                        else [user.get("servicePrincipalName", [])]
+                    ),
+                    "hasspn": len(user.get("servicePrincipalName", [])) > 0,
+                    "displayname": user.get("displayName", None),
+                    "email": user.get("mail", None),
+                    "title": user.get("title", None),
+                    "homedirectory": user.get("homeDirectory", None),
+                    "userpassword": user.get("userPassword", None),
+                    "unixpassword": user.get("unixuserpassword", None),
+                    "unicodepassword": user.get("unicodePwd", None),
+                    "sfupassword": None,  # FIXME, TODO
+                    "logonscript": user.get("scriptpath", None),
+                    "admincount": user.get("adminCount", 0) > 0,
+                    "sidhistory": user.get("Sidhistory", []),
+                },
+                "AllowedToDelegate": user.get("msDS-AllowedToDelegateTo", []),
+                "SPNTargets": [],  # FIXME, TODO
+                "IsDeleted": user.get("isDeleted", False),
+                "IsACLProtected": is_dacl_protected(
+                    user.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                ),
+                "PrimaryGroupSID": f"{domain_sid}-{user.get('primaryGroupID')}",
+                "HasSIDHistory": user.get("Sidhistory", []),
+                "ObjectIdentifier": user.get("objectSid", ""),
+                "ContainedBy": {
+                    "ObjectIdentifier": container_guid,
+                    "ObjectType": container_type,
+                },
+                "Aces": [],
+            }
+
+            # ACEs now
+            infos["Aces"] = processAces(
+                user.get("nTSecurityDescriptor"),
+                infos,
+                ObjectType.USER,
+                domain_fqdn,
+                self.object_map,
+                self.objecttype_guid_map,
+            )
+
+            data["data"].append(infos)
+
+        # Create built-in users
+        default = {
+            "AllowedToDelegate": [],
+            "ObjectIdentifier": f"{domain_fqdn}-S-1-5-20",
+            "PrimaryGroupSID": None,
+            "Properties": {
+                "domain": domain_fqdn,
+                "domainsid": domain_sid,
+                "name": f"NT AUTHORITY@{domain_fqdn}",
+            },
+            "Aces": [],
+            "SPNTargets": [],
+            "HasSIDHistory": [],
+            "IsDeleted": False,
+            "IsACLProtected": False,
+        }
+        data["data"].append(default)
+
+        data["meta"] = {}
+        data["meta"]["type"] = "users"
+        data["meta"]["count"] = len(data["data"])
+        data["meta"]["version"] = 6
+        data["meta"]["methods"] = 521215  # FIXME, TODO
+        import json
+
+        json_object = json.dumps(data)
+        with open(f"ldeep_users_bhgenerated.json", "w") as outfile:
+            outfile.write(json_object)
 
     def bloodhound_computers(self):
-        pass
+        """
+        Create the users json file.
+        """
+        self.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
+        computers_info = self.query(self.COMPUTERS_FILTER())
+        data = {}
+        data["data"] = []
+        for computer in computers_info:
+            parts = computer.get("distinguishedName").split(",")
+            domain_fqdn = ".".join(
+                [part.split("=")[1] for part in parts if part.startswith("DC=")]
+            )
+            domain_sid = "-".join(computer.get("objectSid", "").split("-")[:7])
+            container = ",".join(parts[1:])
+            container_guid = self.object_map[container]["sid"].strip("{}").upper()
+            container_type = self.object_map[container]["type"].strip("{}").capitalize()
+            infos = {
+                "Properties": {
+                    "name": computer.get(
+                        "dNSHostName",
+                        f"{computer.get('sAMAccountName').strip('$')}.{domain_fqdn}".upper(),
+                    ),
+                    "domain": domain_fqdn.upper(),
+                    "domainsid": domain_sid,
+                    "distinguishedname": computer.get("distinguishedName", "").upper(),
+                    "samaccountname": computer.get("sAMAccountName", ""),
+                    "haslaps": False,  # FIXME, TODO
+                    "isaclprotected": is_dacl_protected(
+                        computer.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                    ),
+                    "description": computer.get("description", None),
+                    "whencreated": getWindowsTimestamp(
+                        computer.get("whenCreated", "0")
+                    ),
+                    "enabled": "ACCOUNTDISABLE"
+                    not in computer.get("userAccountControl", ""),
+                    "unconstraineddelegation": "TRUSTED_FOR_DELEGATION"
+                    in computer.get("userAccountControl", ""),
+                    "trustedtoauth": "TRUSTED_TO_AUTH_FOR_DELEGATION"
+                    in computer.get("userAccountControl", ""),
+                    "isdc": False,  # FIXME, TODO
+                    "lastlogon": convertIsoTimestamp(
+                        computer.get("lastLogon", "0"), "lastlogon"
+                    ),  # FIXME
+                    "lastlogontimestamp": convertIsoTimestamp(
+                        computer.get("lastLogonTimestamp", ""), "lastlogontimestamp"
+                    ),  # FIXME
+                    "pwdlastset": convertIsoTimestamp(
+                        computer.get("pwdLastSet", ""), "pwdlastset"
+                    ),  # FIXME
+                    "serviceprincipalnames": (
+                        computer.get("servicePrincipalName", [])
+                        if isinstance(computer.get("servicePrincipalName", []), list)
+                        else [user.get("servicePrincipalName", [])]
+                    ),
+                    "email": computer.get("mail", None),
+                    "operatingsystem": "",  # FIXME, TODO
+                    "sidhistory": computer.get("Sidhistory", []),
+                },
+                "PrimaryGroupSID": f"{domain_sid}-{computer.get('primaryGroupID')}",
+                "AllowedToDelegate": computer.get("msDS-AllowedToDelegateTo", []),
+                "AllowedToAct": [],  # FIXME, TODO
+                "HasSIDHistory": computer.get("Sidhistory", []),
+                "DumpSMSAPassword": [],  # FIXME, TODO
+                "Sessions": {
+                    "Results": [],
+                    "Collected": False,
+                    "FailureReason": None,
+                },
+                "PrivilegedSessions": {
+                    "Results": [],
+                    "Collected": False,
+                    "FailureReason": None,
+                },
+                "RegistrySessions": {
+                    "Results": [],
+                    "Collected": False,
+                    "FailureReason": None,
+                },
+                "LocalGroups": [],
+                "UserRights": [],
+                "DCRegistryData": {
+                    "CertificateMappingMethods": None,
+                    "StrongCertificateBindingEnforcement": None,
+                },
+                "Status": {"Connectable": False, "Error": "PwdLastSetOutOfRange"},
+                "IsDC": False,  # FIXME, TODO
+                "DomainSID": domain_sid,
+                "Aces": [],
+                "ObjectIdentifier": computer.get("objectSid", ""),
+                "IsDeleted": computer.get("isDeleted", False),
+                "IsACLProtected": is_dacl_protected(
+                    computer.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                ),
+                "ContainedBy": {
+                    "ObjectIdentifier": container_guid,
+                    "ObjectType": container_type,
+                },
+            }
+
+            # ACEs now
+            infos["Aces"] = processAces(
+                computer.get("nTSecurityDescriptor"),
+                infos,
+                ObjectType.COMPUTER,
+                domain_fqdn,
+                self.object_map,
+                self.objecttype_guid_map,
+            )
+            data["data"].append(infos)
+
+        data["meta"] = {}
+        data["meta"]["type"] = "computers"
+        data["meta"]["count"] = len(data["data"])
+        data["meta"]["version"] = 6
+        data["meta"]["methods"] = 521215  # FIXME, TODO
+        import json
+
+        json_object = json.dumps(data)
+        with open(f"ldeep_computers_bhgenerated.json", "w") as outfile:
+            outfile.write(json_object)
 
     def bloodhound_groups(self):
-        pass
+        """
+        Create the groups json file.
+        """
+        self.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
+        groups_info = self.query(self.GROUPS_FILTER())
+        data = {}
+        data["data"] = []
+        domain_sid = ""
+        for group in groups_info:
+            parts = group.get("distinguishedName").split(",")
+            domain_fqdn = ".".join(
+                [part.split("=")[1] for part in parts if part.startswith("DC=")]
+            )
+            old_domain_sid = domain_sid
+            domain_sid = (
+                "-".join(group.get("objectSid", "").split("-", 7)[:7])
+                if group.get("objectSid", "").startswith("S-1-5-21")
+                else old_domain_sid
+            )
+            container = ",".join(parts[1:])
+            container_guid = self.object_map[container]["sid"].strip("{}").upper()
+            container_type = self.object_map[container]["type"].strip("{}").capitalize()
+            if group.get("objectSid") in WELLKNOWN_SIDS:
+                objectIdentifier = f"{domain_fqdn}-{group.get('objectSid')}"
+            else:
+                objectIdentifier = group.get("objectSid")
+            infos = {
+                "Properties": {
+                    "name": f"{group.get('sAMAccountName', '')}@{domain_fqdn}".upper(),
+                    "domain": domain_fqdn.upper(),
+                    "distinguishedname": group.get("distinguishedName", "").upper(),
+                    "domainsid": domain_sid,
+                    "samaccountname": group.get("sAMAccountName", ""),
+                    "isaclprotected": is_dacl_protected(
+                        group.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                    ),
+                    "description": group.get("description", None)[0],
+                    "whencreated": getWindowsTimestamp(group.get("whenCreated", "0")),
+                    "admincount": group.get("adminCount", 0) > 0,
+                },
+                "Members": [],  # FIXME, TODO
+                "Members": self.enum_group_members(
+                    domain_fqdn, group.get("distinguishedName")
+                ),
+                "Aces": [],
+                "ObjectIdentifier": objectIdentifier,
+                "IsDeleted": group.get("isDeleted", False),
+                "IsACLProtected": is_dacl_protected(
+                    group.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                ),
+                "ContainedBy": {
+                    "ObjectIdentifier": container_guid,
+                    "ObjectType": container_type,
+                },
+            }
+
+            # ACEs now
+            infos["Aces"] = processAces(
+                group.get("nTSecurityDescriptor"),
+                infos,
+                ObjectType.GROUP,
+                domain_fqdn,
+                self.object_map,
+                self.objecttype_guid_map,
+            )
+            data["data"].append(infos)
+
+        # Create built-in groups
+        default1 = {
+            "ObjectIdentifier": f"{domain_fqdn}-S-1-5-9",
+            "ContainedBy": None,
+            "Properties": {
+                "domain": domain_fqdn,
+                "domainsid": domain_sid,
+                "name": f"ENTERPRISE DOMAIN CONTROLLERS@{domain_fqdn}",
+            },
+            "Aces": [],
+            "Members": [],  # FIXME, TODO
+            "IsDeleted": False,
+            "IsACLProtected": False,
+        }
+        default2 = {
+            "ObjectIdentifier": f"{domain_fqdn}-S-1-1-0",
+            "ContainedBy": None,
+            "Properties": {
+                "domain": domain_fqdn,
+                "domainsid": domain_sid,
+                "name": f"EVERYONE@{domain_fqdn}",
+                "reconcile": False,
+            },
+            "Aces": [],
+            "Members": [],  # FIXME, TODO
+            "IsDeleted": False,
+            "IsACLProtected": False,
+        }
+        default3 = {
+            "ObjectIdentifier": f"{domain_fqdn}-S-1-5-11",
+            "ContainedBy": None,
+            "Properties": {
+                "domain": domain_fqdn,
+                "domainsid": domain_sid,
+                "name": f"AUTHENTICATED USERS@{domain_fqdn}",
+                "reconcile": False,
+            },
+            "Aces": [],
+            "Members": [],  # FIXME, TODO
+            "IsDeleted": False,
+            "IsACLProtected": False,
+        }
+        default4 = {
+            "ObjectIdentifier": f"{domain_fqdn}-S-1-5-4",
+            "ContainedBy": None,
+            "Properties": {
+                "domain": domain_fqdn,
+                "domainsid": domain_sid,
+                "name": f"INTERACTIVE@{domain_fqdn}",
+                "reconcile": False,
+            },
+            "Aces": [],
+            "Members": [],  # FIXME, TODO
+            "IsDeleted": False,
+            "IsACLProtected": False,
+        }
+
+        # data['data'].append(default1)
+        # data['data'].append(default2)
+        # data['data'].append(default3)
+        # data['data'].append(default4)
+
+        data["meta"] = {}
+        data["meta"]["type"] = "groups"
+        data["meta"]["count"] = len(data["data"])
+        data["meta"]["version"] = 6
+        data["meta"]["methods"] = 521215  # FIXME, TODO
+        import json
+
+        json_object = json.dumps(data)
+        with open(f"ldeep_groups_bhgenerated.json", "w") as outfile:
+            outfile.write(json_object)
 
     def bloodhound_ous(self):
         pass
 
     def bloodhound_gpos(self):
         pass
+
+    def enum_group_members(self, domain_fqdn, group_dn):
+        data = []
+        results = self.query(
+            ldapfilter=f"(memberOf={group_dn})",
+            attributes=["objectSid", "objectClass"],
+        )
+        for res in results:
+            item = dict()
+            item["ObjectIdentifier"] = res.get("objectSid")
+            try:
+                item["ObjectType"] = self.object_map[res.get("objectSid")]["type"]
+            except:
+                item["ObjectIdentifier"] = f"{domain_fqdn}-{res.get('objectSid')}"
+                item["ObjectType"] = WELLKNOWN_SIDS[res.get("objectSid")][1].lower()
+            data.append(item)
+
+        return data
