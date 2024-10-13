@@ -224,10 +224,6 @@ def parse_sddl_dacl_ace_type(ace_type):
     return ACEType[ace_type]
 
 
-def is_dacl_protected(mask: int) -> bool:
-    return bin(mask)[2:][3] == "1"
-
-
 def getWindowsTimestamp(t: str) -> int:
     unix_timestamp = int(datetime.timestamp(t.replace(tzinfo=timezone.utc)))
     windows_timestramp = unix_timestamp + 11644473600
@@ -237,6 +233,10 @@ def getWindowsTimestamp(t: str) -> int:
 
 
 def convertIsoTimestamp(t, field: str) -> int:
+    """
+    Convert Windows timestamp (100 ns since 1 Jan 1601) to
+    unix timestamp.
+    """
     if isinstance(t, str):
         if len(t) == 0:
             if field == "lastlogontimestamp":
@@ -245,10 +245,7 @@ def convertIsoTimestamp(t, field: str) -> int:
                 return 0
     if str(t).startswith("1601-01-01"):
         return 0
-    if field == "lastlogon":
-        return int(t.timestamp()) - 5736548
-    else:
-        return int(t.timestamp())
+    return int(t.timestamp())
 
 
 def ace_has_Flags(value: int, ace_raw_flags: int) -> bool:
@@ -283,6 +280,29 @@ def can_write_property(ace: dict, binproperty: str) -> bool:
     if ace.get("GUID").strip("{}") == binproperty:
         return True
     return False
+
+
+def is_dacl_protected(mask: int) -> bool:
+    return bin(mask)[2:][3] == "1"
+
+
+def parse_gmsa(data: dict, object_map: dict) -> list:
+    results = []
+    if "msDS-GroupMSAMembership" in data.keys():
+        # Find principals who can read the password
+        readers_sd = parse_ntSecurityDescriptor(data.get("msDS-GroupMSAMembership"))
+        for ace in readers_sd["DACL"]["ACEs"]:
+            reader_sid = ace["SID"]
+            reader_object_type = object_map[reader_sid]["type"]
+            results.append(
+                {
+                    "PrincipalSID": reader_sid,
+                    "PrincipalType": reader_object_type,
+                    "RightName": "ReadGMSAPassword",
+                    "IsInherited": False,
+                }
+            )
+    return results
 
 
 def processAces(
@@ -376,6 +396,13 @@ def processAces(
             if object_type.value in ["user", "domain"] and hasFlag(
                 mask, ADRights.get("ExtendedRight")
             ):
+                # FIXME
+                # if (
+                #    entry["ObjectIdentifier"]
+                #    == "S-1-5-21-361363594-1987475875-3919384990-1231"
+                # ):
+                #    if sid == "S-1-5-21-361363594-1987475875-3919384990-512":
+                #        breakpoint()
                 r2 = r.copy()
                 r2["RightName"] = EdgeNames.AllExtendedRights.name
                 r2["IsInherited"] = is_inherited

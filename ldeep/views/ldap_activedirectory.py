@@ -67,6 +67,7 @@ from ldeep.utils.sddl import (
     getWindowsTimestamp,
     convertIsoTimestamp,
     processAces,
+    parse_gmsa,
 )
 from ldeep.utils.structure import Structure
 from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
@@ -234,7 +235,10 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     TEMPLATE_FILTER = lambda _: "(objectClass=pKICertificateTemplate)"
     PRIMARY_SCCM_FILTER = lambda _: "(cn=System Management)"
     DP_SCCM_FILTER = lambda _: "(objectClass=mssmsmanagementpoint)"
-    USER_ALL_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user))"
+    # USER_ALL_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user))"
+    USER_ALL_FILTER = (
+        lambda _: "(|(&(objectCategory=person)(objectClass=user))(objectClass=msDS-GroupManagedServiceAccount))"
+    )
     USER_SPN_FILTER = (
         lambda _: "(&(objectCategory=Person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt)))"
     )
@@ -246,7 +250,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     )
     ANR = lambda _, u: f"(anr={u})"
     DISTINGUISHED_NAME = lambda _, n: f"(distinguishedName={n})"
-    COMPUTERS_FILTER = lambda _: "(objectClass=computer)"
+    COMPUTERS_FILTER = (
+        lambda _: "(&(objectClass=computer)(!(objectClass=msDS-GroupManagedServiceAccount)))"
+    )
     DC_FILTER = lambda _: "(userAccountControl:1.2.840.113556.1.4.803:=8192)"
     GROUP_DN_FILTER = lambda _, g: f"(&(objectClass=group)(sAMAccountName={g}))"
     USER_DN_FILTER = (
@@ -719,11 +725,11 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         for user in users:
             if "objectSid" in user.keys():
                 self.object_map[user["objectSid"]] = {
-                    "type": "user",
+                    "type": "User",
                     "dn": user.get("distinguishedName"),
                 }
                 self.object_map[user["distinguishedName"]] = {
-                    "type": "user",
+                    "type": "User",
                     "sid": user.get("objectSid"),
                 }
 
@@ -731,11 +737,11 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         for computer in computers:
             if "objectSid" in computer.keys():
                 self.object_map[computer["objectSid"]] = {
-                    "type": "computer",
+                    "type": "Computer",
                     "dn": computer.get("distinguishedName"),
                 }
                 self.object_map[computer["distinguishedName"]] = {
-                    "type": "computer",
+                    "type": "Computer",
                     "sid": computer.get("objectSid"),
                 }
 
@@ -743,34 +749,34 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         for group in groups:
             if "objectSid" in group.keys():
                 self.object_map[group["objectSid"]] = {
-                    "type": "group",
+                    "type": "Group",
                     "dn": group.get("distinguishedName"),
                 }
                 self.object_map[group["distinguishedName"]] = {
-                    "type": "group",
+                    "type": "Group",
                     "sid": group.get("objectSid"),
                 }
 
         # add default groups
-        self.object_map[group["objectSid"]] = {
-            "type": "group",
-            "dn": group.get("distinguishedName"),
-        }
-        self.object_map[group["distinguishedName"]] = {
-            "type": "group",
-            "sid": group.get("objectSid"),
-        }
+        # self.object_map[group["objectSid"]] = {
+        #    "type": "group",
+        #    "dn": group.get("distinguishedName"),
+        # }
+        # self.object_map[group["distinguishedName"]] = {
+        #    "type": "group",
+        #    "sid": group.get("objectSid"),
+        # }
 
         attributes = ["distinguishedName", "objectGUID", "objectClass"]
         containers = self.query(self.CONTAINER_INFO_FILTER(), attributes)
         for container in containers:
             if "objectGUID" in container.keys():
                 self.object_map[container["objectGUID"]] = {
-                    "type": "container",
+                    "type": "Container",
                     "dn": container.get("distinguishedName"),
                 }
                 self.object_map[container["distinguishedName"]] = {
-                    "type": "container",
+                    "type": "Container",
                     "sid": container.get("objectGUID"),
                 }
 
@@ -778,11 +784,11 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         for ou in ous:
             if "objectGUID" in ou.keys():
                 self.object_map[ou["objectGUID"]] = {
-                    "type": "ou",
+                    "type": "OU",
                     "dn": ou.get("distinguishedName"),
                 }
                 self.object_map[ou["distinguishedName"]] = {
-                    "type": "ou",
+                    "type": "OU",
                     "sid": ou.get("objectGUID"),
                 }
 
@@ -1165,7 +1171,11 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     "domain": domain_fqdn,
                     "domainsid": domain_sid,
                     "distinguishedname": domain.get("distinguishedName", "").upper(),
-                    "description": domain.get("description", None),
+                    "description": (
+                        domain.get("description")[0]
+                        if isinstance(domain.get("description"), list)
+                        else None
+                    ),
                     "functionallevel": FUNCTIONAL_LEVELS.get(
                         domain.get(
                             "msDS-Behavior-Version",
@@ -1211,7 +1221,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"]["type"] = "domains"
         data["meta"]["count"] = len(data["data"])
         data["meta"]["version"] = 6
-        data["meta"]["methods"] = 521215  # FIXME, TODO
+        data["meta"]["methods"] = 262885  # DCOnly
         # return data, domain_fqdn
         import json
 
@@ -1236,7 +1246,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             container = ",".join(parts[1:])
             container_guid = self.object_map[container]["sid"].strip("{}").upper()
             container_type = self.object_map[container]["type"].strip("{}").capitalize()
-            # if user.get('objectSid') == "S-1-5-21-361363594-1987475875-3919384990-1114":
+            # if user.get('objectSid') == "S-1-5-21-361363594-1987475875-3919384990-1224":
             #    breakpoint()
             infos = {
                 "Properties": {
@@ -1245,7 +1255,11 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     "domainsid": domain_sid,
                     "distinguishedname": user.get("distinguishedName", "").upper(),
                     "samaccountname": user.get("sAMAccountName", ""),
-                    "description": user.get("description", None),
+                    "description": (
+                        user.get("description")[0]
+                        if isinstance(user.get("description"), list)
+                        else None
+                    ),
                     "isaclprotected": is_dacl_protected(
                         user.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
                     ),
@@ -1316,6 +1330,13 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 self.objecttype_guid_map,
             )
 
+            # Specific properties and ACLs
+            if "msDS-GroupManagedServiceAccount" in user.get("objectClass", []):
+                infos["Properties"]["gmsa"] = True
+                gmsa_readers = parse_gmsa(user, self.object_map)
+                for principal in gmsa_readers:
+                    infos["Aces"].append(principal)
+
             data["data"].append(infos)
 
         # Create built-in users
@@ -1326,7 +1347,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             "Properties": {
                 "domain": domain_fqdn,
                 "domainsid": domain_sid,
-                "name": f"NT AUTHORITY@{domain_fqdn}",
+                "name": f"NETWORK SERVICE@{domain_fqdn}",
+                "reconcile": False,
             },
             "Aces": [],
             "SPNTargets": [],
@@ -1340,7 +1362,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"]["type"] = "users"
         data["meta"]["count"] = len(data["data"])
         data["meta"]["version"] = 6
-        data["meta"]["methods"] = 521215  # FIXME, TODO
+        data["meta"]["methods"] = 262885  # DCOnly
         import json
 
         json_object = json.dumps(data)
@@ -1363,7 +1385,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             domain_sid = "-".join(computer.get("objectSid", "").split("-")[:7])
             container = ",".join(parts[1:])
             container_guid = self.object_map[container]["sid"].strip("{}").upper()
-            container_type = self.object_map[container]["type"].strip("{}").capitalize()
+            container_type = self.object_map[container]["type"].strip("{}")
             infos = {
                 "Properties": {
                     "name": computer.get(
@@ -1378,7 +1400,11 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     "isaclprotected": is_dacl_protected(
                         computer.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
                     ),
-                    "description": computer.get("description", None),
+                    "description": (
+                        computer.get("description")[0]
+                        if isinstance(computer.get("description"), list)
+                        else None
+                    ),
                     "whencreated": getWindowsTimestamp(
                         computer.get("whenCreated", "0")
                     ),
@@ -1388,28 +1414,31 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     in computer.get("userAccountControl", ""),
                     "trustedtoauth": "TRUSTED_TO_AUTH_FOR_DELEGATION"
                     in computer.get("userAccountControl", ""),
-                    "isdc": False,  # FIXME, TODO
+                    "isdc": "SERVER_TRUST_ACCOUNT"
+                    in computer.get("userAccountControl", ""),
                     "lastlogon": convertIsoTimestamp(
                         computer.get("lastLogon", "0"), "lastlogon"
                     ),  # FIXME
                     "lastlogontimestamp": convertIsoTimestamp(
                         computer.get("lastLogonTimestamp", ""), "lastlogontimestamp"
-                    ),  # FIXME
+                    ),
                     "pwdlastset": convertIsoTimestamp(
                         computer.get("pwdLastSet", ""), "pwdlastset"
-                    ),  # FIXME
+                    ),
                     "serviceprincipalnames": (
                         computer.get("servicePrincipalName", [])
                         if isinstance(computer.get("servicePrincipalName", []), list)
                         else [user.get("servicePrincipalName", [])]
                     ),
                     "email": computer.get("mail", None),
-                    "operatingsystem": "",  # FIXME, TODO
+                    "operatingsystem": computer.get("operatingSystem", None),
                     "sidhistory": computer.get("Sidhistory", []),
                 },
                 "PrimaryGroupSID": f"{domain_sid}-{computer.get('primaryGroupID')}",
                 "AllowedToDelegate": computer.get("msDS-AllowedToDelegateTo", []),
-                "AllowedToAct": [],  # FIXME, TODO
+                "AllowedToAct": self.parse_rbcd_attribute(
+                    computer.get("msDS-AllowedToActOnBehalfOfOtherIdentity", None)
+                ),
                 "HasSIDHistory": computer.get("Sidhistory", []),
                 "DumpSMSAPassword": [],  # FIXME, TODO
                 "Sessions": {
@@ -1434,7 +1463,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     "StrongCertificateBindingEnforcement": None,
                 },
                 "Status": {"Connectable": False, "Error": "PwdLastSetOutOfRange"},
-                "IsDC": False,  # FIXME, TODO
+                "IsDC": "SERVER_TRUST_ACCOUNT"
+                in computer.get("userAccountControl", ""),
                 "DomainSID": domain_sid,
                 "Aces": [],
                 "ObjectIdentifier": computer.get("objectSid", ""),
@@ -1463,7 +1493,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"]["type"] = "computers"
         data["meta"]["count"] = len(data["data"])
         data["meta"]["version"] = 6
-        data["meta"]["methods"] = 521215  # FIXME, TODO
+        data["meta"]["methods"] = 262885  # DCOnly
         import json
 
         json_object = json.dumps(data)
@@ -1507,11 +1537,14 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     "isaclprotected": is_dacl_protected(
                         group.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
                     ),
-                    "description": group.get("description", None)[0],
+                    "description": (
+                        group.get("description")[0]
+                        if isinstance(group.get("description"), list)
+                        else None
+                    ),
                     "whencreated": getWindowsTimestamp(group.get("whenCreated", "0")),
                     "admincount": group.get("adminCount", 0) > 0,
                 },
-                "Members": [],  # FIXME, TODO
                 "Members": self.enum_group_members(
                     domain_fqdn, group.get("distinguishedName")
                 ),
@@ -1539,19 +1572,33 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             data["data"].append(infos)
 
         # Create built-in groups
+        config_dn = self.ldap.server.info.other["configurationNamingContext"][0]
+        rootdomain_fqdn = (
+            config_dn.strip("CN=Configuration,").replace("DC=", "").replace(",", ".")
+        )
         default1 = {
             "ObjectIdentifier": f"{domain_fqdn}-S-1-5-9",
             "ContainedBy": None,
             "Properties": {
-                "domain": domain_fqdn,
-                "domainsid": domain_sid,
+                "domain": rootdomain_fqdn,
                 "name": f"ENTERPRISE DOMAIN CONTROLLERS@{domain_fqdn}",
             },
             "Aces": [],
-            "Members": [],  # FIXME, TODO
+            "Members": [],
             "IsDeleted": False,
             "IsACLProtected": False,
         }
+        attributes = ["dnshostname", "objectSid"]
+        dcs_infos = self.query(self.DC_FILTER(), attributes)
+        for dc in dcs_infos:
+            memberdata = {
+                "ObjectIdentifier": dc.get("objectSid"),
+                "ObjectType": self.object_map[dc.get("objectSid")]["type"]
+                .strip("{}")
+                .capitalize(),
+            }
+            default1["Members"].append(memberdata)
+
         default2 = {
             "ObjectIdentifier": f"{domain_fqdn}-S-1-1-0",
             "ContainedBy": None,
@@ -1594,17 +1641,32 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             "IsDeleted": False,
             "IsACLProtected": False,
         }
+        default5 = {
+            "ObjectIdentifier": f"{domain_fqdn}-S-1-5-7",
+            "ContainedBy": None,
+            "Properties": {
+                "domain": domain_fqdn,
+                "domainsid": domain_sid,
+                "name": f"ANONYMOUS@{domain_fqdn}",
+                "reconcile": False,
+            },
+            "Aces": [],
+            "Members": [],  # FIXME, TODO
+            "IsDeleted": False,
+            "IsACLProtected": False,
+        }
 
-        # data['data'].append(default1)
-        # data['data'].append(default2)
-        # data['data'].append(default3)
-        # data['data'].append(default4)
+        data["data"].append(default1)
+        data["data"].append(default2)
+        data["data"].append(default3)
+        data["data"].append(default4)
+        data["data"].append(default5)
 
         data["meta"] = {}
         data["meta"]["type"] = "groups"
         data["meta"]["count"] = len(data["data"])
         data["meta"]["version"] = 6
-        data["meta"]["methods"] = 521215  # FIXME, TODO
+        data["meta"]["methods"] = 262885  # DCOnly
         import json
 
         json_object = json.dumps(data)
@@ -1618,6 +1680,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         pass
 
     def enum_group_members(self, domain_fqdn, group_dn):
+        # if "Enterprise" in group_dn:
+        #    print(group_dn)
+        #    breakpoint()
         data = []
         results = self.query(
             ldapfilter=f"(memberOf={group_dn})",
@@ -1627,10 +1692,26 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             item = dict()
             item["ObjectIdentifier"] = res.get("objectSid")
             try:
-                item["ObjectType"] = self.object_map[res.get("objectSid")]["type"]
+                item["ObjectType"] = self.object_map[res.get("objectSid")][
+                    "type"
+                ].capitalize()
             except:
                 item["ObjectIdentifier"] = f"{domain_fqdn}-{res.get('objectSid')}"
-                item["ObjectType"] = WELLKNOWN_SIDS[res.get("objectSid")][1].lower()
+                item["ObjectType"] = WELLKNOWN_SIDS[res.get("objectSid")][
+                    1
+                ].capitalize()
             data.append(item)
 
+        return data
+
+    def parse_rbcd_attribute(self, rbcd_value):
+        data = []
+        if rbcd_value:
+            sd = parse_ntSecurityDescriptor(rbcd_value)
+            for ace in sd["DACL"]["ACEs"]:
+                sid = ace.get("SID")
+                if not sid:
+                    continue
+                object_type = self.object_map[sid]["type"]
+                data.append({"ObjectIdentifier": sid, "ObjectType": object_type})
         return data
