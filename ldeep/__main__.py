@@ -671,7 +671,6 @@ class Ldeep(Command):
                     result[key] = ATTRIBUTE_TRANSLATION[key][int(result[key])]
             trusts.append(result)
 
-
         FIELDS_TO_PRINT = [
             "dn",
             "cn",
@@ -741,7 +740,9 @@ class Ldeep(Command):
                 base=",".join(
                     [
                         "CN=Enrollment Services,CN=Public Key Services,CN=Services",
-                        self.engine.ldap.server.info.other["configurationNamingContext"][0],
+                        self.engine.ldap.server.info.other[
+                            "configurationNamingContext"
+                        ][0],
                     ]
                 ),
             ),
@@ -807,10 +808,10 @@ class Ldeep(Command):
             self.display(results, verbose)
             return
         else:
-            all_enabled_templates =  list(set().union(*adcs_infos.values()))
+            all_enabled_templates = list(set().union(*adcs_infos.values()))
             template_number = 1
             for template in templates:
-                if (enabled and template.get("name") not in all_enabled_templates):
+                if enabled and template.get("name") not in all_enabled_templates:
                     continue
 
                 print(template_number)
@@ -994,7 +995,6 @@ class Ldeep(Command):
 
                 print()
                 template_number += 1
-
 
     def list_sccm(self, kwargs):
         """
