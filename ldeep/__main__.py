@@ -640,7 +640,15 @@ class Ldeep(Command):
                 Results will contain full information
         """
         verbose = kwargs.get("verbose", False)
+
+        if verbose:
+            attributes = self.engine.all_attributes()
+
         results = self.engine.query(self.engine.TRUSTS_INFO_FILTER())
+
+        if verbose:
+            self.display(results, verbose)
+            return
 
         ATTRIBUTE_TRANSLATION = {
             "trustDirection": {
@@ -663,9 +671,6 @@ class Ldeep(Command):
                     result[key] = ATTRIBUTE_TRANSLATION[key][int(result[key])]
             trusts.append(result)
 
-        if verbose:
-            self.display(results, verbose)
-            return
 
         FIELDS_TO_PRINT = [
             "dn",
@@ -735,8 +740,8 @@ class Ldeep(Command):
                 attributes,
                 base=",".join(
                     [
-                        "CN=Enrollment Services,CN=Public Key Services,CN=Services,CN=CONFIGURATION",
-                        self.engine.base_dn,
+                        "CN=Enrollment Services,CN=Public Key Services,CN=Services",
+                        self.engine.ldap.server.info.other["configurationNamingContext"][0],
                     ]
                 ),
             ),
@@ -770,13 +775,13 @@ class Ldeep(Command):
                 "nTSecurityDescriptor",
             ]
 
-        results = self.engine.query(
+        templates = self.engine.query(
             self.engine.TEMPLATE_FILTER(),
             attributes,
             base=",".join(
                 [
-                    "CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration",
-                    self.engine.base_dn,
+                    "CN=Certificate Templates,CN=Public Key Services,CN=Services",
+                    self.engine.ldap.server.info.other["configurationNamingContext"][0],
                 ]
             ),
         )
@@ -787,51 +792,59 @@ class Ldeep(Command):
             attributes,
             base=",".join(
                 [
-                    "CN=Enrollment Services,CN=Public Key Services,CN=Services,CN=CONFIGURATION",
-                    self.engine.base_dn,
+                    "CN=Enrollment Services,CN=Public Key Services,CN=Services",
+                    self.engine.ldap.server.info.other["configurationNamingContext"][0],
                 ]
             ),
         )
+        self.engine.set_controls()
 
-        enabled_templates = {}
+        adcs_infos = {}
         for pki in pkis_infos:
-            enabled_templates[pki.get("cn")] = pki.get("certificateTemplates")
+            adcs_infos[pki.get("cn")] = pki.get("certificateTemplates")
 
         if verbose:
             self.display(results, verbose)
             return
         else:
+            all_enabled_templates =  list(set().union(*adcs_infos.values()))
             template_number = 1
-            for result in results:
-                if (
-                    enabled
-                    and result.get("name") not in enabled_templates[pki.get("cn")]
-                ):
+            for template in templates:
+                if (enabled and template.get("name") not in all_enabled_templates):
                     continue
+
                 print(template_number)
-                print(f"{'Template Name':<30}: {result.get('name')}")
-                print(f"{'Display Name':<30}: {result.get('displayName')}")
-                for ca in enabled_templates:
-                    if result.get("name") in enabled_templates[ca]:
-                        print(f"{'Enabled':<30}: True")
-                        print(f"{'Certificate Authority':<30}: {ca}")
+                print(f"{'Template Name':<30}: {template.get('name')}")
+                print(f"{'Display Name':<30}: {template.get('displayName')}")
+
+                for ca in adcs_infos:
+                    if template.get("name") in adcs_infos[ca]:
+                        is_enabled = True
+                        cert_auth = ca
                         break
                     else:
-                        print(f"{'Enabled':<30}: False")
+                        is_enabled = False
+
+                if is_enabled:
+                    print(f"{'Enabled':<30}: True")
+                    print(f"{'Certificate Authority':<30}: {ca}")
+                else:
+                    print(f"{'Enabled':<30}: False")
+
                 ekus = []
                 client_auth = False
-                for eku in result.get("pKIExtendedKeyUsage"):
+                for eku in template.get("pKIExtendedKeyUsage"):
                     if eku in AUTHENTICATING_EKUS.keys():
                         client_auth = True
                     try:
                         ekus.append(OID_TO_STR_MAP[eku])
                     except KeyError:
                         ekus.append(eku)
-                if result.get("pKIExtendedKeyUsage") == []:
+                if template.get("pKIExtendedKeyUsage") == []:
                     client_auth = True
                 print(f"{'Client Authentication':<30}: {client_auth}")
 
-                flag_mask = result.get("msPKI-Certificate-Name-Flag") & 0xFFFFFFFF
+                flag_mask = template.get("msPKI-Certificate-Name-Flag") & 0xFFFFFFFF
                 flags = []
                 for flag_name, flag_value in MS_PKI_CERTIFICATE_NAME_FLAG.items():
                     if flag_mask & flag_value:
@@ -840,13 +853,13 @@ class Ldeep(Command):
                     f"{'Enrollee Supplies Subject':<30}: {'ENROLLEE_SUPPLIES_SUBJECT' in flags}"
                 )
                 manager_approval = (
-                    result.get("msPKI-Enrollment-Flag")
+                    template.get("msPKI-Enrollment-Flag")
                     & MS_PKI_ENROLLMENT_FLAG["PEND_ALL_REQUESTS"]
                 )
                 print(f"{'Requires Manager Approval':<30}: {manager_approval>0}")
 
                 print(
-                    f"{'Template Schema Version':<30}: {result['msPKI-Template-Schema-Version']}"
+                    f"{'Template Schema Version':<30}: {template.get('msPKI-Template-Schema-Version','')}"
                 )
 
                 if ekus:
@@ -863,7 +876,7 @@ class Ldeep(Command):
                 write_dacl_principals = []
                 write_property_principals = []
                 for principal in (
-                    result.get("nTSecurityDescriptor").get("DACL").get("ACEs")
+                    template.get("nTSecurityDescriptor").get("DACL").get("ACEs")
                 ):
                     right = ""
                     sid = principal.get("SID")
@@ -926,13 +939,6 @@ class Ldeep(Command):
                                 write_property_principals.append(f"{name} on {right}")
                             else:
                                 write_property_principals.append(name)
-                        """
-                        add property for the following ?
-                        msPKI-Certificate-Name-Flag (add CT_FLAG_ENROLLEE_SUPPLIES_SUBJECT)
-                        msPKI-Enrollment-Flag (remove approval)
-                        pKIExtendedKeyUsage (never saw)
-                        msPKI-Certificate-Application-Policy (add Client Auth EKU)
-                        """
 
                 print("Permissions")
                 if enroll_principals:
@@ -943,7 +949,7 @@ class Ldeep(Command):
 
                 # Object Control Permissions
                 print("  Object Control Permissions")
-                owner_sid = result.get("nTSecurityDescriptor").get("Owner SID")
+                owner_sid = template.get("nTSecurityDescriptor").get("Owner SID")
                 try:
                     res = next(self.engine.resolve_sid(owner_sid))
                     if "group" in res["objectClass"]:
@@ -988,6 +994,7 @@ class Ldeep(Command):
 
                 print()
                 template_number += 1
+
 
     def list_sccm(self, kwargs):
         """
