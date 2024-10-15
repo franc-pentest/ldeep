@@ -805,7 +805,7 @@ class Ldeep(Command):
             adcs_infos[pki.get("cn")] = pki.get("certificateTemplates")
 
         if verbose:
-            self.display(results, verbose)
+            self.display(templates, verbose)
             return
         else:
             all_enabled_templates = list(set().union(*adcs_infos.values()))
