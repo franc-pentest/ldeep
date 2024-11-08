@@ -2067,6 +2067,23 @@ class Ldeep(Command):
                 error_message = self.engine.ldap.result["message"]
                 print(f"ERROR: {error_message}")
 
+    def action_enable_user(self, kwargs):
+        """
+        Enable a previously disabled user account
+
+        Arguments:
+            #user_name:string
+                Name of the user to enable.
+        """
+        user = kwargs["user_name"]
+        if self.engine.enable_user(user):
+            info(
+                "User {username} enabled (or was already enabled)".format(
+                    username=user
+                )
+            )
+        else:
+            error("Unable to enable {username}, check privileges".format(username=user))
 
 def main():
     parser = ArgumentParser(f"ldeep - {__version__}")

@@ -1055,3 +1055,26 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         except Exception as e:
             raise self.ActiveDirectoryLdapException(e)
         return result
+
+    def enable_user(self, user):
+        """
+        Enable a previously disabled user account on the domain.
+
+        @user: the name of the user to enable.
+
+        @return the result code on the modification action
+        """
+        results = list(self.query(self.USER_DN_FILTER(user)))
+        if len(results) != 1:
+            raise self.ActiveDirectoryLdapException("Zero or non uniq result")
+        else:
+            user_dn = results[0]['dn']
+        # Check if the user exists
+        if self.ldap.search(user_dn, "(objectClass=user)", attributes=["userAccountControl"]):
+            try:
+                # Update userAccountControl to 512 (NORMAL_ACCOUNT) to enable the account
+                mod_attrs = {'userAccountControl': [('MODIFY_REPLACE', 512)]} # enable
+                result = self.ldap.modify(user_dn, mod_attrs)
+                return result
+            except Exception as e:
+                raise self.ActiveDirectoryLdapException(e)
