@@ -263,6 +263,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     LAPS2_FILTER = (
         lambda _, s: f"(&(objectCategory=computer)(msLAPS-PasswordExpirationTime=*)(cn={s}))"
     )
+    GMSA_FILTER = lambda _, s: f"(&(ObjectClass=msDS-GroupManagedServiceAccount)(sAMAccountName={s}))"
     SMSA_FILTER = lambda _: "(ObjectClass=msDS-ManagedServiceAccount)"
     BITLOCKERKEY_FILTER = lambda _: "(objectClass=msFVE-RecoveryInformation)"
     FSMO_DOMAIN_NAMING_FILTER = (
@@ -781,9 +782,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
         return result_set
 
-    def get_gmsa(self, attributes):
+    def get_gmsa(self, attributes, target):
         entries = list(
-            self.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes)
+            self.query(self.GMSA_FILTER(target), attributes)
         )
 
         constants = GMSA_ENCRYPTION_CONSTANTS

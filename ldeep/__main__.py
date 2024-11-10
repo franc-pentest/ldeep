@@ -419,14 +419,18 @@ class Ldeep(Command):
 
     def list_gmsa(self, kwargs):
         """
-        List the gmsa accounts and retrieve NT hash if possible.
+        List the gmsa accounts and retrieve secrets(NT + kerberos keys) if possible.
 
         Arguments:
             @verbose:bool
                 Results will contain full information
+            @target:string
+                Retrieve only the information regarding the specified target account
         """
         verbose = kwargs.get("verbose", False)
+        target = kwargs.get("target", "*")
         hidden_attributes = ["msDS-ManagedPassword"]
+
         if verbose:
             attributes = ALL + hidden_attributes
         else:
@@ -437,7 +441,7 @@ class Ldeep(Command):
             ] + hidden_attributes
 
         try:
-            entries = self.engine.get_gmsa(attributes)
+            entries = self.engine.get_gmsa(attributes, target)
         except LDAPAttributeError as e:
             error(f"{e}. The domain's functional level may be too old")
             entries = []
