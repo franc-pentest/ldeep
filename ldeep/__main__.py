@@ -822,30 +822,34 @@ class Ldeep(Command):
                 print(f"{'Template Name':<30}: {template.get('name')}")
                 print(f"{'Display Name':<30}: {template.get('displayName')}")
 
+                is_enabled = False
+                cert_authorities = []
                 for ca in adcs_infos:
                     if template.get("name") in adcs_infos[ca]:
                         is_enabled = True
-                        cert_auth = ca
-                        break
-                    else:
-                        is_enabled = False
+                        cert_authorities.append(ca)
 
                 if is_enabled:
+                    print(f"{'Certificate Authority':<30}: {cert_authorities[0]}")
+                    for cert_auth in cert_authorities[1:]:
+                        print(f"{' ' * 32}{cert_auth}")
                     print(f"{'Enabled':<30}: True")
-                    print(f"{'Certificate Authority':<30}: {ca}")
                 else:
                     print(f"{'Enabled':<30}: False")
 
                 ekus = []
                 client_auth = False
-                for eku in template.get("pKIExtendedKeyUsage"):
-                    if eku in AUTHENTICATING_EKUS.keys():
+                if "pKIExtendedKeyUsage" in template.keys():
+                    for eku in template.get("pKIExtendedKeyUsage"):
+                        if eku in AUTHENTICATING_EKUS.keys():
+                            client_auth = True
+                        try:
+                            ekus.append(OID_TO_STR_MAP[eku])
+                        except KeyError:
+                            ekus.append(eku)
+                    if template.get("pKIExtendedKeyUsage") == []:
                         client_auth = True
-                    try:
-                        ekus.append(OID_TO_STR_MAP[eku])
-                    except KeyError:
-                        ekus.append(eku)
-                if template.get("pKIExtendedKeyUsage") == []:
+                else:
                     client_auth = True
                 print(f"{'Client Authentication':<30}: {client_auth}")
 
