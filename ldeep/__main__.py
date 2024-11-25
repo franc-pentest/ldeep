@@ -141,8 +141,6 @@ class Ldeep(Command):
                         print(f"{field}: {value}")
                 elif "domain" in record["objectClass"]:
                     print(record["dn"])
-                elif "pKIEnrollmentService" in record["objectClass"]:
-                    print(record["dNSHostName"])
                 elif (
                     "msDS-AuthNPolicy" in record["objectClass"]
                     or "msDS-AuthNPolicySilo" in record["objectClass"]
