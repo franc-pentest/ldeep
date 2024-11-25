@@ -735,23 +735,39 @@ class Ldeep(Command):
         if verbose:
             attributes = self.engine.all_attributes()
         else:
-            attributes = ["dNSHostName", "objectClass"]
+            attributes = [
+                "cACertificateDN",
+                "certificateTemplates",
+                "dNSHostName",
+                "name",
+            ]
 
-        self.display(
-            self.engine.query(
-                self.engine.PKI_FILTER(),
-                attributes,
-                base=",".join(
-                    [
-                        "CN=Enrollment Services,CN=Public Key Services,CN=Services",
-                        self.engine.ldap.server.info.other[
-                            "configurationNamingContext"
-                        ][0],
-                    ]
-                ),
+        ca_info = self.engine.query(
+            self.engine.PKI_FILTER(),
+            attributes,
+            base=",".join(
+                [
+                    "CN=Enrollment Services,CN=Public Key Services,CN=Services",
+                    self.engine.ldap.server.info.other["configurationNamingContext"][0],
+                ]
             ),
-            verbose,
         )
+        if verbose:
+            self.display(ca_info, verbose)
+            return
+        else:
+            ca_number = 1
+            print("Certificate Authorities")
+            for ca in ca_info:
+                print(ca_number)
+                print(f"{'CA Name':<30}: {ca.get('name')}")
+                print(f"{'DNS Name':<30}: {ca.get('dNSHostName')}")
+                print(f"{'Certificate Subject':<30}: {ca.get('cACertificateDN')}")
+                if ca.get("certificateTemplates"):
+                    print(f"{'Associated Templates':<30}")
+                    for template in ca.get("certificateTemplates"):
+                        print(f"{' ' * 32}{template}")
+                ca_number += 1
 
     def list_templates(self, kwargs):
         """
