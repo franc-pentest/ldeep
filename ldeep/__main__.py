@@ -84,7 +84,7 @@ class Ldeep(Command):
                                 print("  [gPLink]:")
                                 print(
                                     "    * {}".format(
-                                        "\n* ".join(
+                                        "\n    * ".join(
                                             [
                                                 (
                                                     extra_records[g]
