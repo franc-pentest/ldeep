@@ -497,48 +497,16 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         elif method == "SIMPLE":
             if "." in domain:
                 domain, _, _ = domain.partition(".")
-            if self.server.startswith("ldaps"):
-                if not password:
-                    print("Password is required (-p)")
-                    exit(1)
-                self.ldap = Connection(
-                    server,
-                    user=f"{domain}\\{username}",
-                    password=password,
-                    authentication=SIMPLE,
-                    check_names=True,
-                )
-            else:
-                if not ntlm:
-                    print(
-                        "Please authenticate using the NT hash for simple bind without ldaps"
-                    )
-                    exit(1)
-                try:
-                    lm, nt = ntlm.split(":")
-                    lm = "aad3b435b51404eeaad3b435b51404ee" if not lm else lm
-                    ntlm = f"{lm}:{nt}"
-                except Exception as e:
-                    print(e)
-                    print("Incorrect hash, format is [LMHASH]:NTHASH")
-                    exit(1)
-                if self.no_encryption:
-                    self.ldap = Connection(
-                        server,
-                        user=f"{domain}\\{username}",
-                        password=ntlm,
-                        authentication=NTLM,
-                        check_names=True,
-                    )
-                else:
-                    self.ldap = Connection(
-                        server,
-                        user=f"{domain}\\{username}",
-                        password=ntlm,
-                        authentication=NTLM,
-                        session_security=ENCRYPT,
-                        check_names=True,
-                    )
+            if not password:
+                print("Password is required with simple bind (-p)")
+                exit(1)
+            self.ldap = Connection(
+                server,
+                user=f"{domain}\\{username}",
+                password=password,
+                authentication=SIMPLE,
+                check_names=True,
+            )
 
         try:
             if method == "Certificate":
