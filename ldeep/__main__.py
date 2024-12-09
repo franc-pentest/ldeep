@@ -2132,7 +2132,7 @@ def main():
         "--type",
         default="ntlm",
         choices=["ntlm", "simple"],
-        help="Authentication type: ntlm (default) or simple",
+        help="Authentication type: ntlm (default) or simple. Simple bind will always be in cleartext with ldap (not ldaps)",
     )
     ldap.add_argument(
         "--throttle",
@@ -2151,7 +2151,7 @@ def main():
         "--no-encryption",
         default=False,
         action="store_true",
-        help="Encrypt the communication or not (default True)",
+        help="Encrypt the communication or not (default: encrypted, except with simple bind and ldap)",
     )
 
     cache.add_argument(
