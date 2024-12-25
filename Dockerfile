@@ -1,9 +1,9 @@
 # Build command: docker build -t ldeep .
 # Execute with: docker run --rm ldeep $args
 
-FROM python:3.8-slim-buster
+FROM python:3.12-slim
 WORKDIR /ldeep
+RUN apt-get update && apt-get install -y libkrb5-dev gcc python3-dev
 COPY . .
-RUN pip install -r requirements.txt
-RUN [ "python", "setup.py", "install" ]
+RUN PDM_BUILD_SCM_VERSION=$(cat VERSION) pip install .
 ENTRYPOINT [ "ldeep" ]
