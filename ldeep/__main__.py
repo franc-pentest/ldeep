@@ -221,13 +221,18 @@ class Ldeep(Command):
                                 except:
                                     print(f"Primary/Secondary Site: {sid}")
                 # sccm management points
-                elif "mSSMSManagementPoint" in record["objectClass"] and "connectionPoint" in record["objectClass"]:
+                elif (
+                    "mSSMSManagementPoint" in record["objectClass"]
+                    and "connectionPoint" in record["objectClass"]
+                ):
                     print(f"Management point: {record['dNSHostName']}")
                     print(f"  Default MP: {record['mSSMSDefaultMP']}")
                     print(f"  Site code: {record['mSSMSSiteCode']}")
                 # potential sccm distribution points
                 elif "connectionPoint" in record["objectClass"]:
-                    print(f"Potential distribution point: {','.join(record['distinguishedName'].split(',')[1:])}")
+                    print(
+                        f"Potential distribution point: {','.join(record['distinguishedName'].split(',')[1:])}"
+                    )
 
                 if self.engine.page_size > 0 and k % self.engine.page_size == 0:
                     sleep(self.engine.throttle)
@@ -1054,7 +1059,12 @@ class Ldeep(Command):
         if verbose:
             attributes = self.engine.all_attributes()
         else:
-            attributes = ["objectClass", "dNSHostName", "mSSMSDefaultMP", "mSSMSSiteCode"]
+            attributes = [
+                "objectClass",
+                "dNSHostName",
+                "mSSMSDefaultMP",
+                "mSSMSSiteCode",
+            ]
 
         results = self.engine.query(
             self.engine.MP_SCCM_FILTER(),
