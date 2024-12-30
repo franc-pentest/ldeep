@@ -220,9 +220,19 @@ class Ldeep(Command):
                                     print(f"Primary/Secondary Site: {name}")
                                 except:
                                     print(f"Primary/Secondary Site: {sid}")
-                # sccm distribution points
-                elif "mSSMSManagementPoint" in record["objectClass"]:
-                    print(f"Distribution point: {record['dNSHostName']}")
+                # sccm management points
+                elif (
+                    "mSSMSManagementPoint" in record["objectClass"]
+                    and "connectionPoint" in record["objectClass"]
+                ):
+                    print(f"Management point: {record['dNSHostName']}")
+                    print(f"  Default MP: {record['mSSMSDefaultMP']}")
+                    print(f"  Site code: {record['mSSMSSiteCode']}")
+                # potential sccm distribution points
+                elif "connectionPoint" in record["objectClass"]:
+                    print(
+                        f"Potential distribution point: {','.join(record['distinguishedName'].split(',')[1:])}"
+                    )
 
                 if self.engine.page_size > 0 and k % self.engine.page_size == 0:
                     sleep(self.engine.throttle)
@@ -1044,12 +1054,33 @@ class Ldeep(Command):
         except Exception as e:
             error(e, close_array=verbose)
 
-        # Distribution points
+        # Management points
         self.engine.set_controls()
         if verbose:
             attributes = self.engine.all_attributes()
         else:
-            attributes = ["objectClass", "dNSHostName"]
+            attributes = [
+                "objectClass",
+                "dNSHostName",
+                "mSSMSDefaultMP",
+                "mSSMSSiteCode",
+            ]
+
+        results = self.engine.query(
+            self.engine.MP_SCCM_FILTER(),
+            attributes,
+        )
+
+        try:
+            self.display(results, verbose)
+        except LDAPObjectClassError as e:
+            error(f"{e}. SCCM may not be installed", close_array=verbose)
+
+        # Distribution points
+        if verbose:
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = ["objectClass", "distinguishedName"]
 
         results = self.engine.query(
             self.engine.DP_SCCM_FILTER(),
