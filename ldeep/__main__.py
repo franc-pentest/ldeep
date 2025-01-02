@@ -1513,26 +1513,98 @@ class Ldeep(Command):
         Arguments:
             @verbose:bool
                 Results will contain full information
+            @recursive:bool
+                List recursively the members of `group`
             #group:string
                 Group to list members
         """
+        user_prefix = "[USER] "
+        group_prefix = "[GROUP] "
+
         group = kwargs["group"]
         verbose = kwargs.get("verbose", False)
+        recursive = kwargs.get("recursive", False)
 
+        already_printed = set()
+
+        anti_loop = []
+
+        # Recursive function in case the recursive flag is set
+        def lookup_members(dn, primary_group_id, leading_sp, already_treated: set, anti_loop: list) -> set:
+            results = self.engine.query(
+                self.engine.ACCOUNTS_IN_GROUP_FILTER(primary_group_id, dn)
+            )
+
+            if results:
+                for result in results:
+                    dn = result['distinguishedName']
+                    object_class = result["objectClass"]
+                    primary_group_id = result["objectSid"].split("-")[-1]
+
+                    if len(anti_loop) > 2:
+                        del anti_loop[0]
+                        anti_loop.append(dn)
+                        if anti_loop[0] == anti_loop[2]:
+                            print(f"[INFO] Loop detected, returning from recursive function")
+                            return already_treated
+                    else:
+                        anti_loop.append(dn)
+
+                    already_treated.add(dn)
+                    if object_class == ['top', 'person', 'organizationalPerson', 'user']:
+                        print(
+                            "{g:>{width}}".format(
+                                g=user_prefix + dn, width=leading_sp + len(user_prefix + dn)
+                        )
+                    )
+                    elif object_class == ['top', 'group']:
+                        print(
+                            "{g:>{width}}".format(
+                                g=group_prefix + dn, width=leading_sp + len(user_prefix + dn)
+                            )
+                        )
+                        lookup_members(dn, primary_group_id, leading_sp + 4, already_treated, anti_loop)
+
+            return already_treated
+
+        # Getting the group DN and primary ID
         results = list(
             self.engine.query(
                 self.engine.GROUP_DN_FILTER(group), ["distinguishedName", "objectSid"]
             )
         )
-        if results:
+
+        # Checking first that the length of the results is > 0 (at least one entry)
+        if len(list(results)) != 0:
             group_dn = results[0]["distinguishedName"]
             primary_group_id = results[0]["objectSid"].split("-")[-1]
+
+            # AS there is a result, we get the users within the group
             results = self.engine.query(
                 self.engine.ACCOUNTS_IN_GROUP_FILTER(primary_group_id, group_dn)
             )
+
+            # Iterating over each user / group belonging to the group
+            for result in results:
+                # Getting DN and ObjectClass attributes of the user / group
+                dn = result['distinguishedName']
+                object_class = result["objectClass"]
+
+                if object_class == ['top', 'person', 'organizationalPerson', 'user']:
+                    print(user_prefix + dn)
+                elif object_class == ['top', 'group']:
+                    print(group_prefix + dn)
+                    if recursive:
+                        already_printed.add(dn)
+                        primary_group_id = result["objectSid"].split("-")[-1]
+                        s = lookup_members(dn, primary_group_id, 4, already_printed, anti_loop)
+                        already_printed.union(s)
+
             self.display(results, verbose)
+
+        # If the list's length == 0 it means no entry were found and therefore the group does not exist
         else:
-            error("Group {group} does not exists".format(group=group))
+            error("Group '{group}' does not exist".format(group=group))
 
     def get_memberships(self, kwargs):
         """
