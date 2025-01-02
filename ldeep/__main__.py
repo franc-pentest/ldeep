@@ -1527,10 +1527,8 @@ class Ldeep(Command):
 
         already_printed = set()
 
-        anti_loop = []
-
         # Recursive function in case the recursive flag is set
-        def lookup_members(dn, primary_group_id, leading_sp, already_treated: set, anti_loop: list) -> set:
+        def lookup_members(dn, primary_group_id, leading_sp, already_treated: set):
             results = self.engine.query(
                 self.engine.ACCOUNTS_IN_GROUP_FILTER(primary_group_id, dn)
             )
@@ -1541,16 +1539,18 @@ class Ldeep(Command):
                     object_class = result["objectClass"]
                     primary_group_id = result["objectSid"].split("-")[-1]
 
-                    if len(anti_loop) > 2:
-                        del anti_loop[0]
-                        anti_loop.append(dn)
-                        if anti_loop[0] == anti_loop[2]:
-                            print(f"[INFO] Loop detected, returning from recursive function")
-                            return already_treated
+                    if dn not in already_treated:
+                        already_treated.add(dn)
                     else:
-                        anti_loop.append(dn)
+                        error_message = "Loop detected, aborting..."
+                        print(
+                            "{g:>{width}}".format(
+                                g=error_message, width=leading_sp + len(error_message)
+                            )
+                        )
+                        already_treated.clear()
+                        return
 
-                    already_treated.add(dn)
                     if object_class == ['top', 'person', 'organizationalPerson', 'user']:
                         print(
                             "{g:>{width}}".format(
@@ -1563,7 +1563,7 @@ class Ldeep(Command):
                                 g=group_prefix + dn, width=leading_sp + len(user_prefix + dn)
                             )
                         )
-                        lookup_members(dn, primary_group_id, leading_sp + 4, already_treated, anti_loop)
+                        lookup_members(dn, primary_group_id, leading_sp + 4, already_treated)
 
             return already_treated
 
@@ -1597,7 +1597,7 @@ class Ldeep(Command):
                     if recursive:
                         already_printed.add(dn)
                         primary_group_id = result["objectSid"].split("-")[-1]
-                        s = lookup_members(dn, primary_group_id, 4, already_printed, anti_loop)
+                        s = lookup_members(dn, primary_group_id, 4, already_printed)
                         already_printed.union(s)
 
             self.display(results, verbose)
