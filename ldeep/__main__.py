@@ -1529,42 +1529,44 @@ class Ldeep(Command):
 
         # Recursive function in case the recursive flag is set
         def lookup_members(dn, primary_group_id, leading_sp, already_treated: set):
+            # Check if the current group is already processed
+            if dn in already_treated:
+                return already_treated
+
+            # Mark the current group as processed
+            already_treated.add(dn)
+
+            # Query for members of the group
             results = self.engine.query(
                 self.engine.ACCOUNTS_IN_GROUP_FILTER(primary_group_id, dn)
             )
 
             if results:
                 for result in results:
-                    dn = result['distinguishedName']
+                    member_dn = result["distinguishedName"]
                     object_class = result["objectClass"]
-                    primary_group_id = result["objectSid"].split("-")[-1]
-
-                    if dn not in already_treated:
-                        already_treated.add(dn)
-                    else:
-                        error_message = "Loop detected, aborting..."
-                        print(
-                            "{g:>{width}}".format(
-                                g=error_message, width=leading_sp + len(error_message)
-                            )
-                        )
-                        already_treated.clear()
-                        return
+                    member_primary_group_id = result["objectSid"].split("-")[-1]
 
                     if object_class == ['top', 'person', 'organizationalPerson', 'user']:
                         print(
                             "{g:>{width}}".format(
-                                g=user_prefix + dn, width=leading_sp + len(user_prefix + dn)
+                                g=user_prefix + member_dn,
+                                width=leading_sp + len(user_prefix + member_dn),
+                            )
                         )
-                    )
                     elif object_class == ['top', 'group']:
                         print(
                             "{g:>{width}}".format(
-                                g=group_prefix + dn, width=leading_sp + len(user_prefix + dn)
+                                g=group_prefix + member_dn,
+                                width=leading_sp + len(group_prefix + member_dn),
                             )
                         )
-                        lookup_members(dn, primary_group_id, leading_sp + 4, already_treated)
+                        # Recurse into nested groups
+                        lookup_members(
+                            member_dn, member_primary_group_id, leading_sp + 4, already_treated
+                        )
 
+            #already_treated.remove(dn)
             return already_treated
 
         # Getting the group DN and primary ID
@@ -1595,7 +1597,6 @@ class Ldeep(Command):
                 elif object_class == ['top', 'group']:
                     print(group_prefix + dn)
                     if recursive:
-                        already_printed.add(dn)
                         primary_group_id = result["objectSid"].split("-")[-1]
                         s = lookup_members(dn, primary_group_id, 4, already_printed)
                         already_printed.union(s)
