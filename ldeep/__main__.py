@@ -1073,8 +1073,8 @@ class Ldeep(Command):
 
         try:
             self.display(results, verbose)
-        except LDAPObjectClassError as e:
-            error(f"{e}. SCCM may not be installed", close_array=verbose)
+        except Exception as e:
+            error(f"{e}. Can't find SCCM management points", close_array=verbose)
 
         # Distribution points
         if verbose:
@@ -1089,8 +1089,8 @@ class Ldeep(Command):
 
         try:
             self.display(results, verbose)
-        except LDAPObjectClassError as e:
-            error(f"{e}. SCCM may not be installed", close_array=verbose)
+        except Exception as e:
+            error(f"{e}. Can't find SCCM distribution points", close_array=verbose)
 
     def list_subnets(self, kwargs):
         """
