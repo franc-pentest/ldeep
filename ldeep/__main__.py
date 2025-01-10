@@ -1073,8 +1073,8 @@ class Ldeep(Command):
 
         try:
             self.display(results, verbose)
-        except LDAPObjectClassError as e:
-            error(f"{e}. SCCM may not be installed", close_array=verbose)
+        except Exception as e:
+            error(f"{e}. Can't find SCCM management points", close_array=verbose)
 
         # Distribution points
         if verbose:
@@ -1089,8 +1089,8 @@ class Ldeep(Command):
 
         try:
             self.display(results, verbose)
-        except LDAPObjectClassError as e:
-            error(f"{e}. SCCM may not be installed", close_array=verbose)
+        except Exception as e:
+            error(f"{e}. Can't find SCCM distribution points", close_array=verbose)
 
     def list_subnets(self, kwargs):
         """
@@ -1296,9 +1296,10 @@ class Ldeep(Command):
                 self.display(entries, verbose)
             else:
                 for entry in entries:
-                    print(
-                        f"User {entry['member'][0]} added to Group {format_sid(entry['msDS-ShadowPrincipalSid'])}"
-                    )
+                    for user in entry.get("member", []):
+                        print(
+                            f"User {entry['member'][0]} added to Group {format_sid(entry['msDS-ShadowPrincipalSid'])}"
+                        )
         except (LDAPAttributeError, LDAPObjectClassError) as e:
             error(
                 f"{e}. The domain's functional level may be too old",
