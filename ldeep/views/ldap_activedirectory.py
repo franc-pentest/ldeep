@@ -545,7 +545,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                             break
                     self.ldap.search(
                         search_base=anon_base,
-                        search_filter="(&(objectClass=domain))",
+                        search_filter="(objectClass=*)",
                         search_scope="SUBTREE",
                         attributes="*",
                     )
