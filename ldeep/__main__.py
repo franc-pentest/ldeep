@@ -1296,9 +1296,10 @@ class Ldeep(Command):
                 self.display(entries, verbose)
             else:
                 for entry in entries:
-                    print(
-                        f"User {entry['member'][0]} added to Group {format_sid(entry['msDS-ShadowPrincipalSid'])}"
-                    )
+                    for user in entry.get("member", []):
+                        print(
+                            f"User {entry['member'][0]} added to Group {format_sid(entry['msDS-ShadowPrincipalSid'])}"
+                        )
         except (LDAPAttributeError, LDAPObjectClassError) as e:
             error(
                 f"{e}. The domain's functional level may be too old",
