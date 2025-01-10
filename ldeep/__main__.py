@@ -1895,7 +1895,7 @@ class Ldeep(Command):
 
     def misc_enum_users(self, kwargs):
         """
-        Anonymously enumerate users with LDAP pings.
+        Anonymously enumerate enabled users with LDAP pings.
 
         Arguments:
             #file:string
@@ -1912,14 +1912,17 @@ class Ldeep(Command):
 
         file = kwargs["file"]
         delay = kwargs["delay"]
-        with open(file, "r") as f:
-            while True:
-                line = f.readline()[:-1]
-                if not line:
-                    break
-                if self.engine.user_exists(line):
-                    print(line)
-                sleep(delay / 1000)
+        try:
+            with open(file, "r") as f:
+                while True:
+                    line = f.readline()[:-1]
+                    if not line:
+                        break
+                    if self.engine.user_exists(line):
+                        print(line)
+                    sleep(delay / 1000)
+        except FileNotFoundError:
+            error(f"Can't find file {file}")
 
     def misc_whoami(self, kwargs):
         """
