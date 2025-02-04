@@ -1866,20 +1866,24 @@ class Ldeep(Command):
         Generate bloodhound JSON files.
 
         Arguments:
-            @version:int = 1
-                Bloodhound version (1 for legacy or 2 for CE).
+            @legacy:bool
+                Bloodhound version (Bloodhound legacy JSON files will be generated).
         """
-        version = kwargs["version"]
+        legacy = kwargs["legacy"]
 
-        self.engine.create_objecttype_guid_map()
-        self.engine.create_object_map()
+        if legacy:
+            self.engine.create_objecttype_guid_map()
+            self.engine.create_object_map()
 
-        self.engine.bloodhound_domain()
-        self.engine.bloodhound_users()
-        self.engine.bloodhound_computers()
-        self.engine.bloodhound_groups()
-        self.engine.bloodhound_ous()
-        self.engine.bloodhound_gpos()
+            self.engine.bloodhound_legacy_domain()
+            self.engine.bloodhound_legacy_users()
+            self.engine.bloodhound_legacy_computers()
+            self.engine.bloodhound_legacy_groups()
+            self.engine.bloodhound_legacy_ous()
+            self.engine.bloodhound_legacy_gpos()
+        else:
+            error("Not implemented yet")
+            exit()
 
     # ACTION #
 

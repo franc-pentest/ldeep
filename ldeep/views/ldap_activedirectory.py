@@ -1151,7 +1151,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             raise self.ActiveDirectoryLdapException(e)
         return result
 
-    def bloodhound_domain(self):
+    def bloodhound_legacy_domain(self):
         """
         Create the domain json file.
         """
@@ -1165,31 +1165,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             )
             domain_sid = domain.get("objectSid", "")
             infos = {
-                "ObjectIdentifier": domain.get("objectSid"),
-                "Properties": {
-                    "name": domain_fqdn.upper(),
-                    "domain": domain_fqdn,
-                    "domainsid": domain_sid,
-                    "distinguishedname": domain.get("distinguishedName", "").upper(),
-                    "description": (
-                        domain.get("description")[0]
-                        if isinstance(domain.get("description"), list)
-                        else None
-                    ),
-                    "functionallevel": FUNCTIONAL_LEVELS.get(
-                        domain.get(
-                            "msDS-Behavior-Version",
-                        )
-                    ),
-                    "isaclprotected": is_dacl_protected(
-                        domain.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
-                    ),
-                    "whencreated": getWindowsTimestamp(domain.get("whenCreated", "0")),
-                    "collected": True,
-                },
-                "Trusts": [],  # FIXME, TODO
-                # The below is all for GPO collection, unsupported as of now.
-                "Links": [],
+                "Aces": [],
                 "ChildObjects": [],
                 "GPOChanges": {
                     "AffectedComputers": [],
@@ -1198,12 +1174,31 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                     "PSRemoteUsers": [],
                     "RemoteDesktopUsers": [],
                 },
-                "IsDeleted": domain.get("isDeleted", False),
                 "IsACLProtected": is_dacl_protected(
                     domain.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
                 ),
-                "ContainedBy": None,  # FIXME, TODO
-                "Aces": [],
+                "IsDeleted": domain.get("isDeleted", False),
+                "Links": [],
+                "ObjectIdentifier": domain.get("objectSid"),
+                "Properties": {
+                    "description": (
+                        domain.get("description")[0]
+                        if isinstance(domain.get("description"), list)
+                        else None
+                    ),
+                    "distinguishedname": domain.get("distinguishedName", "").upper(),
+                    "functionallevel": FUNCTIONAL_LEVELS.get(
+                        domain.get(
+                            "msDS-Behavior-Version",
+                        )
+                    ),
+                    "highvalue": True,
+                    "domain": domain_fqdn,
+                    "domainsid": domain_sid,
+                    "name": domain_fqdn.upper(),
+                    "whencreated": getWindowsTimestamp(domain.get("whenCreated", "0")),
+                },
+                "Trusts": [],  # FIXME, TODO
             }
 
             # ACEs now
@@ -1220,16 +1215,16 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"] = {}
         data["meta"]["type"] = "domains"
         data["meta"]["count"] = len(data["data"])
-        data["meta"]["version"] = 6
+        data["meta"]["version"] = 5
         data["meta"]["methods"] = 262885  # DCOnly
         # return data, domain_fqdn
         import json
 
         json_object = json.dumps(data)
-        with open(f"ldeep_domain_bhgenerated.json", "w") as outfile:
+        with open(f"ldeep_domain_bhgenerated_legacy.json", "w") as outfile:
             outfile.write(json_object)
 
-    def bloodhound_users(self):
+    def bloodhound_legacy_users(self):
         """
         Create the users json file.
         """
@@ -1243,81 +1238,68 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 [part.split("=")[1] for part in parts if part.startswith("DC=")]
             )
             domain_sid = "-".join(user.get("objectSid", "").split("-")[:7])
-            container = ",".join(parts[1:])
-            container_guid = self.object_map[container]["sid"].strip("{}").upper()
-            container_type = self.object_map[container]["type"].strip("{}").capitalize()
+            #container = ",".join(parts[1:])
+            #container_guid = self.object_map[container]["sid"].strip("{}").upper()
+            #container_type = self.object_map[container]["type"].strip("{}").capitalize()
             # if user.get('objectSid') == "S-1-5-21-361363594-1987475875-3919384990-1224":
             #    breakpoint()
             infos = {
+                "Aces": [],
+                "AllowedToDelegate": user.get("msDS-AllowedToDelegateTo", []),
+                "HasSIDHistory": user.get("Sidhistory", []),
+                "IsDeleted": user.get("isDeleted", False),
+                "IsACLProtected": is_dacl_protected(
+                    user.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                ),
+                "ObjectIdentifier": user.get("objectSid", ""),
+                "PrimaryGroupSID": f"{domain_sid}-{user.get('primaryGroupID')}",
                 "Properties": {
-                    "name": f"{user.get('sAMAccountName', '')}@{domain_fqdn}".upper(),
-                    "domain": domain_fqdn.upper(),
-                    "domainsid": domain_sid,
-                    "distinguishedname": user.get("distinguishedName", "").upper(),
-                    "samaccountname": user.get("sAMAccountName", ""),
+                    "admincount": user.get("adminCount", 0) > 0,
                     "description": (
                         user.get("description")[0]
                         if isinstance(user.get("description"), list)
                         else None
                     ),
-                    "isaclprotected": is_dacl_protected(
-                        user.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
-                    ),
-                    "whencreated": getWindowsTimestamp(user.get("whenCreated", "0")),
-                    "sensitive": "NOT_DELEGATED" in user.get("userAccountControl", ""),
-                    "dontreqpreauth": "DONT_REQ_PREAUTH"
-                    in user.get("userAccountControl", ""),
-                    "passwordnotreqd": "PASSWD_NOTREQD"
-                    in user.get("userAccountControl", ""),
-                    "unconstraineddelegation": "TRUSTED_FOR_DELEGATION"
-                    in user.get("userAccountControl", ""),
-                    "pwdneverexpires": "DONT_EXPIRE_PASSWORD"
-                    in user.get("userAccountControl", ""),
-                    "enabled": "ACCOUNTDISABLE"
-                    not in user.get("userAccountControl", ""),
-                    "trustedtoauth": "TRUSTED_TO_AUTH_FOR_DELEGATION"
-                    in user.get("userAccountControl", ""),
+                    "displayname": user.get("displayName", None),
+                    "distinguishedname": user.get("distinguishedName", "").upper(),
+                    "domain": domain_fqdn.upper(),
+                    "domainsid": domain_sid,
+                    "dontreqpreauth": "DONT_REQ_PREAUTH" in user.get("userAccountControl", ""),
+                    "email": user.get("mail", None),
+                    "enabled": "ACCOUNTDISABLE" not in user.get("userAccountControl", ""),
+                    "hasspn": len(user.get("servicePrincipalName", [])) > 0,
+                    "homedirectory": user.get("homeDirectory", None),
                     "lastlogon": convertIsoTimestamp(
                         user.get("lastLogon", "0"), "lastlogon"
                     ),  # FIXME
                     "lastlogontimestamp": convertIsoTimestamp(
                         user.get("lastLogonTimestamp", ""), "lastlogontimestamp"
                     ),  # FIXME
+                    "logonscript": user.get("scriptpath", None),
+                    "name": f"{user.get('sAMAccountName', '')}@{domain_fqdn}".upper(),
+                    "passwordnotreqd": "PASSWD_NOTREQD" in user.get("userAccountControl", ""),
                     "pwdlastset": convertIsoTimestamp(
                         user.get("pwdLastSet", ""), "pwdlastset"
                     ),  # FIXME
+                    "pwdneverexpires": "DONT_EXPIRE_PASSWORD" in user.get("userAccountControl", ""),
+                    "samaccountname": user.get("sAMAccountName", ""),
+                    "sfupassword": None,  # FIXME, TODO
                     "serviceprincipalnames": (
                         user.get("servicePrincipalName", [])
                         if isinstance(user.get("servicePrincipalName", []), list)
                         else [user.get("servicePrincipalName", [])]
                     ),
-                    "hasspn": len(user.get("servicePrincipalName", [])) > 0,
-                    "displayname": user.get("displayName", None),
-                    "email": user.get("mail", None),
+                    "sensitive": "NOT_DELEGATED" in user.get("userAccountControl", ""),
+                    "sidhistory": user.get("Sidhistory", []),
                     "title": user.get("title", None),
-                    "homedirectory": user.get("homeDirectory", None),
+                    "trustedtoauth": "TRUSTED_TO_AUTH_FOR_DELEGATION" in user.get("userAccountControl", ""),
+                    "unconstraineddelegation": "TRUSTED_FOR_DELEGATION" in user.get("userAccountControl", ""),
+                    "unicodepassword": user.get("unicodePwd", None),
                     "userpassword": user.get("userPassword", None),
                     "unixpassword": user.get("unixuserpassword", None),
-                    "unicodepassword": user.get("unicodePwd", None),
-                    "sfupassword": None,  # FIXME, TODO
-                    "logonscript": user.get("scriptpath", None),
-                    "admincount": user.get("adminCount", 0) > 0,
-                    "sidhistory": user.get("Sidhistory", []),
+                    "whencreated": getWindowsTimestamp(user.get("whenCreated", "0")),                    
                 },
-                "AllowedToDelegate": user.get("msDS-AllowedToDelegateTo", []),
                 "SPNTargets": [],  # FIXME, TODO
-                "IsDeleted": user.get("isDeleted", False),
-                "IsACLProtected": is_dacl_protected(
-                    user.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
-                ),
-                "PrimaryGroupSID": f"{domain_sid}-{user.get('primaryGroupID')}",
-                "HasSIDHistory": user.get("Sidhistory", []),
-                "ObjectIdentifier": user.get("objectSid", ""),
-                "ContainedBy": {
-                    "ObjectIdentifier": container_guid,
-                    "ObjectType": container_type,
-                },
-                "Aces": [],
             }
 
             # ACEs now
@@ -1361,15 +1343,15 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"] = {}
         data["meta"]["type"] = "users"
         data["meta"]["count"] = len(data["data"])
-        data["meta"]["version"] = 6
+        data["meta"]["version"] = 5
         data["meta"]["methods"] = 262885  # DCOnly
         import json
 
         json_object = json.dumps(data)
-        with open(f"ldeep_users_bhgenerated.json", "w") as outfile:
+        with open(f"ldeep_users_bh_legacy.json", "w") as outfile:
             outfile.write(json_object)
 
-    def bloodhound_computers(self):
+    def bloodhound_legacy_computers(self):
         """
         Create the users json file.
         """
@@ -1383,99 +1365,96 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 [part.split("=")[1] for part in parts if part.startswith("DC=")]
             )
             domain_sid = "-".join(computer.get("objectSid", "").split("-")[:7])
-            container = ",".join(parts[1:])
-            container_guid = self.object_map[container]["sid"].strip("{}").upper()
-            container_type = self.object_map[container]["type"].strip("{}")
+            #container = ",".join(parts[1:])
+            #container_guid = self.object_map[container]["sid"].strip("{}").upper()
+            #container_type = self.object_map[container]["type"].strip("{}")
             infos = {
+                "Aces": [],
+                "AllowedToAct": self.parse_rbcd_attribute(
+                    computer.get("msDS-AllowedToActOnBehalfOfOtherIdentity", None)
+                ),
+                "AllowedToDelegate": computer.get("msDS-AllowedToDelegateTo", []),
+                "DcomUsers": { #FIXME, TODO
+                    "Collected": False,
+                    "FailureReason": None,
+                    "Results": []
+                },
+                "HasSIDHistory": computer.get("Sidhistory", []),
+                "IsDeleted": computer.get("isDeleted", False),
+                "IsACLProtected": is_dacl_protected(
+                    computer.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                ),
+                "LocalAdmins": { #FIXME, TODO
+                    "Collected": False,
+                    "FailureReason": None,
+                    "Results": []
+                },
+                "ObjectIdentifier": computer.get("objectSid", ""),
+                "PrimaryGroupSID": f"{domain_sid}-{computer.get('primaryGroupID')}",
+                "PrivilegedSessions": {
+                    "Results": [],
+                    "Collected": False,
+                    "FailureReason": None,
+                },
                 "Properties": {
-                    "name": computer.get(
-                        "dNSHostName",
-                        f"{computer.get('sAMAccountName').strip('$')}.{domain_fqdn}".upper(),
-                    ),
-                    "domain": domain_fqdn.upper(),
-                    "domainsid": domain_sid,
-                    "distinguishedname": computer.get("distinguishedName", "").upper(),
-                    "samaccountname": computer.get("sAMAccountName", ""),
-                    "haslaps": False,  # FIXME, TODO
-                    "isaclprotected": is_dacl_protected(
-                        computer.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
-                    ),
                     "description": (
                         computer.get("description")[0]
                         if isinstance(computer.get("description"), list)
                         else None
                     ),
-                    "whencreated": getWindowsTimestamp(
-                        computer.get("whenCreated", "0")
-                    ),
-                    "enabled": "ACCOUNTDISABLE"
-                    not in computer.get("userAccountControl", ""),
-                    "unconstraineddelegation": "TRUSTED_FOR_DELEGATION"
-                    in computer.get("userAccountControl", ""),
-                    "trustedtoauth": "TRUSTED_TO_AUTH_FOR_DELEGATION"
-                    in computer.get("userAccountControl", ""),
-                    "isdc": "SERVER_TRUST_ACCOUNT"
-                    in computer.get("userAccountControl", ""),
+                    "distinguishedname": computer.get("distinguishedName", "").upper(),
+                    "domain": domain_fqdn.upper(),
+                    "domainsid": domain_sid,
+                    "enabled": "ACCOUNTDISABLE" not in computer.get("userAccountControl", ""),
+                    "haslaps": data.get("ms-mcs-admpwdexpirationtime", False) != 0,
                     "lastlogon": convertIsoTimestamp(
                         computer.get("lastLogon", "0"), "lastlogon"
                     ),  # FIXME
                     "lastlogontimestamp": convertIsoTimestamp(
                         computer.get("lastLogonTimestamp", ""), "lastlogontimestamp"
                     ),
+                    "name": computer.get(
+                        "dNSHostName",
+                        f"{computer.get('sAMAccountName').strip('$')}.{domain_fqdn}".upper(),
+                    ),
+                    "operatingsystem": computer.get("operatingSystem", None),
                     "pwdlastset": convertIsoTimestamp(
                         computer.get("pwdLastSet", ""), "pwdlastset"
                     ),
+                    "samaccountname": computer.get("sAMAccountName", ""),
                     "serviceprincipalnames": (
                         computer.get("servicePrincipalName", [])
                         if isinstance(computer.get("servicePrincipalName", []), list)
                         else [user.get("servicePrincipalName", [])]
                     ),
-                    "email": computer.get("mail", None),
-                    "operatingsystem": computer.get("operatingSystem", None),
                     "sidhistory": computer.get("Sidhistory", []),
+                    "trustedtoauth": "TRUSTED_TO_AUTH_FOR_DELEGATION" in computer.get("userAccountControl", ""),
+                    "unconstraineddelegation": "TRUSTED_FOR_DELEGATION" in computer.get("userAccountControl", ""),
+                    "whencreated": getWindowsTimestamp(
+                        computer.get("whenCreated", "0")
+                    ),
                 },
-                "PrimaryGroupSID": f"{domain_sid}-{computer.get('primaryGroupID')}",
-                "AllowedToDelegate": computer.get("msDS-AllowedToDelegateTo", []),
-                "AllowedToAct": self.parse_rbcd_attribute(
-                    computer.get("msDS-AllowedToActOnBehalfOfOtherIdentity", None)
-                ),
-                "HasSIDHistory": computer.get("Sidhistory", []),
-                "DumpSMSAPassword": [],  # FIXME, TODO
-                "Sessions": {
-                    "Results": [],
+                "PSRemoteUsers": { #FIXME, TODO
                     "Collected": False,
                     "FailureReason": None,
-                },
-                "PrivilegedSessions": {
-                    "Results": [],
-                    "Collected": False,
-                    "FailureReason": None,
+                    "Results": []
                 },
                 "RegistrySessions": {
                     "Results": [],
                     "Collected": False,
                     "FailureReason": None,
                 },
-                "LocalGroups": [],
-                "UserRights": [],
-                "DCRegistryData": {
-                    "CertificateMappingMethods": None,
-                    "StrongCertificateBindingEnforcement": None,
+                "RemoteDesktopUsers": { #FIXME, TODO
+                    "Collected": False,
+                    "FailureReason": None,
+                    "Results": []
                 },
-                "Status": {"Connectable": False, "Error": "PwdLastSetOutOfRange"},
-                "IsDC": "SERVER_TRUST_ACCOUNT"
-                in computer.get("userAccountControl", ""),
-                "DomainSID": domain_sid,
-                "Aces": [],
-                "ObjectIdentifier": computer.get("objectSid", ""),
-                "IsDeleted": computer.get("isDeleted", False),
-                "IsACLProtected": is_dacl_protected(
-                    computer.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
-                ),
-                "ContainedBy": {
-                    "ObjectIdentifier": container_guid,
-                    "ObjectType": container_type,
+                "Sessions": {
+                    "Results": [],
+                    "Collected": False,
+                    "FailureReason": None,
                 },
+                "Status": None, # FIXME, TODO
             }
 
             # ACEs now
@@ -1492,15 +1471,15 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"] = {}
         data["meta"]["type"] = "computers"
         data["meta"]["count"] = len(data["data"])
-        data["meta"]["version"] = 6
+        data["meta"]["version"] = 5
         data["meta"]["methods"] = 262885  # DCOnly
         import json
 
         json_object = json.dumps(data)
-        with open(f"ldeep_computers_bhgenerated.json", "w") as outfile:
+        with open(f"ldeep_computers_bh_legacy.json", "w") as outfile:
             outfile.write(json_object)
 
-    def bloodhound_groups(self):
+    def bloodhound_legacy_groups(self):
         """
         Create the groups json file.
         """
@@ -1520,43 +1499,37 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 if group.get("objectSid", "").startswith("S-1-5-21")
                 else old_domain_sid
             )
-            container = ",".join(parts[1:])
-            container_guid = self.object_map[container]["sid"].strip("{}").upper()
-            container_type = self.object_map[container]["type"].strip("{}").capitalize()
+            #container = ",".join(parts[1:])
+            #container_guid = self.object_map[container]["sid"].strip("{}").upper()
+            #container_type = self.object_map[container]["type"].strip("{}").capitalize()
             if group.get("objectSid") in WELLKNOWN_SIDS:
                 objectIdentifier = f"{domain_fqdn}-{group.get('objectSid')}"
             else:
                 objectIdentifier = group.get("objectSid")
             infos = {
+                "Aces": [],
+                "IsACLProtected": is_dacl_protected(
+                    group.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                ),
+                "IsDeleted": group.get("isDeleted", False),
+                "Members": self.enum_group_members(
+                    domain_fqdn, group.get("distinguishedName")
+                ),
+                "ObjectIdentifier": objectIdentifier,
                 "Properties": {
-                    "name": f"{group.get('sAMAccountName', '')}@{domain_fqdn}".upper(),
-                    "domain": domain_fqdn.upper(),
-                    "distinguishedname": group.get("distinguishedName", "").upper(),
-                    "domainsid": domain_sid,
-                    "samaccountname": group.get("sAMAccountName", ""),
-                    "isaclprotected": is_dacl_protected(
-                        group.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
-                    ),
+                    "admincount": group.get("adminCount", 0) > 0,
                     "description": (
                         group.get("description")[0]
                         if isinstance(group.get("description"), list)
                         else None
                     ),
+                    "distinguishedname": group.get("distinguishedName", "").upper(),
+                    "domain": domain_fqdn.upper(),
+                    "domainsid": domain_sid,
+                    "highvalue": False, #FIXME, TODO
+                    "name": f"{group.get('sAMAccountName', '')}@{domain_fqdn}".upper(),
+                    "samaccountname": group.get("sAMAccountName", ""),
                     "whencreated": getWindowsTimestamp(group.get("whenCreated", "0")),
-                    "admincount": group.get("adminCount", 0) > 0,
-                },
-                "Members": self.enum_group_members(
-                    domain_fqdn, group.get("distinguishedName")
-                ),
-                "Aces": [],
-                "ObjectIdentifier": objectIdentifier,
-                "IsDeleted": group.get("isDeleted", False),
-                "IsACLProtected": is_dacl_protected(
-                    group.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
-                ),
-                "ContainedBy": {
-                    "ObjectIdentifier": container_guid,
-                    "ObjectType": container_type,
                 },
             }
 
@@ -1577,16 +1550,15 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             config_dn.strip("CN=Configuration,").replace("DC=", "").replace(",", ".")
         )
         default1 = {
-            "ObjectIdentifier": f"{domain_fqdn}-S-1-5-9",
-            "ContainedBy": None,
-            "Properties": {
-                "domain": rootdomain_fqdn,
-                "name": f"ENTERPRISE DOMAIN CONTROLLERS@{domain_fqdn}",
-            },
             "Aces": [],
-            "Members": [],
             "IsDeleted": False,
             "IsACLProtected": False,
+            "Members": [],
+            "ObjectIdentifier": f"{domain_fqdn}-S-1-5-9", # FIXME, TODO rootdomain instead of addomain
+            "Properties": {
+                "domain": rootdomain_fqdn,
+                "name": f"ENTERPRISE DOMAIN CONTROLLERS@{domain_fqdn}", # FIXME, TODO rootdomain instead of addomain
+            },
         }
         attributes = ["dnshostname", "objectSid"]
         dcs_infos = self.query(self.DC_FILTER(), attributes)
@@ -1600,60 +1572,52 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             default1["Members"].append(memberdata)
 
         default2 = {
+            "Aces": [],
+            "IsACLProtected": False,
+            "IsDeleted": False,
+            "Members": [],  # FIXME, TODO
             "ObjectIdentifier": f"{domain_fqdn}-S-1-1-0",
-            "ContainedBy": None,
             "Properties": {
                 "domain": domain_fqdn,
                 "domainsid": domain_sid,
                 "name": f"EVERYONE@{domain_fqdn}",
-                "reconcile": False,
             },
-            "Aces": [],
-            "Members": [],  # FIXME, TODO
-            "IsDeleted": False,
-            "IsACLProtected": False,
         }
         default3 = {
+            "Aces": [],
+            "IsACLProtected": False,
+            "IsDeleted": False,
+            "Members": [],  # FIXME, TODO
             "ObjectIdentifier": f"{domain_fqdn}-S-1-5-11",
-            "ContainedBy": None,
             "Properties": {
                 "domain": domain_fqdn,
                 "domainsid": domain_sid,
                 "name": f"AUTHENTICATED USERS@{domain_fqdn}",
-                "reconcile": False,
             },
-            "Aces": [],
-            "Members": [],  # FIXME, TODO
-            "IsDeleted": False,
-            "IsACLProtected": False,
         }
         default4 = {
+            "Aces": [],
+            "IsACLProtected": False,
+            "IsDeleted": False,
+            "Members": [],  # FIXME, TODO
             "ObjectIdentifier": f"{domain_fqdn}-S-1-5-4",
-            "ContainedBy": None,
             "Properties": {
                 "domain": domain_fqdn,
                 "domainsid": domain_sid,
                 "name": f"INTERACTIVE@{domain_fqdn}",
-                "reconcile": False,
             },
-            "Aces": [],
-            "Members": [],  # FIXME, TODO
-            "IsDeleted": False,
-            "IsACLProtected": False,
         }
         default5 = {
+            "Aces": [],
+            "IsACLProtected": False,
+            "IsDeleted": False,
+            "Members": [],  # FIXME, TODO
             "ObjectIdentifier": f"{domain_fqdn}-S-1-5-7",
-            "ContainedBy": None,
             "Properties": {
                 "domain": domain_fqdn,
                 "domainsid": domain_sid,
                 "name": f"ANONYMOUS@{domain_fqdn}",
-                "reconcile": False,
             },
-            "Aces": [],
-            "Members": [],  # FIXME, TODO
-            "IsDeleted": False,
-            "IsACLProtected": False,
         }
 
         data["data"].append(default1)
@@ -1665,27 +1629,24 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"] = {}
         data["meta"]["type"] = "groups"
         data["meta"]["count"] = len(data["data"])
-        data["meta"]["version"] = 6
+        data["meta"]["version"] = 5
         data["meta"]["methods"] = 262885  # DCOnly
         import json
 
         json_object = json.dumps(data)
-        with open(f"ldeep_groups_bhgenerated.json", "w") as outfile:
+        with open(f"ldeep_groups_bh_legacy.json", "w") as outfile:
             outfile.write(json_object)
 
-    def bloodhound_ous(self):
+    def bloodhound_legacy_ous(self):
         pass
 
-    def bloodhound_gpos(self):
+    def bloodhound_legacy_gpos(self):
         pass
 
     def enum_group_members(self, domain_fqdn, group_dn):
-        # if "Enterprise" in group_dn:
-        #    print(group_dn)
-        #    breakpoint()
         data = []
         results = self.query(
-            ldapfilter=f"(memberOf={group_dn})",
+            ldapfilter=f"(memberOf={ldap3.utils.conv.escape_filter_chars(group_dn)})",
             attributes=["objectSid", "objectClass"],
         )
         for res in results:
