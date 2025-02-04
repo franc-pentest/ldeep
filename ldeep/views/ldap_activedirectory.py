@@ -40,6 +40,7 @@ from ldap3.extend.microsoft.removeMembersFromGroups import (
 )
 
 import ldap3
+import json
 
 from ldeep.views.activedirectory import (
     ActiveDirectoryView,
@@ -264,7 +265,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     DOMAIN_INFO_FILTER = lambda _: "(objectClass=domain)"
     GPO_INFO_FILTER = lambda _: "(objectCategory=groupPolicyContainer)"
     CONTAINER_INFO_FILTER = (
-        lambda _: "(|(objectCategory=Container)(objectClass=msExchSystemObjectsContainer)(objectClass=builtinDomain))"
+        lambda _: "(|(objectCategory=Container)(objectClass=builtinDomain))"
     )
     PSO_INFO_FILTER = lambda _: "(objectClass=msDS-PasswordSettings)"
     TRUSTS_INFO_FILTER = lambda _: "(objectCategory=trustedDomain)"
@@ -1218,10 +1219,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"]["version"] = 5
         data["meta"]["methods"] = 262885  # DCOnly
         # return data, domain_fqdn
-        import json
-
         json_object = json.dumps(data)
-        with open(f"ldeep_domain_bhgenerated_legacy.json", "w") as outfile:
+        with open(f"ldeep_domain_bh_legacy.json", "w") as outfile:
             outfile.write(json_object)
 
     def bloodhound_legacy_users(self):
@@ -1345,7 +1344,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"]["count"] = len(data["data"])
         data["meta"]["version"] = 5
         data["meta"]["methods"] = 262885  # DCOnly
-        import json
 
         json_object = json.dumps(data)
         with open(f"ldeep_users_bh_legacy.json", "w") as outfile:
@@ -1473,7 +1471,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"]["count"] = len(data["data"])
         data["meta"]["version"] = 5
         data["meta"]["methods"] = 262885  # DCOnly
-        import json
 
         json_object = json.dumps(data)
         with open(f"ldeep_computers_bh_legacy.json", "w") as outfile:
@@ -1631,17 +1628,145 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         data["meta"]["count"] = len(data["data"])
         data["meta"]["version"] = 5
         data["meta"]["methods"] = 262885  # DCOnly
-        import json
 
         json_object = json.dumps(data)
         with open(f"ldeep_groups_bh_legacy.json", "w") as outfile:
             outfile.write(json_object)
 
     def bloodhound_legacy_ous(self):
-        pass
+        """
+        Create the ous json file.
+        """
+        self.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
+        ous_info = self.query(self.CONTAINER_INFO_FILTER())
+        data = {}
+        data["data"] = []
+        for ou in ous_info:
+            parts = ou.get("distinguishedName").split(",")
+            domain_fqdn = ".".join(
+                [part.split("=")[1] for part in parts if part.startswith("DC=")]
+            )
+            domain_sid = "-".join(ou.get("objectSid", "").split("-")[:7])
+            infos = {
+                "Aces": [],
+                "ChildObjects": [], # FIXME, TODO
+                "IsACLProtected": is_dacl_protected(
+                    ou.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                ),
+                "IsDeleted": ou.get("isDeleted", False),
+                "Links": [], # FIXME, TODO
+                "GPOChanges": {
+                    "LocalAdmins": [],
+                    "RemoteDesktopUsers": [],
+                    "DcomUsers": [],
+                    "PSRemoteUsers": [],
+                    "AffectedComputers": []
+                },
+                "ObjectIdentifier": ou.get("objectSid", ""),
+                "Properties": {
+                    "blocksinheritance": ou.get("gPOptions", 0) == 1,
+                    "description": (
+                        ou.get("description")[0]
+                        if isinstance(ou.get("description"), list)
+                        else None
+                    ),
+                    "distinguishedname": ou.get("distinguishedName", "").upper(),
+                    "domain": domain_fqdn.upper(),
+                    "domainsid": domain_sid,
+                    "highvalue": False, #FIXME, TODO
+                    "name": f"{ou.get('name')}@{domain_fqdn}".upper(),
+                    "whencreated": getWindowsTimestamp(
+                        ou.get("whenCreated", "0")
+                    ),
+                },
+            }
+
+            # ACEs now
+            infos["Aces"] = processAces(
+                ou.get("nTSecurityDescriptor"),
+                infos,
+                ObjectType.OU,
+                domain_fqdn,
+                self.object_map,
+                self.objecttype_guid_map,
+            )
+            data["data"].append(infos)
+
+
+        # exchange case
+        # (objectClass=msExchSystemObjectsContainer)
+        # exchange_info =
+
+        data["meta"] = {}
+        data["meta"]["type"] = "ous"
+        data["meta"]["count"] = len(data["data"])
+        data["meta"]["version"] = 5
+        data["meta"]["methods"] = 262885  # DCOnly
+
+        json_object = json.dumps(data)
+        with open(f"ldeep_ous_bh_legacy.json", "w") as outfile:
+            outfile.write(json_object)
 
     def bloodhound_legacy_gpos(self):
-        pass
+        """
+        Create the gpos json file.
+        """
+        self.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
+        gpos_info = self.query(self.GPO_INFO_FILTER())
+        data = {}
+        data["data"] = []
+        for gpo in gpos_info:
+            parts = gpo.get("distinguishedName").split(",")
+            domain_fqdn = ".".join(
+                [part.split("=")[1] for part in parts if part.startswith("DC=")]
+            )
+            domain_sid = "-".join(gpo.get("objectSid", "").split("-")[:7])
+            infos = {
+                "Aces": [],
+                "IsACLProtected": is_dacl_protected(
+                    gpo.get("nTSecurityDescriptor", 0).get("Raw Type", 0)
+                ),
+                "IsDeleted": gpo.get("isDeleted", False),
+                "ObjectIdentifier": gpo.get("objectSid", ""),
+                "Properties": {
+                    "description": (
+                        gpo.get("description")[0]
+                        if isinstance(gpo.get("description"), list)
+                        else None
+                    ),
+                    "distinguishedname": gpo.get("distinguishedName", "").upper(),
+                    "domain": domain_fqdn.upper(),
+                    "domainsid": domain_sid,
+                    "gpcpath": gpo.get("gPCFileSysPath", "").upper(),
+                    "highvalue": False, #FIXME, TODO
+                    "name": f"{gpo.get('displayName')}@{domain_fqdn}".upper(),
+                    "whencreated": getWindowsTimestamp(
+                        gpo.get("whenCreated", "0")
+                    ),
+
+                },
+            }
+
+            # ACEs now
+            infos["Aces"] = processAces(
+                gpo.get("nTSecurityDescriptor"),
+                infos,
+                ObjectType.GPO,
+                domain_fqdn,
+                self.object_map,
+                self.objecttype_guid_map,
+            )
+            data["data"].append(infos)
+
+        data["meta"] = {}
+        data["meta"]["type"] = "gpos"
+        data["meta"]["count"] = len(data["data"])
+        data["meta"]["version"] = 5
+        data["meta"]["methods"] = 262885  # DCOnly
+
+        json_object = json.dumps(data)
+        with open(f"ldeep_gpos_bh_legacy.json", "w") as outfile:
+            outfile.write(json_object)
 
     def enum_group_members(self, domain_fqdn, group_dn):
         data = []
