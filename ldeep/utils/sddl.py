@@ -326,7 +326,11 @@ def processAces(
 
     ignoresids = ["S-1-3-0", "S-1-5-18", "S-1-5-10"]
     if owner_sid not in ignoresids:
-        owner_sidtype = object_map[owner_sid]["type"]
+        try:
+            owner_sidtype = object_map[owner_sid]["type"]
+        except:
+            # SID not found
+            owner_sidtype = "base"
         r = {
             "PrincipalSID": (
                 owner_sid
