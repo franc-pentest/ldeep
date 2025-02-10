@@ -243,6 +243,9 @@ def convertIsoTimestamp(t, field: str) -> int:
                 return -1
             else:
                 return 0
+        else:
+            # FIXME, better check twice
+            return 0
     if str(t).startswith("1601-01-01"):
         return 0
     return int(t.timestamp())

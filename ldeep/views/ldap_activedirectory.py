@@ -1188,14 +1188,14 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                         else None
                     ),
                     "distinguishedname": domain.get("distinguishedName", "").upper(),
+                    "domain": domain_fqdn.upper(),
+                    "domainsid": domain_sid,
                     "functionallevel": FUNCTIONAL_LEVELS.get(
                         domain.get(
                             "msDS-Behavior-Version",
                         )
                     ),
                     "highvalue": True,
-                    "domain": domain_fqdn,
-                    "domainsid": domain_sid,
                     "name": domain_fqdn.upper(),
                     "whencreated": getWindowsTimestamp(domain.get("whenCreated", "0")),
                 },
@@ -1237,14 +1237,12 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 [part.split("=")[1] for part in parts if part.startswith("DC=")]
             )
             domain_sid = "-".join(user.get("objectSid", "").split("-")[:7])
-            #container = ",".join(parts[1:])
-            #container_guid = self.object_map[container]["sid"].strip("{}").upper()
-            #container_type = self.object_map[container]["type"].strip("{}").capitalize()
             # if user.get('objectSid') == "S-1-5-21-361363594-1987475875-3919384990-1224":
             #    breakpoint()
             infos = {
                 "Aces": [],
-                "AllowedToDelegate": user.get("msDS-AllowedToDelegateTo", []),
+                #"AllowedToDelegate": user.get("msDS-AllowedToDelegateTo", []),
+                "AllowedToDelegate": [], #FIXME, TODO
                 "HasSIDHistory": user.get("Sidhistory", []),
                 "IsDeleted": user.get("isDeleted", False),
                 "IsACLProtected": is_dacl_protected(
@@ -1323,13 +1321,12 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         # Create built-in users
         default = {
             "AllowedToDelegate": [],
-            "ObjectIdentifier": f"{domain_fqdn}-S-1-5-20",
+            "ObjectIdentifier": f"{domain_fqdn.upper()}-S-1-5-20",
             "PrimaryGroupSID": None,
             "Properties": {
-                "domain": domain_fqdn,
+                "domain": domain_fqdn.upper(),
                 "domainsid": domain_sid,
-                "name": f"NETWORK SERVICE@{domain_fqdn}",
-                "reconcile": False,
+                "name": f"NETWORK SERVICE@{domain_fqdn.upper()}",
             },
             "Aces": [],
             "SPNTargets": [],
@@ -1351,7 +1348,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
     def bloodhound_legacy_computers(self):
         """
-        Create the users json file.
+        Create the computers json file.
         """
         self.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
         computers_info = self.query(self.COMPUTERS_FILTER())
@@ -1363,15 +1360,13 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 [part.split("=")[1] for part in parts if part.startswith("DC=")]
             )
             domain_sid = "-".join(computer.get("objectSid", "").split("-")[:7])
-            #container = ",".join(parts[1:])
-            #container_guid = self.object_map[container]["sid"].strip("{}").upper()
-            #container_type = self.object_map[container]["type"].strip("{}")
             infos = {
                 "Aces": [],
                 "AllowedToAct": self.parse_rbcd_attribute(
                     computer.get("msDS-AllowedToActOnBehalfOfOtherIdentity", None)
                 ),
-                "AllowedToDelegate": computer.get("msDS-AllowedToDelegateTo", []),
+                #"AllowedToDelegate": computer.get("msDS-AllowedToDelegateTo", []),
+                "AllowedToDelegate" : [], #FIXME, TODO
                 "DcomUsers": { #FIXME, TODO
                     "Collected": False,
                     "FailureReason": None,
