@@ -2050,6 +2050,8 @@ class Ldeep(Command):
         computer = kwargs["computer_name"]
         password = kwargs["computer_pass"]
 
+        computer = computer.replace("$", "")
+
         if self.engine.create_computer(computer, password):
             info(f"Computer {computer} successfully created with password {password}")
         else:
