@@ -981,7 +981,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             "dnsHostName": "%s.%s" % (computer, self.domain),
             "userAccountControl": 0x1000,  # WORKSTATION_TRUST_ACCOUNT
             "servicePrincipalName": spns,
-            "sAMAccountName": computer,
+            "sAMAccountName": computer + "$",
             "unicodePwd": ('"%s"' % password).encode("utf-16-le"),
         }
         try:
