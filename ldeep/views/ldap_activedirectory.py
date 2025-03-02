@@ -969,16 +969,16 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @return the result code on the add action
         """
         computer_dn = f"CN={computer},CN=Computers,{self.base_dn}"
+        domain = ".".join(part.split("=")[1] for part in self.base_dn.split(","))
         # Default computer SPNs
         spns = [
-            f"HOST/{computer}",
-            f"HOST/{computer}.{self.domain}",
-            f"RestrictedKrbHost/{computer}",
-            f"RestrictedKrbHost/{computer}.{self.domain}",
+            f"HOST/{computer.strip('$')}",
+            f"HOST/{computer.strip('$')}.{domain}",
+            f"RestrictedKrbHost/{computer.strip('$')}",
+            f"RestrictedKrbHost/{computer.strip('$')}.{domain}",
         ]
-
         ucd = {
-            "dnsHostName": "%s.%s" % (computer, self.domain),
+            "dnsHostName": "%s.%s" % (computer.strip("$"), domain),
             "userAccountControl": 0x1000,  # WORKSTATION_TRUST_ACCOUNT
             "servicePrincipalName": spns,
             "sAMAccountName": computer,

@@ -2089,9 +2089,11 @@ class Ldeep(Command):
                 == list(coreResults.RESULT_CODES.keys())[36]
             ):
                 print(f"Computer {computer} already exists")
+            elif self.engine.ldap.result["message"].startswith("00000523"):
+                error("KB5008102 seems applied, add an ending '$' to the computer name")
             else:
                 error_message = self.engine.ldap.result["message"]
-                print(f"ERROR: {error_message}")
+                error(f"ERROR: {error_message}")
 
     def action_create_user(self, kwargs):
         """
