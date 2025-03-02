@@ -1182,6 +1182,19 @@ class Ldeep(Command):
             True,
         )
 
+    def list_schema(self, kwargs):
+        """
+        Dump the schema partition of the Active Directory.
+        """
+        self.display(
+            self.engine.query(
+                self.engine.ALL_FILTER(),
+                ALL,
+                base=",".join(["CN=Schema,CN=Configuration", self.engine.base_dn]),
+            ),
+            True,
+        )
+
     def list_auth_policies(self, kwargs):
         """
         List the authentication policies configured in the Active Directory.
@@ -1968,7 +1981,7 @@ class Ldeep(Command):
 
     def misc_enum_users(self, kwargs):
         """
-        Anonymously enumerate users with LDAP pings.
+        Anonymously enumerate enabled users with LDAP pings.
 
         Arguments:
             #file:string
@@ -1985,14 +1998,17 @@ class Ldeep(Command):
 
         file = kwargs["file"]
         delay = kwargs["delay"]
-        with open(file, "r") as f:
-            while True:
-                line = f.readline()[:-1]
-                if not line:
-                    break
-                if self.engine.user_exists(line):
-                    print(line)
-                sleep(delay / 1000)
+        try:
+            with open(file, "r") as f:
+                while True:
+                    line = f.readline()[:-1]
+                    if not line:
+                        break
+                    if self.engine.user_exists(line):
+                        print(line)
+                    sleep(delay / 1000)
+        except FileNotFoundError:
+            error(f"Can't find file {file}")
 
     def misc_whoami(self, kwargs):
         """
@@ -2146,9 +2162,11 @@ class Ldeep(Command):
                 == list(coreResults.RESULT_CODES.keys())[36]
             ):
                 print(f"Computer {computer} already exists")
+            elif self.engine.ldap.result["message"].startswith("00000523"):
+                error("KB5008102 seems applied, add an ending '$' to the computer name")
             else:
                 error_message = self.engine.ldap.result["message"]
-                print(f"ERROR: {error_message}")
+                error(f"ERROR: {error_message}")
 
     def action_create_user(self, kwargs):
         """
