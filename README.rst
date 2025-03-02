@@ -423,9 +423,7 @@ Upcoming
 
 * Proper DNS zone enumeration
 * ADCS enumeration
-* Sites and subnets
 * Project tree
-* Useful Kerberos delegation information
 * Any ideas?
 
 ================

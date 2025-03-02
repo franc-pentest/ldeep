@@ -1561,14 +1561,19 @@ class Ldeep(Command):
                     object_class = result["objectClass"]
                     member_primary_group_id = result["objectSid"].split("-")[-1]
 
-                    if object_class == ['top', 'person', 'organizationalPerson', 'user']:
+                    if object_class == [
+                        "top",
+                        "person",
+                        "organizationalPerson",
+                        "user",
+                    ]:
                         print(
                             "{g:>{width}}".format(
                                 g=user_prefix + member_dn,
                                 width=leading_sp + len(user_prefix + member_dn),
                             )
                         )
-                    elif object_class == ['top', 'group']:
+                    elif object_class == ["top", "group"]:
                         print(
                             "{g:>{width}}".format(
                                 g=group_prefix + member_dn,
@@ -1577,10 +1582,12 @@ class Ldeep(Command):
                         )
                         # Recurse into nested groups
                         lookup_members(
-                            member_dn, member_primary_group_id, leading_sp + 4, already_treated
+                            member_dn,
+                            member_primary_group_id,
+                            leading_sp + 4,
+                            already_treated,
                         )
 
-            #already_treated.remove(dn)
             return already_treated
 
         # Getting the group DN and primary ID
@@ -1603,12 +1610,12 @@ class Ldeep(Command):
             # Iterating over each user / group belonging to the group
             for result in results:
                 # Getting DN and ObjectClass attributes of the user / group
-                dn = result['distinguishedName']
+                dn = result["distinguishedName"]
                 object_class = result["objectClass"]
 
-                if object_class == ['top', 'person', 'organizationalPerson', 'user']:
+                if object_class == ["top", "person", "organizationalPerson", "user"]:
                     print(user_prefix + dn)
-                elif object_class == ['top', 'group']:
+                elif object_class == ["top", "group"]:
                     print(group_prefix + dn)
                     if recursive:
                         primary_group_id = result["objectSid"].split("-")[-1]
