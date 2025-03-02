@@ -1182,6 +1182,19 @@ class Ldeep(Command):
             True,
         )
 
+    def list_schema(self, kwargs):
+        """
+        Dump the schema partition of the Active Directory.
+        """
+        self.display(
+            self.engine.query(
+                self.engine.ALL_FILTER(),
+                ALL,
+                base=",".join(["CN=Schema,CN=Configuration", self.engine.base_dn]),
+            ),
+            True,
+        )
+
     def list_auth_policies(self, kwargs):
         """
         List the authentication policies configured in the Active Directory.
