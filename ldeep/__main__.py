@@ -735,8 +735,9 @@ class Ldeep(Command):
             attributes = ALL
 
         first = True
+        displayed = []
         for name, basePre, baseSuf in (
-            ("Domain", "CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn),
+            ("Domain", "CN=MicrosoftDNS,DC=DomainDnsZones", self.engine.base_dn),
             ("Forest", "CN=MicrosoftDNS,DC=ForestDnsZones", self.engine.forest_base_dn),
             ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
         ):
@@ -748,16 +749,21 @@ class Ldeep(Command):
                 ))
 
                 if len(zones) > 0:
-                    if first:
-                        first = False
+                    if verbose:
+                        displayed.extend(zones)
                     else:
-                        print()
-                    info(f"{name} zones:")
-                    self.display(zones, verbose)
+                        if first:
+                            first = False
+                        else:
+                            print()
+                        info(f"{name} zones:")
+                        self.display(zones)
             except:
                 error(f"Can't list {name.lower()} zones", close_array=verbose)
 
-        if first:
+        if verbose:
+            self.display(displayed, True)
+        elif first:
             info("No zones found")
 
     def list_dns_records(self, kwargs):
@@ -775,11 +781,10 @@ class Ldeep(Command):
         else:
             attributes = ALL
 
-        print(attributes)
-
         first = True
+        displayed = []
         for name, basePre, baseSuf in (
-            ("Domain", "CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn),
+            ("Domain", "CN=MicrosoftDNS,DC=DomainDnsZones", self.engine.base_dn),
             ("Forest", "CN=MicrosoftDNS,DC=ForestDnsZones", self.engine.forest_base_dn),
             ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
         ):
@@ -800,14 +805,19 @@ class Ldeep(Command):
                         filteredResults.append(result)
 
                 if len(filteredResults) > 0:
-                    if first:
-                        first = False
+                    if verbose:
+                        displayed.extend(filteredResults)
                     else:
-                        print()
-                    info(f"{name} records:")
-                    self.display(filteredResults, verbose)
+                        if first:
+                            first = False
+                        else:
+                            print()
+                        info(f"{name} records:")
+                        self.display(filteredResults, verbose)
 
-        if first:
+        if verbose:
+            self.display(displayed, True)
+        elif first:
             info("No records found")
 
     def list_pkis(self, kwargs):
@@ -1586,7 +1596,7 @@ class Ldeep(Command):
 
         first = True
         for name, basePre, baseSuf in (
-            ("Domain", "CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn),
+            ("Domain", "CN=MicrosoftDNS,DC=DomainDnsZones", self.engine.base_dn),
             ("Forest", "CN=MicrosoftDNS,DC=ForestDnsZones", self.engine.forest_base_dn),
             ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
         ):

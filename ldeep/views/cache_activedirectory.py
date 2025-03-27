@@ -99,6 +99,14 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         "files": ["silos"],
         "filter": lambda x: eq(x["cn"], s),
     }
+    ZONES_FILTER = lambda _: {
+        "fmt": "json",
+        "files": ["zones"],
+    }
+    ZONE_FILTER = lambda _: {
+        "fmt": "json",
+        "files": ["dns_records"],
+    }
 
     # Not implemented:
     DOMAIN_INFO_FILTER = lambda _: None
@@ -106,8 +114,6 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
     OU_FILTER = lambda _: None
     PSO_INFO_FILTER = lambda _: None
     TRUSTS_INFO_FILTER = lambda _: None
-    ZONES_FILTER = lambda _: None
-    ZONE_FILTER = lambda _: None
     USER_ACCOUNT_CONTROL_FILTER = lambda _, __: None
     USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: None
     USER_LOCKED_FILTER = lambda _: None
@@ -181,6 +187,13 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         # Process unimplemented queries
         if cachefilter is None:
             raise self.CacheActiveDirectoryException("Cache query not supported.")
+
+        if base is not None:
+            if "filter" in cachefilter:
+                oldFilter = cachefilter["filter"]
+                cachefilter["filter"] = lambda elt: oldFilter(elt) and ("dn" not in elt or elt["dn"].endswith("," + base))
+            else:
+                cachefilter["filter"] = lambda elt: "dn" not in elt or elt["dn"].endswith("," + base)
 
         # Get format of cache files to use: either `lst` or `json`
         if "fmt" in cachefilter:
