@@ -717,19 +717,31 @@ class Ldeep(Command):
         else:
             attributes = ALL
 
-        try:
-            self.display(
-                self.engine.query(
+        first = True
+        for name, basePre, baseSuf in (
+            ("Domain", "CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn),
+            ("Forest", "CN=MicrosoftDNS,DC=ForestDnsZones", self.engine.forest_base_dn),
+            ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
+        ):
+            try:
+                zones = list(self.engine.query(
                     self.engine.ZONES_FILTER(),
                     attributes,
-                    base=",".join(
-                        ["CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn]
-                    ),
-                ),
-                verbose,
-            )
-        except:
-            error(f"Can't list zones", close_array=verbose)
+                    base=f"{basePre},{baseSuf}",
+                ))
+
+                if len(zones) > 0:
+                    if first:
+                        first = False
+                    else:
+                        print()
+                    info(f"{name} zones:")
+                    self.display(zones, verbose)
+            except:
+                error(f"Can't list {name.lower()} zones", close_array=verbose)
+
+        if first:
+            info("No zones found")
 
     def list_pkis(self, kwargs):
         """
@@ -1504,25 +1516,37 @@ class Ldeep(Command):
                 DNS zone to retrieve records
         """
         dns_zone = kwargs["dns_zone"]
-        try:
-            results = self.engine.query(
-                self.engine.ZONE_FILTER(),
-                base=",".join(
-                    [
-                        f"DC={dns_zone}",
-                        "CN=MicrosoftDNS,DC=DomainDNSZones",
-                        self.engine.base_dn,
-                    ]
-                ),
-            )
-        except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
-            error(e)
-        else:
-            def removeEmptyRecords(result):
-                result["dnsRecord"] = list(filter(lambda rec: rec != "", result["dnsRecord"]))
-                return len(result["dnsRecord"]) > 0
 
-            self.display(filter(lambda result: removeEmptyRecords(result), results))
+        first = True
+        for name, basePre, baseSuf in (
+            ("Domain", "CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn),
+            ("Forest", "CN=MicrosoftDNS,DC=ForestDnsZones", self.engine.forest_base_dn),
+            ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
+        ):
+            try:
+                results = list(self.engine.query(
+                    self.engine.ZONE_FILTER(),
+                    base=f"DC={dns_zone},{basePre},{baseSuf}",
+                ))
+            except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
+                error(e)
+            else:
+                filteredResults = []
+                for result in results:
+                    result["dnsRecord"] = list(filter(lambda rec: rec != "", result["dnsRecord"]))
+                    if len(result["dnsRecord"]) > 0:
+                        filteredResults.append(result)
+
+                if len(filteredResults) > 0:
+                    if first:
+                        first = False
+                    else:
+                        print()
+                    info(f"{name} records:")
+                    self.display(filteredResults)
+
+        if first:
+            info("No records found")
 
     def get_membersof(self, kwargs):
         """

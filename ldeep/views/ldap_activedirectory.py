@@ -570,6 +570,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             )
 
         self.base_dn = base or server.info.other["defaultNamingContext"][0]
+        self.forest_base_dn = base or server.info.other["rootDomainNamingContext"][0]
         self.fqdn = ".".join(
             map(
                 lambda x: x.replace("DC=", ""),
