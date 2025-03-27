@@ -2363,6 +2363,12 @@ def main():
         help="LDAP base for query (by default, this value is pulled from remote Ldap)",
     )
     ldap.add_argument(
+        "-f",
+        "--forest-base",
+        default="",
+        help="LDAP forest base for query (by default, this value is pulled from remote Ldap)",
+    )
+    ldap.add_argument(
         "-t",
         "--type",
         default="ntlm",
@@ -2480,6 +2486,7 @@ def main():
                 args.ldapserver,
                 args.domain,
                 args.base,
+                args.forest_base,
                 args.username,
                 args.password,
                 args.ntlm,

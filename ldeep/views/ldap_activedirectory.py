@@ -301,6 +301,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         server,
         domain="",
         base="",
+        forest_base="",
         username="",
         password="",
         ntlm="",
@@ -325,6 +326,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @server: Server to connect and perform LDAP query to.
         @domain: Fully qualified domain name of the Active Directory domain.
         @base: Base for the LDAP queries.
+        @forest_base: Forest base for the LDAP queries.
         @username: Username to use for the authentication
         @password: Password to use for the authentication (for SIMPLE authentication)
         @ntlm: NTLM hash to use for the authentication (for NTLM authentication)
@@ -571,7 +573,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             )
 
         self.base_dn = base or server.info.other["defaultNamingContext"][0]
-        self.forest_base_dn = base or server.info.other["rootDomainNamingContext"][0]
+        self.forest_base_dn = forest_base or server.info.other["rootDomainNamingContext"][0]
         self.fqdn = ".".join(
             map(
                 lambda x: x.replace("DC=", ""),
