@@ -1518,7 +1518,11 @@ class Ldeep(Command):
         except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
             error(e)
         else:
-            self.display(results)
+            def removeEmptyRecords(result):
+                result["dnsRecord"] = list(filter(lambda rec: rec != "", result["dnsRecord"]))
+                return len(result["dnsRecord"]) > 0
+
+            self.display(filter(lambda result: removeEmptyRecords(result), results))
 
     def get_membersof(self, kwargs):
         """

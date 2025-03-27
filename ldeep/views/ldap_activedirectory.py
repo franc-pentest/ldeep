@@ -1,6 +1,6 @@
 from sys import exit, _getframe
 from struct import unpack
-from socket import inet_ntoa
+from socket import inet_ntoa, inet_ntop, AF_INET6
 from ssl import CERT_NONE
 from uuid import UUID
 
@@ -143,10 +143,20 @@ def format_dnsrecord(raw_value):
         if recordvalue == datatype:
             if recordname == "A":
                 target = inet_ntoa(data)
+            elif recordname == "AAAA":
+                target = inet_ntop(AF_INET6, data)
+            elif recordname == "NS":
+                nbSegments = data[1]
+                segments = []
+                index = 2
+                for _ in range(nbSegments):
+                    segLen = data[index]
+                    segments.append(data[index + 1: index + segLen + 1].decode())
+                    index += segLen + 1
+                target = ".".join(segments)
             else:
-                # how, ugly
-                data = data.decode("unicode-escape", errors="replace")
-                target = "".join([c for c in data if ord(c) > 31 or ord(c) == 9])
+                return ""
+
             return "%s %s" % (recordname, target)
 
 
@@ -178,10 +188,6 @@ ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.121"] 
 )
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.93"] = (
     format_pwdProperties,
-    None,
-)
-ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (
-    format_dnsrecord,
     None,
 )
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.60"] = (
