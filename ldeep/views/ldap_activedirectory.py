@@ -3,6 +3,7 @@ from struct import unpack
 from socket import inet_ntoa, inet_ntop, AF_INET6
 from ssl import CERT_NONE
 from uuid import UUID
+from json import loads as json_loads
 
 from Cryptodome.Cipher import AES
 from Cryptodome.Hash import MD4, SHA1
@@ -664,6 +665,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 return dict(d)
 
         return filter(lambda x: x is not None, map(result, entry_generator))
+
+    def query_server_info(self):
+        return [json_loads(self.ldap.server.info.to_json())]
 
     def create_objecttype_guid_map(self):
         self.objecttype_guid_map = dict()

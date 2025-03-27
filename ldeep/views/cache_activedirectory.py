@@ -138,7 +138,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
             )
         self.path = cache_dir
         self.prefix = prefix
-        self.fqdn, self.base_dn = self.__get_domain_info()
+        self.fqdn, self.base_dn, self.forest_base_dn = self.__get_domain_info()
         self.attributes = ALL
         self.throttle = 0
         self.page_size = 0
@@ -232,6 +232,12 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
                     data += map(lambda x: x.strip(), fp.readlines())
         return data
 
+    def query_server_info(self):
+        return self.query({
+            "fmt": "json",
+            "files": ["server_info"],
+        })
+
     def resolve_sid(self, sid):
         """
         Two cases:
@@ -285,10 +291,10 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         """
         Private functions to retrieve the cache domain name.
         """
-        filename = "{prefix}_domain_policy.lst".format(prefix=self.prefix)
+        filename = "{prefix}_server_info.json".format(prefix=self.prefix)
         with open(path.join(self.path, filename)) as fp:
-            for line in fp:
-                if line.startswith("distinguishedName:"):
-                    base = line.split(" ")[1].strip()
-                    domain = base.replace("DC=", ".")[1:].replace(",", "")
-                    return domain, base
+            info = json_load(fp)
+            base = info[0]["raw"]["defaultNamingContext"][0]
+            forest_base = info[0]["raw"]["rootDomainNamingContext"][0]
+            domain = base.replace("DC=", ".")[1:].replace(",", "")
+            return domain, base, forest_base

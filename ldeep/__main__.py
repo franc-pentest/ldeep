@@ -266,6 +266,23 @@ class Ldeep(Command):
 
     # LISTERS #
 
+    def list_server_info(self, kwargs):
+        """
+        List server info.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+
+        info = self.engine.query_server_info()
+        if verbose:
+            self.display(info, True)
+        else:
+            for key, value in info[0]["raw"].items():
+                print(key, value)
+
     def list_users(self, kwargs):
         """
         List users according to a filter.
