@@ -743,6 +743,56 @@ class Ldeep(Command):
         if first:
             info("No zones found")
 
+    def list_dns_records(self, kwargs):
+        """
+        List the DNS records configured in the Active Directory.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+
+        if not verbose:
+            attributes = ["dc", "dnsRecord", "objectClass"]
+        else:
+            attributes = ALL
+
+        print(attributes)
+
+        first = True
+        for name, basePre, baseSuf in (
+            ("Domain", "CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn),
+            ("Forest", "CN=MicrosoftDNS,DC=ForestDnsZones", self.engine.forest_base_dn),
+            ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
+        ):
+            try:
+                results = list(self.engine.query(
+                    self.engine.ZONE_FILTER(),
+                    attributes,
+                    base=f"{basePre},{baseSuf}",
+                ))
+
+            except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
+                error(f"Can't list {name.lower()} records", close_array=verbose)
+            else:
+                filteredResults = []
+                for result in results:
+                    result["dnsRecord"] = list(filter(lambda rec: rec != "", result["dnsRecord"]))
+                    if len(result["dnsRecord"]) > 0:
+                        filteredResults.append(result)
+
+                if len(filteredResults) > 0:
+                    if first:
+                        first = False
+                    else:
+                        print()
+                    info(f"{name} records:")
+                    self.display(filteredResults, verbose)
+
+        if first:
+            info("No records found")
+
     def list_pkis(self, kwargs):
         """
         List pkis.
