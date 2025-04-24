@@ -934,9 +934,12 @@ class Ldeep(Command):
                         name = sid
 
                     # extended rights
+                    mask = principal.get("Raw Access Required")
                     if principal.get("GUID"):
                         right = principal.get("GUID").lower().strip("{}")
-                        if right:
+                        if right and mask & ADRights.get(
+                            "ExtendedRight"
+                        ) == ADRights.get("ExtendedRight"):
                             if (
                                 right == EXTENDED_RIGHTS_NAME_MAP["Enroll"]
                                 or right
@@ -945,7 +948,6 @@ class Ldeep(Command):
                                 enroll_principals.append(name)
 
                     # Object Control Permissions
-                    mask = principal.get("Raw Access Required")
                     if mask & ADRights.get("GenericAll") == ADRights.get("GenericAll"):
                         full_control_principals.append(name)
                     if mask & ADRights.get("WriteOwner") == ADRights.get("WriteOwner"):
