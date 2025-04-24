@@ -1752,13 +1752,17 @@ class Ldeep(Command):
 
         guid_map = {}
         schema_entries = self.engine.ldap.extend.standard.paged_search(
-            self.engine.ldap.server.info.other["schemaNamingContext"][0], "(objectClass=*)",
-            attributes = ["name", "schemaidguid"]
+            self.engine.ldap.server.info.other["schemaNamingContext"][0],
+            "(objectClass=*)",
+            attributes=["name", "schemaidguid"],
         )
         for entry in schema_entries:
             name = entry["attributes"]["name"].lower()
-            if name in ("ms-laps-encryptedpassword", "ms-laps-password") and entry["attributes"]["schemaIDGUID"]:
-                guid = str(UUID(bytes_le = entry["attributes"]["schemaIDGUID"]))
+            if (
+                name in ("ms-laps-encryptedpassword", "ms-laps-password")
+                and entry["attributes"]["schemaIDGUID"]
+            ):
+                guid = str(UUID(bytes_le=entry["attributes"]["schemaIDGUID"]))
                 guid_map[name] = guid
 
         attributes = (
@@ -1819,13 +1823,20 @@ class Ldeep(Command):
                             for ace in c["nTSecurityDescriptor"]["DACL"]["ACEs"]:
                                 if "GUID" in ace.keys():
                                     guid = ace["GUID"].strip("{}")
-                                    if guid == guid_map["ms-laps-encryptedpassword"] or guid == guid_map["ms-laps-password"]:
+                                    if (
+                                        guid == guid_map["ms-laps-encryptedpassword"]
+                                        or guid == guid_map["ms-laps-password"]
+                                    ):
                                         if ace["SID"] not in readers:
                                             if ace["SID"] == "S-1-5-10":
                                                 name = "S-1-5-10 (self)"
                                             else:
                                                 try:
-                                                    res = next(self.engine.resolve_sid(ace["SID"]))
+                                                    res = next(
+                                                        self.engine.resolve_sid(
+                                                            ace["SID"]
+                                                        )
+                                                    )
                                                     if "group" in res["objectClass"]:
                                                         name = f"{res['sAMAccountName']} (group)"
                                                     else:
