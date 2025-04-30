@@ -100,11 +100,12 @@ class Ldeep(Command):
                 elif "groupPolicyContainer" in record["objectClass"]:
                     print(f"{record['cn']}: {record['displayName']}")
                 elif "dnsNode" in record["objectClass"]:
-                    print(
-                        "{dc} {rec}".format(
-                            dc=record["dc"], rec=" ".join(record["dnsRecord"])
-                        )
-                    )
+                    if record["dc"] != "@":
+                        for sub_record in record["dnsRecord"]:
+                            print("{dc} {rec}".format(dc=record["dc"], rec=sub_record))
+                    else:  # TODO: @ seem to be a special record, as well as DomainDnsZones, they seem to have the NS and A of domain controllers
+                        for sub_record in record["dnsRecord"]:
+                            print("{dc} {rec}".format(dc=record["dc"], rec=sub_record))
                 elif "dnsZone" in record["objectClass"]:
                     print(record["dc"])
                 elif (
@@ -266,6 +267,23 @@ class Ldeep(Command):
         sys.stdout.flush()
 
     # LISTERS #
+
+    def list_server_info(self, kwargs):
+        """
+        List server info.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+
+        info = self.engine.query_server_info()
+        if verbose:
+            self.display(info, True)
+        else:
+            for key, value in info[0]["raw"].items():
+                print(key, value)
 
     def list_users(self, kwargs):
         """
@@ -718,19 +736,97 @@ class Ldeep(Command):
         else:
             attributes = ALL
 
-        try:
-            self.display(
-                self.engine.query(
-                    self.engine.ZONES_FILTER(),
-                    attributes,
-                    base=",".join(
-                        ["CN=MicrosoftDNS,DC=DomainDNSZones", self.engine.base_dn]
-                    ),
-                ),
-                verbose,
-            )
-        except:
-            error(f"Can't list zones", close_array=verbose)
+        first = True
+        displayed = []
+        for name, basePre, baseSuf in (
+            ("Domain", "CN=MicrosoftDNS,DC=DomainDnsZones", self.engine.base_dn),
+            ("Forest", "CN=MicrosoftDNS,DC=ForestDnsZones", self.engine.forest_base_dn),
+            ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
+        ):
+            try:
+                zones = list(
+                    self.engine.query(
+                        self.engine.ZONES_FILTER(),
+                        attributes,
+                        base=f"{basePre},{baseSuf}",
+                    )
+                )
+
+                if len(zones) > 0:
+                    if verbose:
+                        displayed.extend(zones)
+                    else:
+                        if first:
+                            first = False
+                        else:
+                            print()
+                        info(f"{name} zones:")
+                        self.display(zones)
+            except:
+                error(f"Can't list {name.lower()} zones", close_array=verbose)
+
+        if verbose:
+            self.display(displayed, True)
+        elif first:
+            info("No zones found")
+
+    def list_dns_records(self, kwargs):
+        """
+        List the DNS records configured in the Active Directory.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+        """
+        verbose = kwargs.get("verbose", False)
+
+        if not verbose:
+            attributes = ["dc", "dnsRecord", "objectClass"]
+        else:
+            attributes = ALL
+
+        first = True
+        displayed = []
+        for name, basePre, baseSuf in (
+            ("Domain", "CN=MicrosoftDNS,DC=DomainDnsZones", self.engine.base_dn),
+            ("Forest", "CN=MicrosoftDNS,DC=ForestDnsZones", self.engine.forest_base_dn),
+            ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
+        ):
+            try:
+                results = list(
+                    self.engine.query(
+                        self.engine.ZONE_FILTER(),
+                        attributes,
+                        base=f"{basePre},{baseSuf}",
+                    )
+                )
+
+            except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
+                error(f"Can't list {name.lower()} records", close_array=verbose)
+            else:
+                filteredResults = []
+                for result in results:
+                    result["dnsRecord"] = list(
+                        filter(lambda rec: rec != "", result["dnsRecord"])
+                    )
+                    if len(result["dnsRecord"]) > 0:
+                        filteredResults.append(result)
+
+                if len(filteredResults) > 0:
+                    if verbose:
+                        displayed.extend(filteredResults)
+                    else:
+                        if first:
+                            first = False
+                        else:
+                            print()
+                        info(f"{name} records:")
+                        self.display(filteredResults, verbose)
+
+        if verbose:
+            self.display(displayed, True)
+        elif first:
+            info("No records found")
 
     def list_pkis(self, kwargs):
         """
@@ -1507,21 +1603,41 @@ class Ldeep(Command):
                 DNS zone to retrieve records
         """
         dns_zone = kwargs["dns_zone"]
-        try:
-            results = self.engine.query(
-                self.engine.ZONE_FILTER(),
-                base=",".join(
-                    [
-                        f"DC={dns_zone}",
-                        "CN=MicrosoftDNS,DC=DomainDNSZones",
-                        self.engine.base_dn,
-                    ]
-                ),
-            )
-        except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
-            error(e)
-        else:
-            self.display(results)
+
+        first = True
+        for name, basePre, baseSuf in (
+            ("Domain", "CN=MicrosoftDNS,DC=DomainDnsZones", self.engine.base_dn),
+            ("Forest", "CN=MicrosoftDNS,DC=ForestDnsZones", self.engine.forest_base_dn),
+            ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
+        ):
+            try:
+                results = list(
+                    self.engine.query(
+                        self.engine.ZONE_FILTER(),
+                        base=f"DC={dns_zone},{basePre},{baseSuf}",
+                    )
+                )
+            except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
+                error(e)
+            else:
+                filteredResults = []
+                for result in results:
+                    result["dnsRecord"] = list(
+                        filter(lambda rec: rec != "", result["dnsRecord"])
+                    )
+                    if len(result["dnsRecord"]) > 0:
+                        filteredResults.append(result)
+
+                if len(filteredResults) > 0:
+                    if first:
+                        first = False
+                    else:
+                        print()
+                    info(f"{name} records:")
+                    self.display(filteredResults)
+
+        if first:
+            info("No records found")
 
     def get_membersof(self, kwargs):
         """
@@ -2304,6 +2420,12 @@ def main():
         help="LDAP base for query (by default, this value is pulled from remote Ldap)",
     )
     ldap.add_argument(
+        "-f",
+        "--forest-base",
+        default="",
+        help="LDAP forest base for query (by default, this value is pulled from remote Ldap)",
+    )
+    ldap.add_argument(
         "-t",
         "--type",
         default="ntlm",
@@ -2421,6 +2543,7 @@ def main():
                 args.ldapserver,
                 args.domain,
                 args.base,
+                args.forest_base,
                 args.username,
                 args.password,
                 args.ntlm,

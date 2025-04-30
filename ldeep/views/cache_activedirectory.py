@@ -99,6 +99,14 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         "files": ["silos"],
         "filter": lambda x: eq(x["cn"], s),
     }
+    ZONES_FILTER = lambda _: {
+        "fmt": "json",
+        "files": ["zones"],
+    }
+    ZONE_FILTER = lambda _: {
+        "fmt": "json",
+        "files": ["dns_records"],
+    }
 
     # Not implemented:
     DOMAIN_INFO_FILTER = lambda _: None
@@ -106,8 +114,6 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
     OU_FILTER = lambda _: None
     PSO_INFO_FILTER = lambda _: None
     TRUSTS_INFO_FILTER = lambda _: None
-    ZONES_FILTER = lambda _: None
-    ZONE_FILTER = lambda _: None
     USER_ACCOUNT_CONTROL_FILTER = lambda _, __: None
     USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: None
     USER_LOCKED_FILTER = lambda _: None
@@ -138,7 +144,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
             )
         self.path = cache_dir
         self.prefix = prefix
-        self.fqdn, self.base_dn = self.__get_domain_info()
+        self.fqdn, self.base_dn, self.forest_base_dn = self.__get_domain_info()
         self.attributes = ALL
         self.throttle = 0
         self.page_size = 0
@@ -181,6 +187,17 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         # Process unimplemented queries
         if cachefilter is None:
             raise self.CacheActiveDirectoryException("Cache query not supported.")
+
+        if base is not None:
+            if "filter" in cachefilter:
+                oldFilter = cachefilter["filter"]
+                cachefilter["filter"] = lambda elt: oldFilter(elt) and (
+                    "dn" not in elt or elt["dn"].endswith("," + base)
+                )
+            else:
+                cachefilter["filter"] = lambda elt: "dn" not in elt or elt[
+                    "dn"
+                ].endswith("," + base)
 
         # Get format of cache files to use: either `lst` or `json`
         if "fmt" in cachefilter:
@@ -231,6 +248,14 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
                 else:
                     data += map(lambda x: x.strip(), fp.readlines())
         return data
+
+    def query_server_info(self):
+        return self.query(
+            {
+                "fmt": "json",
+                "files": ["server_info"],
+            }
+        )
 
     def resolve_sid(self, sid):
         """
@@ -285,10 +310,10 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         """
         Private functions to retrieve the cache domain name.
         """
-        filename = "{prefix}_domain_policy.lst".format(prefix=self.prefix)
+        filename = "{prefix}_server_info.json".format(prefix=self.prefix)
         with open(path.join(self.path, filename)) as fp:
-            for line in fp:
-                if line.startswith("distinguishedName:"):
-                    base = line.split(" ")[1].strip()
-                    domain = base.replace("DC=", ".")[1:].replace(",", "")
-                    return domain, base
+            info = json_load(fp)
+            base = info[0]["raw"]["defaultNamingContext"][0]
+            forest_base = info[0]["raw"]["rootDomainNamingContext"][0]
+            domain = base.replace("DC=", ".")[1:].replace(",", "")
+            return domain, base, forest_base

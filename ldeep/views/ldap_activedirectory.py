@@ -1,8 +1,9 @@
 from sys import exit, _getframe
 from struct import unpack
-from socket import inet_ntoa
+from socket import inet_ntoa, inet_ntop, AF_INET6
 from ssl import CERT_NONE
 from uuid import UUID
+from json import loads as json_loads
 
 from Cryptodome.Cipher import AES
 from Cryptodome.Hash import MD4, SHA1
@@ -143,10 +144,20 @@ def format_dnsrecord(raw_value):
         if recordvalue == datatype:
             if recordname == "A":
                 target = inet_ntoa(data)
+            elif recordname == "AAAA":
+                target = inet_ntop(AF_INET6, data)
+            elif recordname == "NS":
+                nbSegments = data[1]
+                segments = []
+                index = 2
+                for _ in range(nbSegments):
+                    segLen = data[index]
+                    segments.append(data[index + 1 : index + segLen + 1].decode())
+                    index += segLen + 1
+                target = ".".join(segments)
             else:
-                # how, ugly
-                data = data.decode("unicode-escape", errors="replace")
-                target = "".join([c for c in data if ord(c) > 31 or ord(c) == 9])
+                return ""
+
             return "%s %s" % (recordname, target)
 
 
@@ -178,10 +189,6 @@ ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.121"] 
 )
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.93"] = (
     format_pwdProperties,
-    None,
-)
-ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (
-    format_dnsrecord,
     None,
 )
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.60"] = (
@@ -294,6 +301,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         server,
         domain="",
         base="",
+        forest_base="",
         username="",
         password="",
         ntlm="",
@@ -318,6 +326,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @server: Server to connect and perform LDAP query to.
         @domain: Fully qualified domain name of the Active Directory domain.
         @base: Base for the LDAP queries.
+        @forest_base: Forest base for the LDAP queries.
         @username: Username to use for the authentication
         @password: Password to use for the authentication (for SIMPLE authentication)
         @ntlm: NTLM hash to use for the authentication (for NTLM authentication)
@@ -564,6 +573,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             )
 
         self.base_dn = base or server.info.other["defaultNamingContext"][0]
+        self.forest_base_dn = (
+            forest_base or server.info.other["rootDomainNamingContext"][0]
+        )
         self.fqdn = ".".join(
             map(
                 lambda x: x.replace("DC=", ""),
@@ -657,6 +669,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 return dict(d)
 
         return filter(lambda x: x is not None, map(result, entry_generator))
+
+    def query_server_info(self):
+        return [json_loads(self.ldap.server.info.to_json())]
 
     def create_objecttype_guid_map(self):
         self.objecttype_guid_map = dict()
