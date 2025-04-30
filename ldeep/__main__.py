@@ -40,6 +40,7 @@ from ldeep.views.constants import (
     ADRights,
 )
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
+from ldeep.utils import checkProtections
 
 
 class Ldeep(Command):
@@ -616,7 +617,8 @@ class Ldeep(Command):
 
                 if field in FILETIME_TIMESTAMP_FIELDS.keys():
                     val = int(
-                        (fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0]
+                        (fabs(float(val)) / 10**7)
+                        / FILETIME_TIMESTAMP_FIELDS[field][0]
                     )
                     val = "{val} {typ}".format(
                         val=val, typ=FILETIME_TIMESTAMP_FIELDS[field][1]
@@ -2402,6 +2404,29 @@ def main():
 
     ldap = sub.add_parser("ldap", description="LDAP mode")
     cache = sub.add_parser("cache", description="Cache mode")
+    protections = sub.add_parser("protections", description="Protections mode")
+    protections.add_argument(
+        "-d", "--domain", required=True, help="The domain as NetBIOS or FQDN"
+    )
+    protections.add_argument(
+        "-s",
+        "--ldapserver",
+        required=True,
+        help="The LDAP path (ex : ldap://corp.contoso.com:389)",
+    )
+    protections.add_argument("-u", "--username", help="The username")
+    protections.add_argument(
+        "-p", "--password", help="The password used for the authentication"
+    )
+    protections.add_argument(
+        "-H", "--ntlm", help="NTLM hashes, format is LMHASH:NTHASH"
+    )
+    protections.add_argument(
+        "-k",
+        "--kerberos",
+        action="store_true",
+        help="For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable",
+    )
 
     ldap.add_argument(
         "-d", "--domain", required=True, help="The domain as NetBIOS or FQDN"
@@ -2517,6 +2542,18 @@ def main():
             query_engine = CacheActiveDirectoryView(args.dir, args.prefix)
         except CacheActiveDirectoryView.CacheActiveDirectoryDirNotFoundException as e:
             error(e)
+
+    elif protections:
+        # Check protections (LDAP Signing & LDAPS Channel Binding)
+        checkProtections(
+            args.ldapserver,
+            args.username,
+            args.password,
+            args.ntlm,
+            args.domain,
+            args.kerberos,
+        )
+        exit()
 
     else:
         try:
