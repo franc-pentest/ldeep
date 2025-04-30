@@ -152,7 +152,7 @@ def format_dnsrecord(raw_value):
                 index = 2
                 for _ in range(nbSegments):
                     segLen = data[index]
-                    segments.append(data[index + 1: index + segLen + 1].decode())
+                    segments.append(data[index + 1 : index + segLen + 1].decode())
                     index += segLen + 1
                 target = ".".join(segments)
             else:
@@ -573,7 +573,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             )
 
         self.base_dn = base or server.info.other["defaultNamingContext"][0]
-        self.forest_base_dn = forest_base or server.info.other["rootDomainNamingContext"][0]
+        self.forest_base_dn = (
+            forest_base or server.info.other["rootDomainNamingContext"][0]
+        )
         self.fqdn = ".".join(
             map(
                 lambda x: x.replace("DC=", ""),

@@ -191,9 +191,13 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         if base is not None:
             if "filter" in cachefilter:
                 oldFilter = cachefilter["filter"]
-                cachefilter["filter"] = lambda elt: oldFilter(elt) and ("dn" not in elt or elt["dn"].endswith("," + base))
+                cachefilter["filter"] = lambda elt: oldFilter(elt) and (
+                    "dn" not in elt or elt["dn"].endswith("," + base)
+                )
             else:
-                cachefilter["filter"] = lambda elt: "dn" not in elt or elt["dn"].endswith("," + base)
+                cachefilter["filter"] = lambda elt: "dn" not in elt or elt[
+                    "dn"
+                ].endswith("," + base)
 
         # Get format of cache files to use: either `lst` or `json`
         if "fmt" in cachefilter:
@@ -246,10 +250,12 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         return data
 
     def query_server_info(self):
-        return self.query({
-            "fmt": "json",
-            "files": ["server_info"],
-        })
+        return self.query(
+            {
+                "fmt": "json",
+                "files": ["server_info"],
+            }
+        )
 
     def resolve_sid(self, sid):
         """

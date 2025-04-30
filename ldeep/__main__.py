@@ -102,18 +102,10 @@ class Ldeep(Command):
                 elif "dnsNode" in record["objectClass"]:
                     if record["dc"] != "@":
                         for sub_record in record["dnsRecord"]:
-                            print(
-                                "{dc} {rec}".format(
-                                    dc=record["dc"], rec=sub_record
-                                )
-                            )
-                    else: # TODO: @ seem to be a special record, as well as DomainDnsZones, they seem to have the NS and A of domain controllers
+                            print("{dc} {rec}".format(dc=record["dc"], rec=sub_record))
+                    else:  # TODO: @ seem to be a special record, as well as DomainDnsZones, they seem to have the NS and A of domain controllers
                         for sub_record in record["dnsRecord"]:
-                            print(
-                                "{dc} {rec}".format(
-                                    dc=record["dc"], rec=sub_record
-                                )
-                            )
+                            print("{dc} {rec}".format(dc=record["dc"], rec=sub_record))
                 elif "dnsZone" in record["objectClass"]:
                     print(record["dc"])
                 elif (
@@ -752,11 +744,13 @@ class Ldeep(Command):
             ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
         ):
             try:
-                zones = list(self.engine.query(
-                    self.engine.ZONES_FILTER(),
-                    attributes,
-                    base=f"{basePre},{baseSuf}",
-                ))
+                zones = list(
+                    self.engine.query(
+                        self.engine.ZONES_FILTER(),
+                        attributes,
+                        base=f"{basePre},{baseSuf}",
+                    )
+                )
 
                 if len(zones) > 0:
                     if verbose:
@@ -799,18 +793,22 @@ class Ldeep(Command):
             ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
         ):
             try:
-                results = list(self.engine.query(
-                    self.engine.ZONE_FILTER(),
-                    attributes,
-                    base=f"{basePre},{baseSuf}",
-                ))
+                results = list(
+                    self.engine.query(
+                        self.engine.ZONE_FILTER(),
+                        attributes,
+                        base=f"{basePre},{baseSuf}",
+                    )
+                )
 
             except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
                 error(f"Can't list {name.lower()} records", close_array=verbose)
             else:
                 filteredResults = []
                 for result in results:
-                    result["dnsRecord"] = list(filter(lambda rec: rec != "", result["dnsRecord"]))
+                    result["dnsRecord"] = list(
+                        filter(lambda rec: rec != "", result["dnsRecord"])
+                    )
                     if len(result["dnsRecord"]) > 0:
                         filteredResults.append(result)
 
@@ -1613,16 +1611,20 @@ class Ldeep(Command):
             ("Legacy", "CN=MicrosoftDNS,CN=System", self.engine.base_dn),
         ):
             try:
-                results = list(self.engine.query(
-                    self.engine.ZONE_FILTER(),
-                    base=f"DC={dns_zone},{basePre},{baseSuf}",
-                ))
+                results = list(
+                    self.engine.query(
+                        self.engine.ZONE_FILTER(),
+                        base=f"DC={dns_zone},{basePre},{baseSuf}",
+                    )
+                )
             except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
                 error(e)
             else:
                 filteredResults = []
                 for result in results:
-                    result["dnsRecord"] = list(filter(lambda rec: rec != "", result["dnsRecord"]))
+                    result["dnsRecord"] = list(
+                        filter(lambda rec: rec != "", result["dnsRecord"])
+                    )
                     if len(result["dnsRecord"]) > 0:
                         filteredResults.append(result)
 
