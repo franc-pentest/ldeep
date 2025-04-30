@@ -49,7 +49,8 @@ def checkLDAPSigning(server, userDN, password, kerberosAuth):
 # 1. Connect to port 636
 # 2. Try to wrap socket with SSL/TLS
 # 3. If no error or self-signed certificate -> SSL/TLS configured
-# 4. Else -> SSL/TLS not configured (By default DCs do not have a certificate setup for LDAPS on port 636 and TLS handshake will hang)
+# 4. Else -> SSL/TLS not configured (By default DCs do not have
+#     a certificate setup for LDAPS on port 636 and TLS handshake will hang)
 def LDAPSCompleteHandshake(target):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(5)
@@ -80,7 +81,8 @@ def LDAPSCompleteHandshake(target):
 # 1. Bind LDAPS without Channel Binding (EPA)
 # 2. "data 80090346" in error -> Bind failed -> Enforced
 # 3. "data 52e" in error or no error -> Bind succeed -> Not enforced
-# Note: Channel Binding (EPA) enforcement will be returned regardless of a successful LDAPS bind -> Allow checking without authentication
+# Note: Channel Binding (EPA) enforcement will be returned regardless of
+#     a successful LDAPS bind -> Allow checking without authentication
 def checkEPA(server, userDN, password, kerberosAuth):
     try:
         if kerberosAuth:
@@ -115,7 +117,8 @@ def checkEPA(server, userDN, password, kerberosAuth):
 
 def do_ntlm_bind_null_avpair_epa(
     self, controls
-):  # Patch dynamically NTLM Bind of LDAP3 to force miscalculation of Channel Binding (EPA)
+):  # Patch dynamically NTLM Bind of LDAP3
+    # to enforce miscalculation of Channel Binding (EPA)
     self.last_error = None
     with self.connection_lock:
         if not self.sasl_in_progress:
@@ -229,7 +232,8 @@ def do_ntlm_bind_null_avpair_epa(
 # 3. "data 52e" in error or no error -> No EPA verification
 def checkEPAPolicy(server, userDN, password):
     try:
-        # Forcing a miscalculation of the "Channel Bindings" AV_PAIR in Type 3 NTLM message
+        # Enforce miscalculation of the "Channel Bindings" AV_PAIR
+        # in Type 3 NTLM message
         Connection.do_ntlm_bind = do_ntlm_bind_null_avpair_epa
         conn = Connection(
             server,
