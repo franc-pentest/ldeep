@@ -6,7 +6,6 @@ A module used to handle binary ntSecurityDescriptor from Active Directory LDAP.
 
 from struct import unpack
 
-
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid_le
 
 SDDLTypeFlags = {

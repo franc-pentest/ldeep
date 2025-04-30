@@ -159,11 +159,10 @@ LDAP
 ::
 
     $ ldeep ldap -h
-    usage: ldeep ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [--throttle THROTTLE] [--page_size PAGE_SIZE]
-                      [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--pfx-file PFX_FILE] [--pfx-pass PFX_PASS] [--cert-pem CERT_PEM]
-                      [--key-pem KEY_PEM] [-a]
-                      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,create_computer,create_user,modify_password,remove_from_group,unlock}
-                      ...
+    usage: ldeep - 1.0.80 ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [--throttle THROTTLE] [--page_size PAGE_SIZE] [-n] [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--pfx-file PFX_FILE]
+                               [--pfx-pass PFX_PASS] [--cert-pem CERT_PEM] [--key-pem KEY_PEM] [-a]
+                               {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,templates,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,change_uac,create_computer,create_user,modify_password,remove_from_group,unlock}
+                               ...
 
     LDAP mode
 
@@ -175,11 +174,11 @@ LDAP
                             The LDAP path (ex : ldap://corp.contoso.com:389)
       -b BASE, --base BASE  LDAP base for query (by default, this value is pulled from remote Ldap)
       -t {ntlm,simple}, --type {ntlm,simple}
-                            Authentication type: ntlm (default) or simple
-      --throttle THROTTLE   Add a throttle between queries to sneak under detection thresholds (in seconds between queries:
-                            argument to the sleep function)
+                            Authentication type: ntlm (default) or simple. Simple bind will always be in cleartext with ldap (not ldaps)
+      --throttle THROTTLE   Add a throttle between queries to sneak under detection thresholds (in seconds between queries: argument to the sleep function)
       --page_size PAGE_SIZE
                             Configure the page size used by the engine to query the LDAP server (default: 1000)
+      -n, --no-encryption   Encrypt the communication or not (default: encrypted, except with simple bind and ldap)
 
     NTLM authentication:
       -u USERNAME, --username USERNAME
@@ -203,7 +202,7 @@ LDAP
     commands:
       available commands
 
-      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,change_uac,create_computer,create_user,modify_password,remove_from_group,unlock}
+      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,templates,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,change_uac,create_computer,create_user,modify_password,remove_from_group,unlock}
         auth_policies       List the authentication policies configured in the Active Directory.
         bitlockerkeys       Extract the bitlocker recovery keys.
         computers           List the computer hostnames and resolve them if --resolve is specify.
@@ -211,7 +210,7 @@ LDAP
         delegations         List accounts configured for any kind of delegation.
         domain_policy       Return the domain policy.
         fsmo                List FSMO roles.
-        gmsa                List the gmsa accounts and retrieve NT hash if possible.
+        gmsa                List the gmsa accounts and retrieve secrets(NT + kerberos keys) if possible.
         gpo                 Return the list of Group policy objects.
         groups              List the groups.
         machines            List the machine accounts.
@@ -223,6 +222,7 @@ LDAP
         silos               List the silos configured in the Active Directory.
         smsa                List the smsa accounts and the machines they are associated with.
         subnets             List sites and associated subnets.
+        templates           List certificate templates.
         trusts              List the domain's trust relationships.
         users               List users according to a filter.
         zones               List the DNS zones configured in the Active Directory.
@@ -423,9 +423,7 @@ Upcoming
 
 * Proper DNS zone enumeration
 * ADCS enumeration
-* Sites and subnets
 * Project tree
-* Useful Kerberos delegation information
 * Any ideas?
 
 ================

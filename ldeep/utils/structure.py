@@ -4,10 +4,11 @@
 # of the Apache Software License. See the accompanying LICENSE file
 # for more information.
 #
-from __future__ import division
-from __future__ import print_function
-from struct import pack, unpack, calcsize
-from six import b, PY3
+from __future__ import division, print_function
+
+from struct import calcsize, pack, unpack
+
+from six import PY3, b
 
 
 class Structure:

@@ -1,9 +1,9 @@
-from sys import __stdout__, __stderr__, exit
-from termcolor import colored
 from multiprocessing.dummy import Pool as ThreadPool
-from tqdm import tqdm
+from sys import __stderr__, __stdout__, exit
 
 import dns.resolver
+from termcolor import colored
+from tqdm import tqdm
 
 
 def info(content):

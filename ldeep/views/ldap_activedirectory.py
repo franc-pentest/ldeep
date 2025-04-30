@@ -1,64 +1,65 @@
-from sys import exit, _getframe
-from struct import unpack
-from socket import inet_ntoa
+from json import loads as json_loads
+from socket import AF_INET6, inet_ntoa, inet_ntop
 from ssl import CERT_NONE
+from struct import unpack
+from sys import _getframe, exit
 from uuid import UUID
 
+import ldap3
 from Cryptodome.Cipher import AES
 from Cryptodome.Hash import MD4, SHA1
 from Cryptodome.Protocol.KDF import PBKDF2
-
 from ldap3 import (
-    Server,
-    Connection,
-    SASL,
-    KERBEROS,
-    NTLM,
-    SUBTREE,
     ALL as LDAP3_ALL,
+)
+from ldap3 import (
     BASE,
     DEREF_NEVER,
-    TLS_CHANNEL_BINDING,
     ENCRYPT,
+    KERBEROS,
     MODIFY_REPLACE,
+    NTLM,
+    SASL,
+    SIMPLE,
+    SUBTREE,
+    TLS_CHANNEL_BINDING,
+    Connection,
+    Server,
 )
-from ldap3 import SIMPLE
-from ldap3.protocol.formatters.formatters import format_sid
 from ldap3.core.exceptions import (
+    LDAPAttributeError,
     LDAPOperationResult,
     LDAPSocketOpenError,
-    LDAPAttributeError,
     LDAPSocketSendError,
 )
-from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
-from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 from ldap3.extend.microsoft.addMembersToGroups import (
     ad_add_members_to_groups as addUsersInGroups,
 )
+from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 from ldap3.extend.microsoft.removeMembersFromGroups import (
     ad_remove_members_from_groups as removeUsersInGroups,
 )
+from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
+from ldap3.protocol.formatters.formatters import format_sid
 
-import ldap3
-
-from ldeep.views.activedirectory import (
-    ActiveDirectoryView,
-    ALL,
-    validate_sid,
-    validate_guid,
-)
-from ldeep.views.constants import (
-    USER_ACCOUNT_CONTROL,
-    DNS_TYPES,
-    SAM_ACCOUNT_TYPE,
-    PWD_PROPERTIES,
-    TRUSTS_INFOS,
-    WELL_KNOWN_SIDS,
-    LOGON_SAM_LOGON_RESPONSE_EX,
-    GMSA_ENCRYPTION_CONSTANTS,
-)
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldeep.utils.structure import Structure
+from ldeep.views.activedirectory import (
+    ALL,
+    ActiveDirectoryView,
+    validate_guid,
+    validate_sid,
+)
+from ldeep.views.constants import (
+    DNS_TYPES,
+    GMSA_ENCRYPTION_CONSTANTS,
+    LOGON_SAM_LOGON_RESPONSE_EX,
+    PWD_PROPERTIES,
+    SAM_ACCOUNT_TYPE,
+    TRUSTS_INFOS,
+    USER_ACCOUNT_CONTROL,
+    WELL_KNOWN_SIDS,
+)
 from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
 
 
@@ -143,10 +144,20 @@ def format_dnsrecord(raw_value):
         if recordvalue == datatype:
             if recordname == "A":
                 target = inet_ntoa(data)
+            elif recordname == "AAAA":
+                target = inet_ntop(AF_INET6, data)
+            elif recordname == "NS":
+                nbSegments = data[1]
+                segments = []
+                index = 2
+                for _ in range(nbSegments):
+                    segLen = data[index]
+                    segments.append(data[index + 1 : index + segLen + 1].decode())
+                    index += segLen + 1
+                target = ".".join(segments)
             else:
-                # how, ugly
-                data = data.decode("unicode-escape", errors="replace")
-                target = "".join([c for c in data if ord(c) > 31 or ord(c) == 9])
+                return ""
+
             return "%s %s" % (recordname, target)
 
 
@@ -178,10 +189,6 @@ ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.121"] 
 )
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.93"] = (
     format_pwdProperties,
-    None,
-)
-ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (
-    format_dnsrecord,
     None,
 )
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.60"] = (
@@ -223,7 +230,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     PKI_FILTER = lambda _: "(objectClass=pKIEnrollmentService)"
     TEMPLATE_FILTER = lambda _: "(objectClass=pKICertificateTemplate)"
     PRIMARY_SCCM_FILTER = lambda _: "(cn=System Management)"
-    DP_SCCM_FILTER = lambda _: "(objectClass=mssmsmanagementpoint)"
+    MP_SCCM_FILTER = lambda _: "(objectClass=mssmsmanagementpoint)"
+    DP_SCCM_FILTER = lambda _: "(cn=*-Remote-Installation-Services)"
     USER_ALL_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user))"
     USER_SPN_FILTER = (
         lambda _: "(&(objectCategory=Person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt)))"
@@ -263,6 +271,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     LAPS2_FILTER = (
         lambda _, s: f"(&(objectCategory=computer)(msLAPS-PasswordExpirationTime=*)(cn={s}))"
     )
+    GMSA_FILTER = (
+        lambda _, s: f"(&(ObjectClass=msDS-GroupManagedServiceAccount)(sAMAccountName={s}))"
+    )
     SMSA_FILTER = lambda _: "(ObjectClass=msDS-ManagedServiceAccount)"
     BITLOCKERKEY_FILTER = lambda _: "(objectClass=msFVE-RecoveryInformation)"
     FSMO_DOMAIN_NAMING_FILTER = (
@@ -290,6 +301,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         server,
         domain="",
         base="",
+        forest_base="",
         username="",
         password="",
         ntlm="",
@@ -314,6 +326,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @server: Server to connect and perform LDAP query to.
         @domain: Fully qualified domain name of the Active Directory domain.
         @base: Base for the LDAP queries.
+        @forest_base: Forest base for the LDAP queries.
         @username: Username to use for the authentication
         @password: Password to use for the authentication (for SIMPLE authentication)
         @ntlm: NTLM hash to use for the authentication (for NTLM authentication)
@@ -348,22 +361,22 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 exit(1)
             else:
                 if self.pfx_file:
-                    from cryptography.hazmat.primitives.serialization import pkcs12
                     from cryptography.hazmat.primitives import serialization
+                    from cryptography.hazmat.primitives.serialization import pkcs12
 
                     with open(pfx_file, "rb") as f:
                         pfxdata = f.read()
                     if self.pfx_pass:
-                        from oscrypto.keys import (
-                            parse_pkcs12,
-                            parse_certificate,
-                            parse_private,
-                        )
                         from oscrypto.asymmetric import (
-                            rsa_pkcs1v15_sign,
-                            load_private_key,
-                            dump_openssl_private_key,
                             dump_certificate,
+                            dump_openssl_private_key,
+                            load_private_key,
+                            rsa_pkcs1v15_sign,
+                        )
+                        from oscrypto.keys import (
+                            parse_certificate,
+                            parse_pkcs12,
+                            parse_private,
                         )
 
                         if isinstance(self.pfx_pass, str):
@@ -494,48 +507,16 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         elif method == "SIMPLE":
             if "." in domain:
                 domain, _, _ = domain.partition(".")
-            if self.server.startswith("ldaps"):
-                if not password:
-                    print("Password is required (-p)")
-                    exit(1)
-                self.ldap = Connection(
-                    server,
-                    user=f"{domain}\\{username}",
-                    password=password,
-                    authentication=SIMPLE,
-                    check_names=True,
-                )
-            else:
-                if not ntlm:
-                    print(
-                        "Please authenticate using the NT hash for simple bind without ldaps"
-                    )
-                    exit(1)
-                try:
-                    lm, nt = ntlm.split(":")
-                    lm = "aad3b435b51404eeaad3b435b51404ee" if not lm else lm
-                    ntlm = f"{lm}:{nt}"
-                except Exception as e:
-                    print(e)
-                    print("Incorrect hash, format is [LMHASH]:NTHASH")
-                    exit(1)
-                if self.no_encryption:
-                    self.ldap = Connection(
-                        server,
-                        user=f"{domain}\\{username}",
-                        password=ntlm,
-                        authentication=NTLM,
-                        check_names=True,
-                    )
-                else:
-                    self.ldap = Connection(
-                        server,
-                        user=f"{domain}\\{username}",
-                        password=ntlm,
-                        authentication=NTLM,
-                        session_security=ENCRYPT,
-                        check_names=True,
-                    )
+            if not password:
+                print("Password is required with simple bind (-p)")
+                exit(1)
+            self.ldap = Connection(
+                server,
+                user=f"{domain}\\{username}",
+                password=password,
+                authentication=SIMPLE,
+                check_names=True,
+            )
 
         try:
             if method == "Certificate":
@@ -573,7 +554,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                             break
                     self.ldap.search(
                         search_base=anon_base,
-                        search_filter="(&(objectClass=domain))",
+                        search_filter="(objectClass=*)",
                         search_scope="SUBTREE",
                         attributes="*",
                     )
@@ -592,6 +573,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             )
 
         self.base_dn = base or server.info.other["defaultNamingContext"][0]
+        self.forest_base_dn = (
+            forest_base or server.info.other["rootDomainNamingContext"][0]
+        )
         self.fqdn = ".".join(
             map(
                 lambda x: x.replace("DC=", ""),
@@ -685,6 +669,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 return dict(d)
 
         return filter(lambda x: x is not None, map(result, entry_generator))
+
+    def query_server_info(self):
+        return [json_loads(self.ldap.server.info.to_json())]
 
     def create_objecttype_guid_map(self):
         self.objecttype_guid_map = dict()
@@ -781,10 +768,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
         return result_set
 
-    def get_gmsa(self, attributes):
-        entries = list(
-            self.query("(ObjectClass=msDS-GroupManagedServiceAccount)", attributes)
-        )
+    def get_gmsa(self, attributes, target):
+        entries = list(self.query(self.GMSA_FILTER(target), attributes))
 
         constants = GMSA_ENCRYPTION_CONSTANTS
         iv = b"\x00" * 16
@@ -999,16 +984,16 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @return the result code on the add action
         """
         computer_dn = f"CN={computer},CN=Computers,{self.base_dn}"
+        domain = ".".join(part.split("=")[1] for part in self.base_dn.split(","))
         # Default computer SPNs
         spns = [
-            f"HOST/{computer}",
-            f"HOST/{computer}.{self.domain}",
-            f"RestrictedKrbHost/{computer}",
-            f"RestrictedKrbHost/{computer}.{self.domain}",
+            f"HOST/{computer.strip('$')}",
+            f"HOST/{computer.strip('$')}.{domain}",
+            f"RestrictedKrbHost/{computer.strip('$')}",
+            f"RestrictedKrbHost/{computer.strip('$')}.{domain}",
         ]
-
         ucd = {
-            "dnsHostName": "%s.%s" % (computer, self.domain),
+            "dnsHostName": "%s.%s" % (computer.strip("$"), domain),
             "userAccountControl": 0x1000,  # WORKSTATION_TRUST_ACCOUNT
             "servicePrincipalName": spns,
             "sAMAccountName": computer,
