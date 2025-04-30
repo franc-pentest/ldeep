@@ -1,5 +1,5 @@
 from ldap3 import ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES
-from ldap3.protocol.formatters.validators import validate_sid, validate_guid
+from ldap3.protocol.formatters.validators import validate_guid, validate_sid
 
 ALL_ATTRIBUTES = ALL_ATTRIBUTES
 ALL_OPERATIONAL_ATTRIBUTES = ALL_OPERATIONAL_ATTRIBUTES

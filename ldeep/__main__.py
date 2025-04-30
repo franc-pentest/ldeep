@@ -1,46 +1,45 @@
 #!/usr/bin/env python3
 
+import sys
 from argparse import ArgumentParser
-from json import dump as json_dump
 from base64 import b64encode
+from datetime import date, datetime, timedelta
+from json import dump as json_dump
 from math import fabs
 from re import compile as re_compile
-from datetime import date, datetime, timedelta
-from commandparse import Command
 from time import sleep
 from uuid import UUID
 
+from commandparse import Command
+from ldap3.core import results as coreResults
+from ldap3.core.exceptions import LDAPAttributeError, LDAPObjectClassError
+from ldap3.protocol.formatters.formatters import format_sid
 from pyasn1.error import PyAsn1UnicodeDecodeError
 
+from ldeep._version import __version__
+from ldeep.utils import Logger, error, info
+from ldeep.utils import resolve as utils_resolve
+from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldeep.views.activedirectory import (
-    ActiveDirectoryView,
     ALL,
     ALL_ATTRIBUTES,
     ALL_OPERATIONAL_ATTRIBUTES,
+    ActiveDirectoryView,
 )
+from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 from ldeep.views.constants import (
-    USER_ACCOUNT_CONTROL,
-    LDAP_SERVER_SD_FLAGS_OID_SEC_DESC,
+    AUTHENTICATING_EKUS,
+    EXTENDED_RIGHTS_NAME_MAP,
     FILETIME_TIMESTAMP_FIELDS,
     FOREST_LEVELS,
-    OID_TO_STR_MAP,
-    AUTHENTICATING_EKUS,
+    LDAP_SERVER_SD_FLAGS_OID_SEC_DESC,
     MS_PKI_CERTIFICATE_NAME_FLAG,
-    EXTENDED_RIGHTS_NAME_MAP,
     MS_PKI_ENROLLMENT_FLAG,
+    OID_TO_STR_MAP,
+    USER_ACCOUNT_CONTROL,
     ADRights,
 )
-from ldeep._version import __version__
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
-from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
-
-from ldeep.utils import error, info, Logger, resolve as utils_resolve
-from ldeep.utils.sddl import parse_ntSecurityDescriptor
-from ldap3.protocol.formatters.formatters import format_sid
-from ldap3.core import results as coreResults
-from ldap3.core.exceptions import LDAPAttributeError, LDAPObjectClassError
-
-import sys
 
 
 class Ldeep(Command):

@@ -1,65 +1,65 @@
-from sys import exit, _getframe
-from struct import unpack
-from socket import inet_ntoa, inet_ntop, AF_INET6
-from ssl import CERT_NONE
-from uuid import UUID
 from json import loads as json_loads
+from socket import AF_INET6, inet_ntoa, inet_ntop
+from ssl import CERT_NONE
+from struct import unpack
+from sys import _getframe, exit
+from uuid import UUID
 
+import ldap3
 from Cryptodome.Cipher import AES
 from Cryptodome.Hash import MD4, SHA1
 from Cryptodome.Protocol.KDF import PBKDF2
-
 from ldap3 import (
-    Server,
-    Connection,
-    SASL,
-    KERBEROS,
-    NTLM,
-    SUBTREE,
     ALL as LDAP3_ALL,
+)
+from ldap3 import (
     BASE,
     DEREF_NEVER,
-    TLS_CHANNEL_BINDING,
     ENCRYPT,
+    KERBEROS,
     MODIFY_REPLACE,
+    NTLM,
+    SASL,
+    SIMPLE,
+    SUBTREE,
+    TLS_CHANNEL_BINDING,
+    Connection,
+    Server,
 )
-from ldap3 import SIMPLE
-from ldap3.protocol.formatters.formatters import format_sid
 from ldap3.core.exceptions import (
+    LDAPAttributeError,
     LDAPOperationResult,
     LDAPSocketOpenError,
-    LDAPAttributeError,
     LDAPSocketSendError,
 )
-from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
-from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 from ldap3.extend.microsoft.addMembersToGroups import (
     ad_add_members_to_groups as addUsersInGroups,
 )
+from ldap3.extend.microsoft.modifyPassword import ad_modify_password
 from ldap3.extend.microsoft.removeMembersFromGroups import (
     ad_remove_members_from_groups as removeUsersInGroups,
 )
+from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
+from ldap3.protocol.formatters.formatters import format_sid
 
-import ldap3
-
-from ldeep.views.activedirectory import (
-    ActiveDirectoryView,
-    ALL,
-    validate_sid,
-    validate_guid,
-)
-from ldeep.views.constants import (
-    USER_ACCOUNT_CONTROL,
-    DNS_TYPES,
-    SAM_ACCOUNT_TYPE,
-    PWD_PROPERTIES,
-    TRUSTS_INFOS,
-    WELL_KNOWN_SIDS,
-    LOGON_SAM_LOGON_RESPONSE_EX,
-    GMSA_ENCRYPTION_CONSTANTS,
-)
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldeep.utils.structure import Structure
+from ldeep.views.activedirectory import (
+    ALL,
+    ActiveDirectoryView,
+    validate_guid,
+    validate_sid,
+)
+from ldeep.views.constants import (
+    DNS_TYPES,
+    GMSA_ENCRYPTION_CONSTANTS,
+    LOGON_SAM_LOGON_RESPONSE_EX,
+    PWD_PROPERTIES,
+    SAM_ACCOUNT_TYPE,
+    TRUSTS_INFOS,
+    USER_ACCOUNT_CONTROL,
+    WELL_KNOWN_SIDS,
+)
 from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
 
 
@@ -361,22 +361,22 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                 exit(1)
             else:
                 if self.pfx_file:
-                    from cryptography.hazmat.primitives.serialization import pkcs12
                     from cryptography.hazmat.primitives import serialization
+                    from cryptography.hazmat.primitives.serialization import pkcs12
 
                     with open(pfx_file, "rb") as f:
                         pfxdata = f.read()
                     if self.pfx_pass:
-                        from oscrypto.keys import (
-                            parse_pkcs12,
-                            parse_certificate,
-                            parse_private,
-                        )
                         from oscrypto.asymmetric import (
-                            rsa_pkcs1v15_sign,
-                            load_private_key,
-                            dump_openssl_private_key,
                             dump_certificate,
+                            dump_openssl_private_key,
+                            load_private_key,
+                            rsa_pkcs1v15_sign,
+                        )
+                        from oscrypto.keys import (
+                            parse_certificate,
+                            parse_pkcs12,
+                            parse_private,
                         )
 
                         if isinstance(self.pfx_pass, str):

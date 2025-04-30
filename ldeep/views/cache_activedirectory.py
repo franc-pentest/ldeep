@@ -1,9 +1,10 @@
-from os import path
 from json import load as json_load
+from os import path
+
 from ldeep.views.activedirectory import (
-    ActiveDirectoryView,
     ALL,
     ALL_ATTRIBUTES,
+    ActiveDirectoryView,
     validate_guid,
     validate_sid,
 )
