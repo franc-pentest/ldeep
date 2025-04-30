@@ -8,6 +8,7 @@ from re import compile as re_compile
 from datetime import date, datetime, timedelta
 from commandparse import Command
 from time import sleep
+from uuid import UUID
 
 from pyasn1.error import PyAsn1UnicodeDecodeError
 
@@ -1022,9 +1023,12 @@ class Ldeep(Command):
                         name = sid
 
                     # extended rights
+                    mask = principal.get("Raw Access Required")
                     if principal.get("GUID"):
                         right = principal.get("GUID").lower().strip("{}")
-                        if right:
+                        if right and mask & ADRights.get(
+                            "ExtendedRight"
+                        ) == ADRights.get("ExtendedRight"):
                             if (
                                 right == EXTENDED_RIGHTS_NAME_MAP["Enroll"]
                                 or right
@@ -1033,7 +1037,6 @@ class Ldeep(Command):
                                 enroll_principals.append(name)
 
                     # Object Control Permissions
-                    mask = principal.get("Raw Access Required")
                     if mask & ADRights.get("GenericAll") == ADRights.get("GenericAll"):
                         full_control_principals.append(name)
                     if mask & ADRights.get("WriteOwner") == ADRights.get("WriteOwner"):
@@ -1854,6 +1857,21 @@ class Ldeep(Command):
         computer = kwargs.get("computer", "*")
         verbose = kwargs.get("verbose", False)
 
+        guid_map = {}
+        schema_entries = self.engine.ldap.extend.standard.paged_search(
+            self.engine.ldap.server.info.other["schemaNamingContext"][0],
+            "(objectClass=*)",
+            attributes=["name", "schemaidguid"],
+        )
+        for entry in schema_entries:
+            name = entry["attributes"]["name"].lower()
+            if (
+                name in ("ms-laps-encryptedpassword", "ms-laps-password")
+                and entry["attributes"]["schemaIDGUID"]
+            ):
+                guid = str(UUID(bytes_le=entry["attributes"]["schemaIDGUID"]))
+                guid_map[name] = guid
+
         attributes = (
             ALL
             if verbose
@@ -1889,6 +1907,7 @@ class Ldeep(Command):
                         "dNSHostName",
                         "msLAPS-EncryptedPassword",
                         "msLAPS-PasswordExpirationTime",
+                        "nTSecurityDescriptor",
                     ]
                 )
                 entries = self.engine.query(
@@ -1906,6 +1925,33 @@ class Ldeep(Command):
                                 )
                             else:
                                 print(f"{c['dNSHostName']}")
+
+                            readers = set()
+                            for ace in c["nTSecurityDescriptor"]["DACL"]["ACEs"]:
+                                if "GUID" in ace.keys():
+                                    guid = ace["GUID"].strip("{}")
+                                    if (
+                                        guid == guid_map["ms-laps-encryptedpassword"]
+                                        or guid == guid_map["ms-laps-password"]
+                                    ):
+                                        if ace["SID"] not in readers:
+                                            if ace["SID"] == "S-1-5-10":
+                                                name = "S-1-5-10 (self)"
+                                            else:
+                                                try:
+                                                    res = next(
+                                                        self.engine.resolve_sid(
+                                                            ace["SID"]
+                                                        )
+                                                    )
+                                                    if "group" in res["objectClass"]:
+                                                        name = f"{res['sAMAccountName']} (group)"
+                                                    else:
+                                                        name = res["sAMAccountName"]
+                                                except StopIteration:
+                                                    name = ace["SID"]
+                                            print(f"{c['dNSHostName']}:reader:{name}")
+                                            readers.add(ace["SID"])
             except Exception as e:
                 print(e)
                 error("No LAPS related attribute has been detected")
