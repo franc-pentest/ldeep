@@ -100,11 +100,20 @@ class Ldeep(Command):
                 elif "groupPolicyContainer" in record["objectClass"]:
                     print(f"{record['cn']}: {record['displayName']}")
                 elif "dnsNode" in record["objectClass"]:
-                    print(
-                        "{dc} {rec}".format(
-                            dc=record["dc"], rec=" ".join(record["dnsRecord"])
-                        )
-                    )
+                    if record["dc"] != "@":
+                        for sub_record in record["dnsRecord"]:
+                            print(
+                                "{dc} {rec}".format(
+                                    dc=record["dc"], rec=sub_record
+                                )
+                            )
+                    else: # TODO: @ seem to be a special record, as well as DomainDnsZones, they seem to have the NS and A of domain controllers
+                        for sub_record in record["dnsRecord"]:
+                            print(
+                                "{dc} {rec}".format(
+                                    dc=record["dc"], rec=sub_record
+                                )
+                            )
                 elif "dnsZone" in record["objectClass"]:
                     print(record["dc"])
                 elif (
