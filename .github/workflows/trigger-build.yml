@@ -91,7 +91,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: ldeep_macos-arm64
+          path: |
+            ldeep_macos-arm64
+            nuitka-crash-report.xml
 
   macos-amd-build:
     name: MacOS AMD64 Build
@@ -117,4 +119,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-amd
-          path: ldeep_macos-amd64
+          path: |
+            ldeep_macos-amd64
+            nuitka-crash-report.xml
