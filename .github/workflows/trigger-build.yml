@@ -1,14 +1,8 @@
-name: Release
+name: Manual Test Build
 
 on:
-  push:
+  workflow_dispatch:
     branches: [master]
-    paths:
-      - 'VERSION'
-
-permissions:
-  id-token: write
-  contents: write
 
 jobs:
   linux-build:
@@ -124,38 +118,3 @@ jobs:
         with:
           name: macos-amd
           path: ldeep_macos-amd64
-
-  tagged-release:
-    needs: [linux-build, windows-build, macos-build, macos-amd-build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get local version
-        run: echo "version=$(cat VERSION)" >> $GITHUB_ENV
-
-      - name: Create tag
-        uses: rickstaa/action-create-tag@v1
-        with:
-          tag: ${{ env.version }}
-
-      - name: Download all workflow run artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Create the release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.version }}
-          generate_release_notes: true
-          body: "${{ github.event.head_commit.message }}"
-          files: |
-            linux/ldeep_linux-amd64
-            windows/ldeep_windows-amd64.exe
-            macos/ldeep_macos-arm64
-            macos-amd/ldeep_macos-amd64
-
-      - name: Upload to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: sdist/
