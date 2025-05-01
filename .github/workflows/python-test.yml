@@ -43,7 +43,7 @@ jobs:
           set +e
           echo "\`\`\`console" >> $GITHUB_STEP_SUMMARY
           echo pdm run ldeep -h >> $GITHUB_STEP_SUMMARY
-          pdm run ldeep -h 2>&1 >> $GITHUB_STEP_SUMMARY
+          pdm run ldeep -h >> $GITHUB_STEP_SUMMARY 2>&1
           exitcode="$?"
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           exit "$exitcode"
