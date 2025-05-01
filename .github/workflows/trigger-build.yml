@@ -84,8 +84,7 @@ jobs:
 
       - name: Build
         run: |
-          wget https://nuitka.net/ccache/v4.2.1/ccache-4.2.1.zip
-          pdm run python3.12 -m nuitka --standalone --onefile --verbose --show-scons --output-filename=ldeep.bin ldeep/__main__.py
+          pdm run python3.12 -m nuitka --standalone --onefile --assume-yes-for-downloads --output-filename=ldeep.bin ldeep/__main__.py
           mv ldeep.bin ldeep_macos-arm64
 
       - name: Upload Artifacts
@@ -114,8 +113,7 @@ jobs:
 
       - name: Build
         run: |
-          wget https://nuitka.net/ccache/v4.2.1/ccache-4.2.1.zip
-          pdm run python3.12 -m nuitka --standalone --onefile --verbose --show-scons --output-filename=ldeep.bin ldeep/__main__.py
+          pdm run python3.12 -m nuitka --standalone --onefile --assume-yes-for-downloads --output-filename=ldeep.bin ldeep/__main__.py
           mv ldeep.bin ldeep_macos-amd64
 
       - name: Upload Artifacts
