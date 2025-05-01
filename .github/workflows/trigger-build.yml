@@ -88,6 +88,7 @@ jobs:
           mv ldeep.bin ldeep_macos-arm64
 
       - name: Upload Artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: macos
@@ -116,6 +117,7 @@ jobs:
           mv ldeep.bin ldeep_macos-amd64
 
       - name: Upload Artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: macos-amd
