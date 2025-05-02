@@ -40,7 +40,7 @@ from ldeep.views.constants import (
     ADRights,
 )
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
-from ldeep.utils import checkProtections
+from ldeep.utils.protections import checkProtections
 
 
 class Ldeep(Command):
@@ -2411,7 +2411,7 @@ def main():
         "-s",
         "--ldapserver",
         required=True,
-        help="The LDAP path (ex : ldap://corp.contoso.com:389)",
+        help="The LDAP server (IP or FQDN for Kerberos)",
     )
     protections.add_argument("-u", "--username", help="The username")
     protections.add_argument(
@@ -2542,7 +2542,7 @@ def main():
         except CacheActiveDirectoryView.CacheActiveDirectoryDirNotFoundException as e:
             error(e)
 
-    elif protections:
+    elif args.mode == "protections":
         # Check protections (LDAP Signing & LDAPS Channel Binding)
         checkProtections(
             args.ldapserver,
