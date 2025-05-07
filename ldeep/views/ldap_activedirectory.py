@@ -1054,11 +1054,21 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             raise self.ActiveDirectoryLdapException("Zero or non uniq result")
         else:
             user_dn = results[0]['dn']
+            uac_properties = [x.strip() for x in results[0]['userAccountControl'].split('|')]
+
+        new_uac_value = 0
+        for uac_value in uac_properties:
+            new_uac_value += USER_ACCOUNT_CONTROL[uac_value]
+        if 'ACCOUNTDISABLE' in uac_properties:
+            new_uac_value -= 2
+        if 'NORMAL_ACCOUNT' not in uac_properties:
+            new_uac_value += 512
+
         # Check if the user exists
         if self.ldap.search(user_dn, "(objectClass=user)", attributes=["userAccountControl"]):
             try:
                 # Update userAccountControl to 512 (NORMAL_ACCOUNT) to enable the account
-                mod_attrs = {'userAccountControl': [('MODIFY_REPLACE', 512)]} # enable
+                mod_attrs = {'userAccountControl': [('MODIFY_REPLACE', new_uac_value)]} # enable
                 result = self.ldap.modify(user_dn, mod_attrs)
                 return result
             except Exception as e:
