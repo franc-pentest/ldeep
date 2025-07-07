@@ -231,7 +231,8 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     TEMPLATE_FILTER = lambda _: "(objectClass=pKICertificateTemplate)"
     PRIMARY_SCCM_FILTER = lambda _: "(cn=System Management)"
     MP_SCCM_FILTER = lambda _: "(objectClass=mssmsmanagementpoint)"
-    DP_SCCM_FILTER = lambda _: "(cn=*-Remote-Installation-Services)"
+    WDS_FILTER = lambda _: "(cn=*-Remote-Installation-Services)"
+    #WDS_FILTER = lambda _: "(objectClass=intellimirrorSCP)"
     USER_ALL_FILTER = lambda _: "(&(objectCategory=Person)(objectClass=user))"
     USER_SPN_FILTER = (
         lambda _: "(&(objectCategory=Person)(objectClass=user)(servicePrincipalName=*)(!(sAMAccountName=krbtgt)))"
