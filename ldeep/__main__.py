@@ -28,16 +28,10 @@ from ldeep.views.activedirectory import (
 )
 from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 from ldeep.views.constants import (
-    AUTHENTICATING_EKUS,
-    EXTENDED_RIGHTS_NAME_MAP,
     FILETIME_TIMESTAMP_FIELDS,
     FOREST_LEVELS,
     LDAP_SERVER_SD_FLAGS_OID_SEC_DESC,
-    MS_PKI_CERTIFICATE_NAME_FLAG,
-    MS_PKI_ENROLLMENT_FLAG,
-    OID_TO_STR_MAP,
     USER_ACCOUNT_CONTROL,
-    ADRights,
 )
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 
@@ -56,7 +50,6 @@ class Ldeep(Command):
                 return b64encode(o).decode("ascii")
 
         if verbose:
-            # self.__display(list(map(dict, records)), default)
             self.__display(records, default)
         else:
             k = 0

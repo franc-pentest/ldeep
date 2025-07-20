@@ -430,8 +430,6 @@ Upcoming
 Related projects
 ================
 
-* https://github.com/SecureAuthCorp/impacket
+* https://github.com/fortra/impacket
 * https://github.com/ropnop/windapsearch
 * https://github.com/shellster/LDAPPER
-
-
