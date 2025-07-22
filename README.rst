@@ -161,7 +161,7 @@ LDAP
     $ ldeep ldap -h
     usage: ldeep - 1.0.80 ldap [-h] -d DOMAIN -s LDAPSERVER [-b BASE] [-t {ntlm,simple}] [--throttle THROTTLE] [--page_size PAGE_SIZE] [-n] [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k] [--pfx-file PFX_FILE]
                                [--pfx-pass PFX_PASS] [--cert-pem CERT_PEM] [--key-pem KEY_PEM] [-a]
-                               {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,templates,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,change_uac,create_computer,create_user,modify_password,remove_from_group,unlock}
+                               {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,templates,trusts,users,wds,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,change_uac,create_computer,create_user,modify_password,remove_from_group,unlock}
                                ...
 
     LDAP mode
@@ -225,6 +225,7 @@ LDAP
         templates           List certificate templates.
         trusts              List the domain's trust relationships.
         users               List users according to a filter.
+        wds                 List WDS servers which can host Distribution Points or MDT shares.
         zones               List the DNS zones configured in the Active Directory.
         from_guid           Return the object associated with the given `guid`.
         from_sid            Return the object associated with the given `sid`.
@@ -271,7 +272,7 @@ CACHE
     commands:
       available commands
 
-      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone}
+      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,wds,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone}
         auth_policies       List the authentication policies configured in the Active Directory.
         bitlockerkeys       Extract the bitlocker recovery keys.
         computers           List the computer hostnames and resolve them if --resolve is specify.
@@ -293,6 +294,7 @@ CACHE
         subnets             List sites and associated subnets.
         trusts              List the domain's trust relationships.
         users               List users according to a filter.
+        wds                 List WDS servers which can host Distribution Points or MDT shares.
         zones               List the DNS zones configured in the Active Directory.
         from_guid           Return the object associated with the given `guid`.
         from_sid            Return the object associated with the given `sid`.
