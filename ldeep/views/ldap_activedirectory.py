@@ -211,6 +211,10 @@ ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.2.281"] 
     parse_ntSecurityDescriptor,
     None,
 )
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.1410"] = (
+    format_sid,
+    None,
+)
 
 
 class LdapActiveDirectoryView(ActiveDirectoryView):
