@@ -248,7 +248,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     )
     ANR = lambda _, u: f"(anr={u})"
     DISTINGUISHED_NAME = lambda _, n: f"(distinguishedName={n})"
-    COMPUTERS_FILTER = lambda _: "(objectClass=computer)"
+    COMPUTERS_FILTER = (
+        lambda _: "(&(objectClass=computer)(!(objectClass=msDS-GroupManagedServiceAccount)))"
+    )
     DC_FILTER = lambda _: "(userAccountControl:1.2.840.113556.1.4.803:=8192)"
     GROUP_DN_FILTER = lambda _, g: f"(&(objectClass=group)(sAMAccountName={g}))"
     USER_DN_FILTER = (
