@@ -1420,19 +1420,22 @@ class Ldeep(Command):
                     object_class = result["objectClass"]
                     member_primary_group_id = result["objectSid"].split("-")[-1]
 
-                    if object_class == [
-                        "top",
-                        "person",
-                        "organizationalPerson",
-                        "user",
-                    ]:
+                    if any(
+                        cls in object_class
+                        for cls in [
+                            "user",
+                            "computer",
+                            "msDS-ManagedServiceAccount",
+                            "msDS-GroupManagedServiceAccount",
+                        ]
+                    ):
                         print(
                             "{g:>{width}}".format(
                                 g=user_prefix + member_dn,
                                 width=leading_sp + len(user_prefix + member_dn),
                             )
                         )
-                    elif object_class == ["top", "group"]:
+                    elif "group" in object_class:
                         print(
                             "{g:>{width}}".format(
                                 g=group_prefix + member_dn,
@@ -1461,7 +1464,7 @@ class Ldeep(Command):
             group_dn = results[0]["distinguishedName"]
             primary_group_id = results[0]["objectSid"].split("-")[-1]
 
-            # AS there is a result, we get the users within the group
+            # As there is a result, we get the users within the group
             results = self.engine.query(
                 self.engine.ACCOUNTS_IN_GROUP_FILTER(primary_group_id, group_dn)
             )
@@ -1472,9 +1475,17 @@ class Ldeep(Command):
                 dn = result["distinguishedName"]
                 object_class = result["objectClass"]
 
-                if object_class == ["top", "person", "organizationalPerson", "user"]:
+                if any(
+                    cls in object_class
+                    for cls in [
+                        "user",
+                        "computer",
+                        "msDS-ManagedServiceAccount",
+                        "msDS-GroupManagedServiceAccount",
+                    ]
+                ):
                     print(user_prefix + dn)
-                elif object_class == ["top", "group"]:
+                elif "group" in object_class:
                     print(group_prefix + dn)
                     if recursive:
                         primary_group_id = result["objectSid"].split("-")[-1]
