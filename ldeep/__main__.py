@@ -1420,7 +1420,15 @@ class Ldeep(Command):
                     object_class = result["objectClass"]
                     member_primary_group_id = result["objectSid"].split("-")[-1]
 
-                    if any(cls in object_class for cls in ["user", "computer", "msDS-ManagedServiceAccount", "msDS-GroupManagedServiceAccount"]):
+                    if any(
+                        cls in object_class
+                        for cls in [
+                            "user",
+                            "computer",
+                            "msDS-ManagedServiceAccount",
+                            "msDS-GroupManagedServiceAccount",
+                        ]
+                    ):
                         print(
                             "{g:>{width}}".format(
                                 g=user_prefix + member_dn,
@@ -1467,7 +1475,15 @@ class Ldeep(Command):
                 dn = result["distinguishedName"]
                 object_class = result["objectClass"]
 
-                if any(cls in object_class for cls in ["user", "computer", "msDS-ManagedServiceAccount", "msDS-GroupManagedServiceAccount"]):
+                if any(
+                    cls in object_class
+                    for cls in [
+                        "user",
+                        "computer",
+                        "msDS-ManagedServiceAccount",
+                        "msDS-GroupManagedServiceAccount",
+                    ]
+                ):
                     print(user_prefix + dn)
                 elif "group" in object_class:
                     print(group_prefix + dn)
