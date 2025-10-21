@@ -40,10 +40,9 @@ from ldap3.extend.microsoft.removeMembersFromGroups import (
     ad_remove_members_from_groups as removeUsersInGroups,
 )
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
-from ldap3.protocol.formatters.formatters import format_sid
+from ldap3.protocol.formatters.formatters import format_sid, format_ad_timestamp
 
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
-from ldeep.utils.structure import Structure
 from ldeep.views.activedirectory import (
     ALL,
     ActiveDirectoryView,
@@ -171,48 +170,71 @@ def format_ad_timedelta(raw_value):
 
 
 # from http://www.kouti.com/tables/baseattributes.htm
+# userAccountControl
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (
     format_userAccountControl,
     None,
 )
+# sAMAccountType
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.302"] = (
     format_samAccountType,
     None,
 )
+# dnsRecord
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (
     format_dnsrecord,
     None,
 )
+# securityIdentifier
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.121"] = (
     format_sid,
     None,
 )
+# pwdProperties
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.93"] = (
     format_pwdProperties,
     None,
 )
+# lockoutDuration
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.60"] = (
     format_ad_timedelta,
     None,
 )
+# maxPwdAge
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.74"] = (
     format_ad_timedelta,
     None,
 )
+# minPwdAge
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.78"] = (
     format_ad_timedelta,
     None,
 )
+# trustAttributes
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.470"] = (
     format_trustsInfos,
     None,
 )
+# nTSecurityDescriptor
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.2.281"] = (
     parse_ntSecurityDescriptor,
     None,
 )
+# mS-DS-CreatorSID
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.1410"] = (
     format_sid,
+    None,
+)
+# sIDHistory
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.609"] = (
+    format_sid,
+    None,
+)
+# ms-Mcs-AdmPwdExpirationTime
+ldap3.protocol.formatters.standard.standard_formatter[
+    "1.2.840.113556.1.8000.2554.50051.45980.28112.18903.35903.6685103.1224907.2.2"
+] = (
+    format_ad_timestamp,
     None,
 )
 
@@ -376,13 +398,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                         from oscrypto.asymmetric import (
                             dump_certificate,
                             dump_openssl_private_key,
-                            load_private_key,
-                            rsa_pkcs1v15_sign,
                         )
                         from oscrypto.keys import (
-                            parse_certificate,
                             parse_pkcs12,
-                            parse_private,
                         )
 
                         if isinstance(self.pfx_pass, str):
