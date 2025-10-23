@@ -52,6 +52,7 @@ from ldeep.views.activedirectory import (
 from ldeep.views.constants import (
     DNS_TYPES,
     GMSA_ENCRYPTION_CONSTANTS,
+    GROUP_TYPE,
     LOGON_SAM_LOGON_RESPONSE_EX,
     PWD_PROPERTIES,
     SAM_ACCOUNT_TYPE,
@@ -169,6 +170,23 @@ def format_ad_timedelta(raw_value):
     return raw_value
 
 
+def format_groupeType(raw_value):
+    try:
+        val = int(raw_value)
+        result = []
+        for k, v in GROUP_TYPE.items():
+            if v & val:
+                result.append(k)
+        return " | ".join(result)
+    except (TypeError, ValueError):
+        pass
+    except (
+        Exception
+    ):
+        pass
+    return raw_value
+
+
 # from http://www.kouti.com/tables/baseattributes.htm
 # userAccountControl
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (
@@ -235,6 +253,11 @@ ldap3.protocol.formatters.standard.standard_formatter[
     "1.2.840.113556.1.8000.2554.50051.45980.28112.18903.35903.6685103.1224907.2.2"
 ] = (
     format_ad_timestamp,
+    None,
+)
+# groupType
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.750"] = (
+    format_groupeType,
     None,
 )
 
