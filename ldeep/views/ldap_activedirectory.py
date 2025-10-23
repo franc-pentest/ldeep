@@ -178,8 +178,6 @@ def format_groupeType(raw_value):
             if v & val:
                 result.append(k)
         return " | ".join(result)
-    except (TypeError, ValueError):
-        pass
     except Exception:
         pass
     return raw_value
