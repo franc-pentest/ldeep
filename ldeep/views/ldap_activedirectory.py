@@ -180,9 +180,7 @@ def format_groupeType(raw_value):
         return " | ".join(result)
     except (TypeError, ValueError):
         pass
-    except (
-        Exception
-    ):
+    except Exception:
         pass
     return raw_value
 
