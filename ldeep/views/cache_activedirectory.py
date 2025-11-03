@@ -108,22 +108,33 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         "fmt": "json",
         "files": ["dns_records"],
     }
+    GPO_INFO_FILTER = lambda _: {"files": ["gpo"]}
+    OU_FILTER = lambda _: {"files": ["ou"]}
+    PKI_FILTER = lambda _: {"files": ["pkis"]}
+    BITLOCKERKEY_FILTER = lambda _: {"files": ["bitlockerkeys"]}
+    ALL_DELEGATIONS_FILTER = lambda _: {"files": ["delegations_all"]}
+    UNCONSTRAINED_DELEGATION_FILTER = lambda _: {"files": ["delegations_unconstrained"]}
+    CONSTRAINED_DELEGATION_FILTER = lambda _: {"files": ["delegations_constrained"]}
+    RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER = lambda _: {"files": ["delegations_rbcd"]}
+    # TODO: Handle FSMO, SCCM cases later, file is composed of 3 JSON array
+    FSMO_DOMAIN_NAMING_FILTER = lambda _: None
+    PRIMARY_SCCM_FILTER = lambda _: None
 
-    # Not implemented:
-    DOMAIN_INFO_FILTER = lambda _: None
-    GPO_INFO_FILTER = lambda _: None
-    OU_FILTER = lambda _: None
-    PSO_INFO_FILTER = lambda _: None
-    TRUSTS_INFO_FILTER = lambda _: None
-    USER_ACCOUNT_CONTROL_FILTER = lambda _, __: None
-    USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: None
-    USER_LOCKED_FILTER = lambda _: None
-    SMSA_FILTER = lambda _: None
-    SHADOW_PRINCIPALS_FILTER = lambda _: None
-    UNCONSTRAINED_DELEGATION_FILTER = lambda _: None
-    CONSTRAINED_DELEGATION_FILTER = lambda _: None
-    RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER = lambda _: None
-    ALL_DELEGATIONS_FILTER = lambda _: None
+    GMSA_FILTER = lambda _, n: {
+        "files": ["gmsa"],
+        "filter": lambda x: True if n == '*' else eq(x["sAMAccountName"], n),
+    }
+    SMSA_FILTER = lambda _: {"files": ["smsa"]}
+    USER_LOCKED_FILTER = lambda _: {"files": ["users_locked"]}
+    USER_ACCOUNT_CONTROL_FILTER = lambda _, __: {"files": ["users_disabled"]}
+    USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: {"files": ["users_enabled"]}
+    SHADOW_PRINCIPALS_FILTER = lambda _: {"files": ["shadow_principals"]}
+    TRUSTS_INFO_FILTER = lambda _: {"files": ["trusts"]}
+    DOMAIN_INFO_FILTER = lambda _: {
+        "files": ["domain_policy"],
+        "fmt": "lst",
+    }
+    PSO_INFO_FILTER = lambda _: {"files": ["pso"]}
 
     class CacheActiveDirectoryException(Exception):
         pass
@@ -214,6 +225,12 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
             filename = "{prefix}_{file}.{ext}".format(
                 prefix=self.prefix, file=fil, ext=fmt
             )
+            # In case the JSON file exists, parse it unless specified by the query engine
+            if path.exists(path.join(self.path, filename[:-3] + 'json')) and not "fmt" in cachefilter:
+                fmt = "json"
+                filename = "{prefix}_{file}.{ext}".format(
+                    prefix=self.prefix, file=fil, ext=fmt
+                )
 
             # Two cases
             # all attributes are required thus we parse the JSON file

@@ -6,9 +6,6 @@ from sys import _getframe, exit
 from uuid import UUID
 
 import ldap3
-from Cryptodome.Cipher import AES
-from Cryptodome.Hash import MD4, SHA1
-from Cryptodome.Protocol.KDF import PBKDF2
 from ldap3 import (
     ALL as LDAP3_ALL,
 )
@@ -51,7 +48,6 @@ from ldeep.views.activedirectory import (
 )
 from ldeep.views.constants import (
     DNS_TYPES,
-    GMSA_ENCRYPTION_CONSTANTS,
     GROUP_TYPE,
     LOGON_SAM_LOGON_RESPONSE_EX,
     PWD_PROPERTIES,
@@ -60,7 +56,6 @@ from ldeep.views.constants import (
     USER_ACCOUNT_CONTROL,
     WELL_KNOWN_SIDS,
 )
-from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
 
 
 # define an ldap3-compliant formatters
@@ -810,83 +805,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             raise self.ActiveDirectoryLdapException(e)
 
         return result_set
-
-    def get_gmsa(self, attributes, target):
-        entries = list(self.query(self.GMSA_FILTER(target), attributes))
-
-        constants = GMSA_ENCRYPTION_CONSTANTS
-        iv = b"\x00" * 16
-
-        for entry in entries:
-            sam = entry["sAMAccountName"]
-            data = entry["msDS-ManagedPassword"]
-            try:
-                readers = entry["msDS-GroupMSAMembership"]
-            except Exception:
-                readers = []
-            # Find principals who can read the password
-            if readers:
-                try:
-                    readers_sd = parse_ntSecurityDescriptor(readers)
-                    entry["readers"] = []
-                    for ace in readers_sd["DACL"]["ACEs"]:
-                        try:
-                            reader_object = list(self.resolve_sid(ace["SID"]))
-                            if reader_object:
-                                name = reader_object[0]["sAMAccountName"]
-                                if "group" in reader_object[0]["objectClass"]:
-                                    name += " (group)"
-                                entry["readers"].append(name)
-                            else:
-                                entry["readers"].append(ace["SID"])
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-            blob = MSDS_MANAGEDPASSWORD_BLOB()
-            try:
-                blob.fromString(data)
-            except (TypeError, KeyError):
-                continue
-
-            password = blob["CurrentPassword"][:-2]
-
-            # Compute NT hash
-            hash = MD4.new()
-            hash.update(password)
-            nthash = hash.hexdigest()
-
-            # Quick and dirty way to get the FQDN of the account's domain
-            dc_list = []
-            for s in entry["dn"].split(","):
-                if s.startswith("DC="):
-                    dc_list.append(s[3:])
-
-            domain_fqdn = ".".join(dc_list)
-            salt = f"{domain_fqdn.upper()}host{sam[:-1].lower()}.{domain_fqdn.lower()}"
-            encryption_key = PBKDF2(
-                password.decode("utf-16-le", "replace").encode(),
-                salt.encode(),
-                32,
-                count=4096,
-                hmac_hash_module=SHA1,
-            )
-
-            # Compute AES keys
-            cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
-            first_part = cipher.encrypt(constants)
-            cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
-            second_part = cipher.encrypt(first_part)
-            aes256_key = first_part[:16] + second_part[:16]
-
-            cipher = AES.new(encryption_key[:16], AES.MODE_CBC, iv)
-            aes128_key = cipher.encrypt(constants[:16])
-
-            entry["nthash"] = f"{nthash}"
-            entry["aes128-cts-hmac-sha1-96"] = f"{aes128_key.hex()}"
-            entry["aes256-cts-hmac-sha1-96"] = f"{aes256_key.hex()}"
-
-        return entries
 
     def unlock(self, username):
         """
