@@ -467,11 +467,12 @@ class Ldeep(Command):
             ] + hidden_attributes
 
         try:
-            entries = list(self.engine.query(self.engine.GMSA_FILTER(target), attributes))
+            entries = list(
+                self.engine.query(self.engine.GMSA_FILTER(target), attributes)
+            )
         except LDAPAttributeError as e:
             error(f"{e}. The domain's functional level may be too old")
             entries = []
-
 
         constants = GMSA_ENCRYPTION_CONSTANTS
         iv = b"\x00" * 16
@@ -922,12 +923,18 @@ class Ldeep(Command):
         ca_info = self.engine.query(
             self.engine.PKI_FILTER(),
             attributes,
-            base = None if isinstance(self.engine, CacheActiveDirectoryView) else ",".join(
-                [
-                    "CN=Enrollment Services,CN=Public Key Services,CN=Services",
-                    self.engine.ldap.server.info.other["configurationNamingContext"][0],
-                ]
-            )
+            base=(
+                None
+                if isinstance(self.engine, CacheActiveDirectoryView)
+                else ",".join(
+                    [
+                        "CN=Enrollment Services,CN=Public Key Services,CN=Services",
+                        self.engine.ldap.server.info.other[
+                            "configurationNamingContext"
+                        ][0],
+                    ]
+                )
+            ),
         )
         if verbose:
             self.display(ca_info, verbose)
@@ -1224,7 +1231,9 @@ class Ldeep(Command):
             entries = self.engine.query(
                 self.engine.SHADOW_PRINCIPALS_FILTER(),
                 attributes,
-                base= None if isinstance(self.engine, CacheActiveDirectoryView) else base
+                base=(
+                    None if isinstance(self.engine, CacheActiveDirectoryView) else base
+                ),
             )
 
             if verbose:
@@ -1258,7 +1267,7 @@ class Ldeep(Command):
         results = self.engine.query(
             self.engine.FSMO_DOMAIN_NAMING_FILTER(),
             attributes,
-            base = ",".join(["CN=Partitions,CN=Configuration", self.engine.base_dn]),
+            base=",".join(["CN=Partitions,CN=Configuration", self.engine.base_dn]),
         )
 
         try:
@@ -1269,7 +1278,7 @@ class Ldeep(Command):
         results = self.engine.query(
             self.engine.FSMO_SCHEMA_FILTER(),
             attributes,
-            base = ",".join(["CN=Schema,CN=Configuration", self.engine.base_dn]),
+            base=",".join(["CN=Schema,CN=Configuration", self.engine.base_dn]),
         )
 
         try:

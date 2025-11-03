@@ -115,14 +115,16 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
     ALL_DELEGATIONS_FILTER = lambda _: {"files": ["delegations_all"]}
     UNCONSTRAINED_DELEGATION_FILTER = lambda _: {"files": ["delegations_unconstrained"]}
     CONSTRAINED_DELEGATION_FILTER = lambda _: {"files": ["delegations_constrained"]}
-    RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER = lambda _: {"files": ["delegations_rbcd"]}
+    RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER = lambda _: {
+        "files": ["delegations_rbcd"]
+    }
     # TODO: Handle FSMO, SCCM cases later, file is composed of 3 JSON array
     FSMO_DOMAIN_NAMING_FILTER = lambda _: None
     PRIMARY_SCCM_FILTER = lambda _: None
 
     GMSA_FILTER = lambda _, n: {
         "files": ["gmsa"],
-        "filter": lambda x: True if n == '*' else eq(x["sAMAccountName"], n),
+        "filter": lambda x: True if n == "*" else eq(x["sAMAccountName"], n),
     }
     SMSA_FILTER = lambda _: {"files": ["smsa"]}
     USER_LOCKED_FILTER = lambda _: {"files": ["users_locked"]}
@@ -226,7 +228,10 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
                 prefix=self.prefix, file=fil, ext=fmt
             )
             # In case the JSON file exists, parse it unless specified by the query engine
-            if path.exists(path.join(self.path, filename[:-3] + 'json')) and not "fmt" in cachefilter:
+            if (
+                path.exists(path.join(self.path, filename[:-3] + "json"))
+                and not "fmt" in cachefilter
+            ):
                 fmt = "json"
                 filename = "{prefix}_{file}.{ext}".format(
                     prefix=self.prefix, file=fil, ext=fmt
