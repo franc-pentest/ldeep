@@ -939,7 +939,7 @@ class Ldeep(Command):
         if verbose:
             self.display(ca_info, verbose)
             return
-        elif isinstance(self.engine, CacheActiveDirectoryView) == False:
+        elif isinstance(ca_info[0], dict):
             ca_number = 1
             print("Certificate Authorities")
             for ca in ca_info:
