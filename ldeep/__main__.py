@@ -10,6 +10,10 @@ from re import compile as re_compile
 from time import sleep
 from uuid import UUID
 
+from Cryptodome.Cipher import AES
+from Cryptodome.Hash import MD4, SHA1
+from Cryptodome.Protocol.KDF import PBKDF2
+
 from commandparse import Command
 from ldap3.core import results as coreResults
 from ldap3.core.exceptions import LDAPAttributeError, LDAPObjectClassError
@@ -32,7 +36,9 @@ from ldeep.views.constants import (
     FOREST_LEVELS,
     LDAP_SERVER_SD_FLAGS_OID_SEC_DESC,
     USER_ACCOUNT_CONTROL,
+    GMSA_ENCRYPTION_CONSTANTS,
 )
+from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.utils.protections import checkProtections
 
@@ -461,10 +467,84 @@ class Ldeep(Command):
             ] + hidden_attributes
 
         try:
-            entries = self.engine.get_gmsa(attributes, target)
+            entries = list(
+                self.engine.query(self.engine.GMSA_FILTER(target), attributes)
+            )
         except LDAPAttributeError as e:
             error(f"{e}. The domain's functional level may be too old")
             entries = []
+
+        constants = GMSA_ENCRYPTION_CONSTANTS
+        iv = b"\x00" * 16
+
+        for entry in entries:
+            sam = entry["sAMAccountName"]
+            data = entry["msDS-ManagedPassword"]
+            try:
+                readers = entry["msDS-GroupMSAMembership"]
+            except Exception:
+                readers = []
+            # Find principals who can read the password
+            if readers:
+                try:
+                    readers_sd = parse_ntSecurityDescriptor(readers)
+                    entry["readers"] = []
+                    for ace in readers_sd["DACL"]["ACEs"]:
+                        try:
+                            reader_object = list(self.engine.resolve_sid(ace["SID"]))
+                            if reader_object:
+                                name = reader_object[0]["sAMAccountName"]
+                                if "group" in reader_object[0]["objectClass"]:
+                                    name += " (group)"
+                                entry["readers"].append(name)
+                            else:
+                                entry["readers"].append(ace["SID"])
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            blob = MSDS_MANAGEDPASSWORD_BLOB()
+            try:
+                blob.fromString(data)
+            except (TypeError, KeyError):
+                continue
+
+            password = blob["CurrentPassword"][:-2]
+
+            # Compute NT hash
+            hash = MD4.new()
+            hash.update(password)
+            nthash = hash.hexdigest()
+
+            # Quick and dirty way to get the FQDN of the account's domain
+            dc_list = []
+            for s in entry["dn"].split(","):
+                if s.startswith("DC="):
+                    dc_list.append(s[3:])
+
+            domain_fqdn = ".".join(dc_list)
+            salt = f"{domain_fqdn.upper()}host{sam[:-1].lower()}.{domain_fqdn.lower()}"
+            encryption_key = PBKDF2(
+                password.decode("utf-16-le", "replace").encode(),
+                salt.encode(),
+                32,
+                count=4096,
+                hmac_hash_module=SHA1,
+            )
+
+            # Compute AES keys
+            cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
+            first_part = cipher.encrypt(constants)
+            cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
+            second_part = cipher.encrypt(first_part)
+            aes256_key = first_part[:16] + second_part[:16]
+
+            cipher = AES.new(encryption_key[:16], AES.MODE_CBC, iv)
+            aes128_key = cipher.encrypt(constants[:16])
+
+            entry["nthash"] = f"{nthash}"
+            entry["aes128-cts-hmac-sha1-96"] = f"{aes128_key.hex()}"
+            entry["aes256-cts-hmac-sha1-96"] = f"{aes256_key.hex()}"
 
         if verbose:
             self.display(entries, verbose)
@@ -843,17 +923,23 @@ class Ldeep(Command):
         ca_info = self.engine.query(
             self.engine.PKI_FILTER(),
             attributes,
-            base=",".join(
-                [
-                    "CN=Enrollment Services,CN=Public Key Services,CN=Services",
-                    self.engine.ldap.server.info.other["configurationNamingContext"][0],
-                ]
+            base=(
+                None
+                if isinstance(self.engine, CacheActiveDirectoryView)
+                else ",".join(
+                    [
+                        "CN=Enrollment Services,CN=Public Key Services,CN=Services",
+                        self.engine.ldap.server.info.other[
+                            "configurationNamingContext"
+                        ][0],
+                    ]
+                )
             ),
         )
         if verbose:
             self.display(ca_info, verbose)
             return
-        else:
+        elif isinstance(ca_info[0], dict):
             ca_number = 1
             print("Certificate Authorities")
             for ca in ca_info:
@@ -866,6 +952,8 @@ class Ldeep(Command):
                     for template in ca.get("certificateTemplates"):
                         print(f"{' ' * 32}{template}")
                 ca_number += 1
+        else:
+            print("\n".join(ca_info))
 
     def list_sccm(self, kwargs):
         """
@@ -1141,7 +1229,11 @@ class Ldeep(Command):
                 ]
             )
             entries = self.engine.query(
-                self.engine.SHADOW_PRINCIPALS_FILTER(), attributes, base=base
+                self.engine.SHADOW_PRINCIPALS_FILTER(),
+                attributes,
+                base=(
+                    None if isinstance(self.engine, CacheActiveDirectoryView) else base
+                ),
             )
 
             if verbose:
