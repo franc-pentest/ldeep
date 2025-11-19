@@ -55,79 +55,8 @@ from ldeep.views.constants import (
     TRUSTS_INFOS,
     USER_ACCOUNT_CONTROL,
     WELL_KNOWN_SIDS,
+    KERBEROS_ENC_TYPE,
 )
-
-
-# define an ldap3-compliant formatters
-def format_userAccountControl(raw_value):
-    try:
-        val = int(raw_value)
-        result = []
-        for k, v in USER_ACCOUNT_CONTROL.items():
-            if v & val:
-                result.append(k)
-        return " | ".join(result)
-    except (TypeError, ValueError):  # expected exceptions↲
-        pass
-    except (
-        Exception
-    ):  # any other exception should be investigated, anyway the formatters return the raw_value
-        pass
-    return raw_value
-
-
-# define an ldap3-compliant formatters
-def format_samAccountType(raw_value):
-    try:
-        val = int(raw_value)
-        result = []
-        for k, v in SAM_ACCOUNT_TYPE.items():
-            if v & val:
-                result.append(k)
-        return " | ".join(result)
-    except (TypeError, ValueError):  # expected exceptions↲
-        pass
-    except (
-        Exception
-    ):  # any other exception should be investigated, anyway the formatter returns the raw_value
-        pass
-    return raw_value
-
-
-# define an ldap3-compliant formatters
-def format_pwdProperties(raw_value):
-    try:
-        val = int(raw_value)
-        result = []
-        for k, v in PWD_PROPERTIES.items():
-            if v & val:
-                result.append(k)
-        return " | ".join(result)
-    except (TypeError, ValueError):  # expected exceptions↲
-        pass
-    except (
-        Exception
-    ):  # any other exception should be investigated, anyway the formatter returns the raw_value
-        pass
-    return raw_value
-
-
-# define an ldap3-compliant formatters
-def format_trustsInfos(raw_value):
-    try:
-        val = int(raw_value)
-        result = []
-        for k, v in TRUSTS_INFOS.items():
-            if v & val:
-                result.append(k)
-        return " | ".join(result)
-    except (TypeError, ValueError):  # expected exceptions↲
-        pass
-    except (
-        Exception
-    ):  # any other exception should be investigated, anyway the formatter returns the raw_value
-        pass
-    return raw_value
 
 
 # define an ldap3-compliant formatters
@@ -165,28 +94,34 @@ def format_ad_timedelta(raw_value):
     return raw_value
 
 
-def format_groupeType(raw_value):
+def format_bitmask(value, enum, bits=32):
     try:
-        val = int(raw_value)
+        val = int(value)
+        if val == 0:
+            return enum.get(0, "Unknown")
         result = []
-        for k, v in GROUP_TYPE.items():
-            if v & val:
-                result.append(k)
+        for i in range(bits):
+            mask = 1 << i
+            if bool(val & mask) and enum.get(mask):
+                result.append(enum.get(mask))
+            # Handle unknown mask in enum
+            elif bool(val & mask) and enum.get(mask, None) is None:
+                result.append(f"{mask:#2x} (Unknown)")
         return " | ".join(result)
     except Exception:
         pass
-    return raw_value
+    return value
 
 
 # from http://www.kouti.com/tables/baseattributes.htm
 # userAccountControl
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (
-    format_userAccountControl,
+    lambda val: format_bitmask(val, USER_ACCOUNT_CONTROL, 32),
     None,
 )
 # sAMAccountType
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.302"] = (
-    format_samAccountType,
+    lambda val: SAM_ACCOUNT_TYPE.get(int(val), "Unknown"),
     None,
 )
 # dnsRecord
@@ -201,7 +136,7 @@ ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.121"] 
 )
 # pwdProperties
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.93"] = (
-    format_pwdProperties,
+    lambda val: format_bitmask(val, PWD_PROPERTIES, 8),
     None,
 )
 # lockoutDuration
@@ -221,7 +156,7 @@ ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.78"] =
 )
 # trustAttributes
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.470"] = (
-    format_trustsInfos,
+    lambda val: format_bitmask(val, TRUSTS_INFOS, 16),
     None,
 )
 # nTSecurityDescriptor
@@ -248,7 +183,12 @@ ldap3.protocol.formatters.standard.standard_formatter[
 )
 # groupType
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.750"] = (
-    format_groupeType,
+    lambda val: format_bitmask(val, GROUP_TYPE, 32),
+    None,
+)
+# msDS-SupportedEncryptionTypes
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.1963"] = (
+    lambda val: format_bitmask(val, KERBEROS_ENC_TYPE, 8),
     None,
 )
 
