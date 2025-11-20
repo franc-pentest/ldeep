@@ -16,6 +16,10 @@ def error(content, close_array=False):
         print("]")
 
 
+def get_key_for_value(dic, val):
+    return next((k for k, v in dic.items() if v == val), None)
+
+
 class Logger(object):
     def __init__(self, outfile=None, quiet=False):
         self.quiet = quiet

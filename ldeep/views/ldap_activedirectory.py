@@ -6,9 +6,6 @@ from sys import _getframe, exit
 from uuid import UUID
 
 import ldap3
-from Cryptodome.Cipher import AES
-from Cryptodome.Hash import MD4, SHA1
-from Cryptodome.Protocol.KDF import PBKDF2
 from ldap3 import (
     ALL as LDAP3_ALL,
 )
@@ -40,10 +37,9 @@ from ldap3.extend.microsoft.removeMembersFromGroups import (
     ad_remove_members_from_groups as removeUsersInGroups,
 )
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
-from ldap3.protocol.formatters.formatters import format_sid
+from ldap3.protocol.formatters.formatters import format_sid, format_ad_timestamp
 
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
-from ldeep.utils.structure import Structure
 from ldeep.views.activedirectory import (
     ALL,
     ActiveDirectoryView,
@@ -52,87 +48,15 @@ from ldeep.views.activedirectory import (
 )
 from ldeep.views.constants import (
     DNS_TYPES,
-    GMSA_ENCRYPTION_CONSTANTS,
+    GROUP_TYPE,
     LOGON_SAM_LOGON_RESPONSE_EX,
     PWD_PROPERTIES,
     SAM_ACCOUNT_TYPE,
     TRUSTS_INFOS,
     USER_ACCOUNT_CONTROL,
     WELL_KNOWN_SIDS,
+    KERBEROS_ENC_TYPE,
 )
-from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
-
-
-# define an ldap3-compliant formatters
-def format_userAccountControl(raw_value):
-    try:
-        val = int(raw_value)
-        result = []
-        for k, v in USER_ACCOUNT_CONTROL.items():
-            if v & val:
-                result.append(k)
-        return " | ".join(result)
-    except (TypeError, ValueError):  # expected exceptions↲
-        pass
-    except (
-        Exception
-    ):  # any other exception should be investigated, anyway the formatters return the raw_value
-        pass
-    return raw_value
-
-
-# define an ldap3-compliant formatters
-def format_samAccountType(raw_value):
-    try:
-        val = int(raw_value)
-        result = []
-        for k, v in SAM_ACCOUNT_TYPE.items():
-            if v & val:
-                result.append(k)
-        return " | ".join(result)
-    except (TypeError, ValueError):  # expected exceptions↲
-        pass
-    except (
-        Exception
-    ):  # any other exception should be investigated, anyway the formatter returns the raw_value
-        pass
-    return raw_value
-
-
-# define an ldap3-compliant formatters
-def format_pwdProperties(raw_value):
-    try:
-        val = int(raw_value)
-        result = []
-        for k, v in PWD_PROPERTIES.items():
-            if v & val:
-                result.append(k)
-        return " | ".join(result)
-    except (TypeError, ValueError):  # expected exceptions↲
-        pass
-    except (
-        Exception
-    ):  # any other exception should be investigated, anyway the formatter returns the raw_value
-        pass
-    return raw_value
-
-
-# define an ldap3-compliant formatters
-def format_trustsInfos(raw_value):
-    try:
-        val = int(raw_value)
-        result = []
-        for k, v in TRUSTS_INFOS.items():
-            if v & val:
-                result.append(k)
-        return " | ".join(result)
-    except (TypeError, ValueError):  # expected exceptions↲
-        pass
-    except (
-        Exception
-    ):  # any other exception should be investigated, anyway the formatter returns the raw_value
-        pass
-    return raw_value
 
 
 # define an ldap3-compliant formatters
@@ -170,45 +94,101 @@ def format_ad_timedelta(raw_value):
     return raw_value
 
 
+def format_bitmask(value, enum, bits=32):
+    try:
+        val = int(value)
+        if val == 0:
+            return enum.get(0, "Unknown")
+        result = []
+        for i in range(bits):
+            mask = 1 << i
+            if bool(val & mask) and enum.get(mask):
+                result.append(enum.get(mask))
+            # Handle unknown mask in enum
+            elif bool(val & mask) and enum.get(mask, None) is None:
+                result.append(f"{mask:#2x} (Unknown)")
+        return " | ".join(result)
+    except Exception:
+        pass
+    return value
+
+
 # from http://www.kouti.com/tables/baseattributes.htm
+# userAccountControl
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.8"] = (
-    format_userAccountControl,
+    lambda val: format_bitmask(val, USER_ACCOUNT_CONTROL, 32),
     None,
 )
+# sAMAccountType
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.302"] = (
-    format_samAccountType,
+    lambda val: SAM_ACCOUNT_TYPE.get(int(val), "Unknown"),
     None,
 )
+# dnsRecord
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.382"] = (
     format_dnsrecord,
     None,
 )
+# securityIdentifier
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.121"] = (
     format_sid,
     None,
 )
+# pwdProperties
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.93"] = (
-    format_pwdProperties,
+    lambda val: format_bitmask(val, PWD_PROPERTIES, 8),
     None,
 )
+# lockoutDuration
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.60"] = (
     format_ad_timedelta,
     None,
 )
+# maxPwdAge
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.74"] = (
     format_ad_timedelta,
     None,
 )
+# minPwdAge
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.78"] = (
     format_ad_timedelta,
     None,
 )
+# trustAttributes
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.470"] = (
-    format_trustsInfos,
+    lambda val: format_bitmask(val, TRUSTS_INFOS, 16),
     None,
 )
+# nTSecurityDescriptor
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.2.281"] = (
     parse_ntSecurityDescriptor,
+    None,
+)
+# mS-DS-CreatorSID
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.1410"] = (
+    format_sid,
+    None,
+)
+# sIDHistory
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.609"] = (
+    format_sid,
+    None,
+)
+# ms-Mcs-AdmPwdExpirationTime
+ldap3.protocol.formatters.standard.standard_formatter[
+    "1.2.840.113556.1.8000.2554.50051.45980.28112.18903.35903.6685103.1224907.2.2"
+] = (
+    format_ad_timestamp,
+    None,
+)
+# groupType
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.750"] = (
+    lambda val: format_bitmask(val, GROUP_TYPE, 32),
+    None,
+)
+# msDS-SupportedEncryptionTypes
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.1963"] = (
+    lambda val: format_bitmask(val, KERBEROS_ENC_TYPE, 8),
     None,
 )
 
@@ -245,7 +225,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     )
     ANR = lambda _, u: f"(anr={u})"
     DISTINGUISHED_NAME = lambda _, n: f"(distinguishedName={n})"
-    COMPUTERS_FILTER = lambda _: "(objectClass=computer)"
+    COMPUTERS_FILTER = (
+        lambda _: "(&(objectClass=computer)(!(objectClass=msDS-GroupManagedServiceAccount)))"
+    )
     DC_FILTER = lambda _: "(userAccountControl:1.2.840.113556.1.4.803:=8192)"
     GROUP_DN_FILTER = lambda _, g: f"(&(objectClass=group)(sAMAccountName={g}))"
     USER_DN_FILTER = (
@@ -371,13 +353,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                         from oscrypto.asymmetric import (
                             dump_certificate,
                             dump_openssl_private_key,
-                            load_private_key,
-                            rsa_pkcs1v15_sign,
                         )
                         from oscrypto.keys import (
-                            parse_certificate,
                             parse_pkcs12,
-                            parse_private,
                         )
 
                         if isinstance(self.pfx_pass, str):
@@ -768,83 +746,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             raise self.ActiveDirectoryLdapException(e)
 
         return result_set
-
-    def get_gmsa(self, attributes, target):
-        entries = list(self.query(self.GMSA_FILTER(target), attributes))
-
-        constants = GMSA_ENCRYPTION_CONSTANTS
-        iv = b"\x00" * 16
-
-        for entry in entries:
-            sam = entry["sAMAccountName"]
-            data = entry["msDS-ManagedPassword"]
-            try:
-                readers = entry["msDS-GroupMSAMembership"]
-            except Exception:
-                readers = []
-            # Find principals who can read the password
-            if readers:
-                try:
-                    readers_sd = parse_ntSecurityDescriptor(readers)
-                    entry["readers"] = []
-                    for ace in readers_sd["DACL"]["ACEs"]:
-                        try:
-                            reader_object = list(self.resolve_sid(ace["SID"]))
-                            if reader_object:
-                                name = reader_object[0]["sAMAccountName"]
-                                if "group" in reader_object[0]["objectClass"]:
-                                    name += " (group)"
-                                entry["readers"].append(name)
-                            else:
-                                entry["readers"].append(ace["SID"])
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-            blob = MSDS_MANAGEDPASSWORD_BLOB()
-            try:
-                blob.fromString(data)
-            except (TypeError, KeyError):
-                continue
-
-            password = blob["CurrentPassword"][:-2]
-
-            # Compute NT hash
-            hash = MD4.new()
-            hash.update(password)
-            nthash = hash.hexdigest()
-
-            # Quick and dirty way to get the FQDN of the account's domain
-            dc_list = []
-            for s in entry["dn"].split(","):
-                if s.startswith("DC="):
-                    dc_list.append(s[3:])
-
-            domain_fqdn = ".".join(dc_list)
-            salt = f"{domain_fqdn.upper()}host{sam[:-1].lower()}.{domain_fqdn.lower()}"
-            encryption_key = PBKDF2(
-                password.decode("utf-16-le", "replace").encode(),
-                salt.encode(),
-                32,
-                count=4096,
-                hmac_hash_module=SHA1,
-            )
-
-            # Compute AES keys
-            cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
-            first_part = cipher.encrypt(constants)
-            cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
-            second_part = cipher.encrypt(first_part)
-            aes256_key = first_part[:16] + second_part[:16]
-
-            cipher = AES.new(encryption_key[:16], AES.MODE_CBC, iv)
-            aes128_key = cipher.encrypt(constants[:16])
-
-            entry["nthash"] = f"{nthash}"
-            entry["aes128-cts-hmac-sha1-96"] = f"{aes128_key.hex()}"
-            entry["aes256-cts-hmac-sha1-96"] = f"{aes256_key.hex()}"
-
-        return entries
 
     def unlock(self, username):
         """

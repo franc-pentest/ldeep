@@ -10,6 +10,10 @@ from re import compile as re_compile
 from time import sleep
 from uuid import UUID
 
+from Cryptodome.Cipher import AES
+from Cryptodome.Hash import MD4, SHA1
+from Cryptodome.Protocol.KDF import PBKDF2
+
 from commandparse import Command
 from ldap3.core import results as coreResults
 from ldap3.core.exceptions import LDAPAttributeError, LDAPObjectClassError
@@ -28,18 +32,16 @@ from ldeep.views.activedirectory import (
 )
 from ldeep.views.cache_activedirectory import CacheActiveDirectoryView
 from ldeep.views.constants import (
-    AUTHENTICATING_EKUS,
-    EXTENDED_RIGHTS_NAME_MAP,
     FILETIME_TIMESTAMP_FIELDS,
     FOREST_LEVELS,
     LDAP_SERVER_SD_FLAGS_OID_SEC_DESC,
-    MS_PKI_CERTIFICATE_NAME_FLAG,
-    MS_PKI_ENROLLMENT_FLAG,
-    OID_TO_STR_MAP,
     USER_ACCOUNT_CONTROL,
-    ADRights,
+    GMSA_ENCRYPTION_CONSTANTS,
 )
+from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
+from ldeep.utils.protections import checkProtections
+from ldeep.utils import get_key_for_value
 
 
 class Ldeep(Command):
@@ -56,7 +58,6 @@ class Ldeep(Command):
                 return b64encode(o).decode("ascii")
 
         if verbose:
-            # self.__display(list(map(dict, records)), default)
             self.__display(records, default)
         else:
             k = 0
@@ -311,14 +312,14 @@ class Ldeep(Command):
         elif filter_ == "enabled":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER_NEG(
-                    USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "ACCOUNTDISABLE")
                 ),
                 attributes,
             )
         elif filter_ == "disabled":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "ACCOUNTDISABLE")
                 ),
                 attributes,
             )
@@ -327,35 +328,37 @@ class Ldeep(Command):
         elif filter_ == "nopasswordexpire":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "DONT_EXPIRE_PASSWORD")
                 ),
                 attributes,
             )
         elif filter_ == "passwordexpired":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["PASSWORD_EXPIRED"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "PASSWORD_EXPIRED")
                 ),
                 attributes,
             )
         elif filter_ == "passwordnotrequired":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["PASSWD_NOTREQD"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "PASSWD_NOTREQD")
                 ),
                 attributes,
             )
         elif filter_ == "nokrbpreauth":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["DONT_REQ_PREAUTH"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "DONT_REQ_PREAUTH")
                 ),
                 attributes,
             )
         elif filter_ == "reversible":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["ENCRYPTED_TEXT_PWD_ALLOWED"]
+                    get_key_for_value(
+                        USER_ACCOUNT_CONTROL, "ENCRYPTED_TEXT_PWD_ALLOWED"
+                    )
                 ),
                 attributes,
             )
@@ -470,10 +473,84 @@ class Ldeep(Command):
             ] + hidden_attributes
 
         try:
-            entries = self.engine.get_gmsa(attributes, target)
+            entries = list(
+                self.engine.query(self.engine.GMSA_FILTER(target), attributes)
+            )
         except LDAPAttributeError as e:
             error(f"{e}. The domain's functional level may be too old")
             entries = []
+
+        constants = GMSA_ENCRYPTION_CONSTANTS
+        iv = b"\x00" * 16
+
+        for entry in entries:
+            sam = entry["sAMAccountName"]
+            data = entry["msDS-ManagedPassword"]
+            try:
+                readers = entry["msDS-GroupMSAMembership"]
+            except Exception:
+                readers = []
+            # Find principals who can read the password
+            if readers:
+                try:
+                    readers_sd = parse_ntSecurityDescriptor(readers)
+                    entry["readers"] = []
+                    for ace in readers_sd["DACL"]["ACEs"]:
+                        try:
+                            reader_object = list(self.engine.resolve_sid(ace["SID"]))
+                            if reader_object:
+                                name = reader_object[0]["sAMAccountName"]
+                                if "group" in reader_object[0]["objectClass"]:
+                                    name += " (group)"
+                                entry["readers"].append(name)
+                            else:
+                                entry["readers"].append(ace["SID"])
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            blob = MSDS_MANAGEDPASSWORD_BLOB()
+            try:
+                blob.fromString(data)
+            except (TypeError, KeyError):
+                continue
+
+            password = blob["CurrentPassword"][:-2]
+
+            # Compute NT hash
+            hash = MD4.new()
+            hash.update(password)
+            nthash = hash.hexdigest()
+
+            # Quick and dirty way to get the FQDN of the account's domain
+            dc_list = []
+            for s in entry["dn"].split(","):
+                if s.startswith("DC="):
+                    dc_list.append(s[3:])
+
+            domain_fqdn = ".".join(dc_list)
+            salt = f"{domain_fqdn.upper()}host{sam[:-1].lower()}.{domain_fqdn.lower()}"
+            encryption_key = PBKDF2(
+                password.decode("utf-16-le", "replace").encode(),
+                salt.encode(),
+                32,
+                count=4096,
+                hmac_hash_module=SHA1,
+            )
+
+            # Compute AES keys
+            cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
+            first_part = cipher.encrypt(constants)
+            cipher = AES.new(encryption_key, AES.MODE_CBC, iv)
+            second_part = cipher.encrypt(first_part)
+            aes256_key = first_part[:16] + second_part[:16]
+
+            cipher = AES.new(encryption_key[:16], AES.MODE_CBC, iv)
+            aes128_key = cipher.encrypt(constants[:16])
+
+            entry["nthash"] = f"{nthash}"
+            entry["aes128-cts-hmac-sha1-96"] = f"{aes128_key.hex()}"
+            entry["aes256-cts-hmac-sha1-96"] = f"{aes256_key.hex()}"
 
         if verbose:
             self.display(entries, verbose)
@@ -852,17 +929,24 @@ class Ldeep(Command):
         ca_info = self.engine.query(
             self.engine.PKI_FILTER(),
             attributes,
-            base=",".join(
-                [
-                    "CN=Enrollment Services,CN=Public Key Services,CN=Services",
-                    self.engine.ldap.server.info.other["configurationNamingContext"][0],
-                ]
+            base=(
+                None
+                if isinstance(self.engine, CacheActiveDirectoryView)
+                else ",".join(
+                    [
+                        "CN=Enrollment Services,CN=Public Key Services,CN=Services",
+                        self.engine.ldap.server.info.other[
+                            "configurationNamingContext"
+                        ][0],
+                    ]
+                )
             ),
         )
+        ca_info = list(ca_info)
         if verbose:
             self.display(ca_info, verbose)
             return
-        else:
+        elif isinstance(ca_info, filter) or isinstance(ca_info[0], dict):
             ca_number = 1
             print("Certificate Authorities")
             for ca in ca_info:
@@ -875,6 +959,8 @@ class Ldeep(Command):
                     for template in ca.get("certificateTemplates"):
                         print(f"{' ' * 32}{template}")
                 ca_number += 1
+        else:
+            print("\n".join(ca_info))
 
     def list_sccm(self, kwargs):
         """
@@ -1178,7 +1264,11 @@ class Ldeep(Command):
                 ]
             )
             entries = self.engine.query(
-                self.engine.SHADOW_PRINCIPALS_FILTER(), attributes, base=base
+                self.engine.SHADOW_PRINCIPALS_FILTER(),
+                attributes,
+                base=(
+                    None if isinstance(self.engine, CacheActiveDirectoryView) else base
+                ),
             )
 
             if verbose:
@@ -1457,19 +1547,22 @@ class Ldeep(Command):
                     object_class = result["objectClass"]
                     member_primary_group_id = result["objectSid"].split("-")[-1]
 
-                    if object_class == [
-                        "top",
-                        "person",
-                        "organizationalPerson",
-                        "user",
-                    ]:
+                    if any(
+                        cls in object_class
+                        for cls in [
+                            "user",
+                            "computer",
+                            "msDS-ManagedServiceAccount",
+                            "msDS-GroupManagedServiceAccount",
+                        ]
+                    ):
                         print(
                             "{g:>{width}}".format(
                                 g=user_prefix + member_dn,
                                 width=leading_sp + len(user_prefix + member_dn),
                             )
                         )
-                    elif object_class == ["top", "group"]:
+                    elif "group" in object_class:
                         print(
                             "{g:>{width}}".format(
                                 g=group_prefix + member_dn,
@@ -1498,7 +1591,7 @@ class Ldeep(Command):
             group_dn = results[0]["distinguishedName"]
             primary_group_id = results[0]["objectSid"].split("-")[-1]
 
-            # AS there is a result, we get the users within the group
+            # As there is a result, we get the users within the group
             results = self.engine.query(
                 self.engine.ACCOUNTS_IN_GROUP_FILTER(primary_group_id, group_dn)
             )
@@ -1509,9 +1602,17 @@ class Ldeep(Command):
                 dn = result["distinguishedName"]
                 object_class = result["objectClass"]
 
-                if object_class == ["top", "person", "organizationalPerson", "user"]:
+                if any(
+                    cls in object_class
+                    for cls in [
+                        "user",
+                        "computer",
+                        "msDS-ManagedServiceAccount",
+                        "msDS-GroupManagedServiceAccount",
+                    ]
+                ):
                     print(user_prefix + dn)
-                elif object_class == ["top", "group"]:
+                elif "group" in object_class:
                     print(group_prefix + dn)
                     if recursive:
                         primary_group_id = result["objectSid"].split("-")[-1]
@@ -2180,6 +2281,29 @@ def main():
 
     ldap = sub.add_parser("ldap", description="LDAP mode")
     cache = sub.add_parser("cache", description="Cache mode")
+    protections = sub.add_parser("protections", description="Protections mode")
+    protections.add_argument(
+        "-d", "--domain", required=True, help="The domain as NetBIOS or FQDN"
+    )
+    protections.add_argument(
+        "-s",
+        "--ldapserver",
+        required=True,
+        help="The LDAP server (IP or FQDN for Kerberos)",
+    )
+    protections.add_argument("-u", "--username", help="The username")
+    protections.add_argument(
+        "-p", "--password", help="The password used for the authentication"
+    )
+    protections.add_argument(
+        "-H", "--ntlm", help="NTLM hashes, format is LMHASH:NTHASH"
+    )
+    protections.add_argument(
+        "-k",
+        "--kerberos",
+        action="store_true",
+        help="For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable",
+    )
 
     ldap.add_argument(
         "-d", "--domain", required=True, help="The domain as NetBIOS or FQDN"
@@ -2293,8 +2417,24 @@ def main():
     if cache:
         try:
             query_engine = CacheActiveDirectoryView(args.dir, args.prefix)
-        except CacheActiveDirectoryView.CacheActiveDirectoryDirNotFoundException as e:
+        except (
+            CacheActiveDirectoryView.CacheActiveDirectoryDirNotFoundException,
+            CacheActiveDirectoryView.CacheActiveDirectoryFileNotFoundException,
+        ) as e:
             error(e)
+            sys.exit(1)
+
+    elif args.mode == "protections":
+        # Check protections (LDAP Signing & LDAPS Channel Binding)
+        checkProtections(
+            args.ldapserver,
+            args.username,
+            args.password,
+            args.ntlm,
+            args.domain,
+            args.kerberos,
+        )
+        exit()
 
     else:
         try:
@@ -2350,7 +2490,10 @@ def main():
 
     try:
         ldeep.dispatch_command(args)
-    except CacheActiveDirectoryView.CacheActiveDirectoryException as e:
+    except (
+        CacheActiveDirectoryView.CacheActiveDirectoryException,
+        CacheActiveDirectoryView.CacheActiveDirectoryFileNotFoundException,
+    ) as e:
         error(e)
     except NotImplementedError:
         error("Feature not yet available")
