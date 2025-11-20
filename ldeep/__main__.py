@@ -939,6 +939,7 @@ class Ldeep(Command):
                 )
             ),
         )
+        ca_info = list(ca_info)
         if verbose:
             self.display(ca_info, verbose)
             return

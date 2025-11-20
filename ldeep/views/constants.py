@@ -108,6 +108,7 @@ TRUSTS_INFOS = {
 }
 
 FOREST_LEVELS = {
+    10: "Windows Server 2025",
     7: "Windows Server 2016",
     6: "Windows Server 2012 R2",
     5: "Windows Server 2012",
