@@ -41,6 +41,7 @@ from ldeep.views.constants import (
 from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
 from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.utils.protections import checkProtections
+from ldeep.utils import get_key_for_value
 
 
 class Ldeep(Command):
@@ -308,14 +309,14 @@ class Ldeep(Command):
         elif filter_ == "enabled":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER_NEG(
-                    USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "ACCOUNTDISABLE")
                 ),
                 attributes,
             )
         elif filter_ == "disabled":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["ACCOUNTDISABLE"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "ACCOUNTDISABLE")
                 ),
                 attributes,
             )
@@ -324,35 +325,37 @@ class Ldeep(Command):
         elif filter_ == "nopasswordexpire":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["DONT_EXPIRE_PASSWORD"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "DONT_EXPIRE_PASSWORD")
                 ),
                 attributes,
             )
         elif filter_ == "passwordexpired":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["PASSWORD_EXPIRED"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "PASSWORD_EXPIRED")
                 ),
                 attributes,
             )
         elif filter_ == "passwordnotrequired":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["PASSWD_NOTREQD"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "PASSWD_NOTREQD")
                 ),
                 attributes,
             )
         elif filter_ == "nokrbpreauth":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["DONT_REQ_PREAUTH"]
+                    get_key_for_value(USER_ACCOUNT_CONTROL, "DONT_REQ_PREAUTH")
                 ),
                 attributes,
             )
         elif filter_ == "reversible":
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
-                    USER_ACCOUNT_CONTROL["ENCRYPTED_TEXT_PWD_ALLOWED"]
+                    get_key_for_value(
+                        USER_ACCOUNT_CONTROL, "ENCRYPTED_TEXT_PWD_ALLOWED"
+                    )
                 ),
                 attributes,
             )
@@ -940,7 +943,7 @@ class Ldeep(Command):
         if verbose:
             self.display(ca_info, verbose)
             return
-        elif len(ca_info) > 0 and isinstance(ca_info[0], dict):
+        elif isinstance(ca_info, filter) or isinstance(ca_info[0], dict):
             ca_number = 1
             print("Certificate Authorities")
             for ca in ca_info:
@@ -2383,8 +2386,12 @@ def main():
     if cache:
         try:
             query_engine = CacheActiveDirectoryView(args.dir, args.prefix)
-        except CacheActiveDirectoryView.CacheActiveDirectoryDirNotFoundException as e:
+        except (
+            CacheActiveDirectoryView.CacheActiveDirectoryDirNotFoundException,
+            CacheActiveDirectoryView.CacheActiveDirectoryFileNotFoundException,
+        ) as e:
             error(e)
+            sys.exit(1)
 
     elif args.mode == "protections":
         # Check protections (LDAP Signing & LDAPS Channel Binding)
@@ -2452,7 +2459,10 @@ def main():
 
     try:
         ldeep.dispatch_command(args)
-    except CacheActiveDirectoryView.CacheActiveDirectoryException as e:
+    except (
+        CacheActiveDirectoryView.CacheActiveDirectoryException,
+        CacheActiveDirectoryView.CacheActiveDirectoryFileNotFoundException,
+    ) as e:
         error(e)
     except NotImplementedError:
         error("Feature not yet available")
