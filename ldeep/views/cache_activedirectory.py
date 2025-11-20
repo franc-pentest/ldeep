@@ -144,6 +144,9 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
     class CacheActiveDirectoryDirNotFoundException(Exception):
         pass
 
+    class CacheActiveDirectoryFileNotFoundException(Exception):
+        pass
+
     def __init__(self, cache_dir=".", prefix="ldeep_"):
         """
         CacheActiveDirectoryView constructor.
@@ -235,6 +238,11 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
                 fmt = "json"
                 filename = "{prefix}_{file}.{ext}".format(
                     prefix=self.prefix, file=fil, ext=fmt
+                )
+
+            if not path.exists(filename):
+                raise self.CacheActiveDirectoryFileNotFoundException(
+                    f"{filename} required but not found"
                 )
 
             # Two cases
@@ -334,6 +342,10 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         Private functions to retrieve the cache domain name.
         """
         filename = "{prefix}_server_info.json".format(prefix=self.prefix)
+        if not path.exists(filename):
+            raise self.CacheActiveDirectoryFileNotFoundException(
+                f"{filename} not found"
+            )
         with open(path.join(self.path, filename)) as fp:
             info = json_load(fp)
             base = info[0]["raw"]["defaultNamingContext"][0]
