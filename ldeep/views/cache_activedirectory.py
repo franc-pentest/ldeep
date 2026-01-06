@@ -58,10 +58,16 @@ def eq_anr(record, value):
 
 class CacheActiveDirectoryView(ActiveDirectoryView):
     # Constant functions (first arg -> self but we don't need it)
-    USER_LOCKED_FILTER = lambda _: {"files": ["users_locked"]}
     GROUPS_FILTER = lambda _: {"files": ["groups"]}
     USER_ALL_FILTER = lambda _: {"files": ["users_all"]}
-    USER_SPN_FILTER = lambda _: {"files": ["users_spn"]}
+    USER_SPN_FILTER = lambda _: {
+        "files": ["users_spn"],
+        "replacement": {
+            "files": ["users_all"],
+            "filter": lambda x: x.get("servicePrincipalName", None) is not None
+            and x["sAMAccountName"] != "krbtgt",
+        },
+    }
     COMPUTERS_FILTER = lambda _: {"files": ["machines"]}
     ANR = lambda _, u: {
         "files": ["users_all", "groups", "machines"],
@@ -112,11 +118,36 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
     OU_FILTER = lambda _: {"files": ["ou"]}
     PKI_FILTER = lambda _: {"files": ["pkis"]}
     BITLOCKERKEY_FILTER = lambda _: {"files": ["bitlockerkeys"]}
-    ALL_DELEGATIONS_FILTER = lambda _: {"files": ["delegations_all"]}
-    UNCONSTRAINED_DELEGATION_FILTER = lambda _: {"files": ["delegations_unconstrained"]}
-    CONSTRAINED_DELEGATION_FILTER = lambda _: {"files": ["delegations_constrained"]}
+    ALL_DELEGATIONS_FILTER = lambda _: {
+        "files": ["delegations_all"],
+        "replacement": {
+            "files": ["users_all", "machines"],
+            "filter": lambda x: "TRUSTED_FOR_DELEGATION" in x["userAccountControl"]
+            or x.get("msDS-AllowedToDelegateTo", None) is not None
+            or x.get("msDS-AllowedToActOnBehalfOfOtherIdentity") is not None,
+        },
+    }
+    UNCONSTRAINED_DELEGATION_FILTER = lambda _: {
+        "files": ["delegations_unconstrained"],
+        "replacement": {
+            "files": ["users_all", "machines"],
+            "filter": lambda x: "TRUSTED_FOR_DELEGATION" in x["userAccountControl"],
+        },
+    }
+    CONSTRAINED_DELEGATION_FILTER = lambda _: {
+        "files": ["delegations_constrained"],
+        "replacement": {
+            "files": ["users_all", "machines"],
+            "filter": lambda x: x.get("msDS-AllowedToDelegateTo", None) is not None,
+        },
+    }
     RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER = lambda _: {
-        "files": ["delegations_rbcd"]
+        "files": ["delegations_rbcd"],
+        "replacement": {
+            "files": ["users_all", "machines"],
+            "filter": lambda x: x.get("msDS-AllowedToActOnBehalfOfOtherIdentity", None)
+            is not None,
+        },
     }
     # TODO: Handle FSMO, SCCM cases later, file is composed of 3 JSON array
     FSMO_DOMAIN_NAMING_FILTER = lambda _: None
@@ -127,9 +158,27 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         "filter": lambda x: True if n == "*" else eq(x["sAMAccountName"], n),
     }
     SMSA_FILTER = lambda _: {"files": ["smsa"]}
-    USER_LOCKED_FILTER = lambda _: {"files": ["users_locked"]}
-    USER_ACCOUNT_CONTROL_FILTER = lambda _, __: {"files": ["users_disabled"]}
-    USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: {"files": ["users_enabled"]}
+    USER_LOCKED_FILTER = lambda _: {
+        "files": ["users_locked"],
+        "replacement": {
+            "files": ["users_all"],
+            "filter": lambda x: x.get("lockoutTime", None) is not None,
+        },
+    }
+    USER_ACCOUNT_CONTROL_FILTER = lambda _, __: {
+        "files": ["users_disabled"],
+        "replacement": {
+            "files": ["users_all"],
+            "filter": lambda x: "ACCOUNTDISABLE" in x["userAccountControl"],
+        },
+    }
+    USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: {
+        "files": ["users_enabled"],
+        "replacement": {
+            "files": ["users_all"],
+            "filter": lambda x: "ACCOUNTDISABLE" not in x["userAccountControl"],
+        },
+    }
     SHADOW_PRINCIPALS_FILTER = lambda _: {"files": ["shadow_principals"]}
     TRUSTS_INFO_FILTER = lambda _: {"files": ["trusts"]}
     DOMAIN_INFO_FILTER = lambda _: {
@@ -137,6 +186,22 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         "fmt": "lst",
     }
     PSO_INFO_FILTER = lambda _: {"files": ["pso"]}
+    LAPS_FILTER = lambda _, n: {
+        "files": ["machines"],
+        "filter": lambda x: (
+            x.get("ms-Mcs-AdmPwdExpirationTime", None) is not None and eq(x["cn"], n)
+            if n != "*"
+            else True
+        ),
+    }
+    LAPS2_FILTER = lambda _, n: {
+        "files": ["machines"],
+        "filter": lambda x: (
+            x.get("msLAPS-PasswordExpirationTime", None) is not None and eq(x["cn"], n)
+            if n != "*"
+            else True
+        ),
+    }
 
     class CacheActiveDirectoryException(Exception):
         pass
@@ -240,10 +305,15 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
                     prefix=self.prefix, file=fil, ext=fmt
                 )
 
-            if not path.exists(filename):
+            replacement = cachefilter.get("replacement", None)
+            if not path.exists(filename) and replacement is None:
                 raise self.CacheActiveDirectoryFileNotFoundException(
                     f"{filename} required but not found"
                 )
+            if not path.exists(filename) and replacement:
+                cachefilter["files"] = cachefilter["replacement"]["files"]
+                cachefilter["filter"] = cachefilter["replacement"]["filter"]
+                return self.query(cachefilter, attributes, base, scope)
 
             # Two cases
             # all attributes are required thus we parse the JSON file
