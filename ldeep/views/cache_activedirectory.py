@@ -9,6 +9,7 @@ from ldeep.views.activedirectory import (
     validate_sid,
 )
 from ldeep.views.constants import WELL_KNOWN_SIDS
+from ldeep.utils import error
 
 FILE_CONTENT_DICT = dict()
 
@@ -307,12 +308,12 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
 
             replacement = cachefilter.get("replacement", None)
             if not path.exists(filename) and replacement is None:
-                raise self.CacheActiveDirectoryFileNotFoundException(
-                    f"{filename} required but not found"
-                )
+                error(f"{filename} required but not found")
+                continue
             if not path.exists(filename) and replacement:
                 cachefilter["files"] = cachefilter["replacement"]["files"]
                 cachefilter["filter"] = cachefilter["replacement"]["filter"]
+                del cachefilter["replacement"]
                 return self.query(cachefilter, attributes, base, scope)
 
             # Two cases
