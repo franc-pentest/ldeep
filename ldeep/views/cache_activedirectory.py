@@ -165,18 +165,18 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
             "filter": lambda x: x.get("lockoutTime", None) is not None,
         },
     }
-    USER_ACCOUNT_CONTROL_FILTER = lambda _, __: {
+    USER_ACCOUNT_CONTROL_FILTER = lambda _, n: {
         "files": ["users_disabled"],
         "replacement": {
             "files": ["users_all"],
-            "filter": lambda x: "ACCOUNTDISABLE" in x["userAccountControl"],
+            "filter": lambda x: n in x["userAccountControl"],
         },
     }
-    USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, __: {
+    USER_ACCOUNT_CONTROL_FILTER_NEG = lambda _, n: {
         "files": ["users_enabled"],
         "replacement": {
             "files": ["users_all"],
-            "filter": lambda x: "ACCOUNTDISABLE" not in x["userAccountControl"],
+            "filter": lambda x: n not in x["userAccountControl"],
         },
     }
     SHADOW_PRINCIPALS_FILTER = lambda _: {"files": ["shadow_principals"]}
