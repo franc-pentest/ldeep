@@ -310,6 +310,8 @@ class Ldeep(Command):
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER_NEG(
                     get_key_for_value(USER_ACCOUNT_CONTROL, "ACCOUNTDISABLE")
+                    if isinstance(self.engine, LdapActiveDirectoryView)
+                    else "ACCOUNTDISABLE"
                 ),
                 attributes,
             )
@@ -317,6 +319,8 @@ class Ldeep(Command):
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
                     get_key_for_value(USER_ACCOUNT_CONTROL, "ACCOUNTDISABLE")
+                    if isinstance(self.engine, LdapActiveDirectoryView)
+                    else "ACCOUNTDISABLE"
                 ),
                 attributes,
             )
@@ -326,6 +330,8 @@ class Ldeep(Command):
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
                     get_key_for_value(USER_ACCOUNT_CONTROL, "DONT_EXPIRE_PASSWORD")
+                    if isinstance(self.engine, LdapActiveDirectoryView)
+                    else "DONT_EXPIRE_PASSWORD"
                 ),
                 attributes,
             )
@@ -333,6 +339,8 @@ class Ldeep(Command):
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
                     get_key_for_value(USER_ACCOUNT_CONTROL, "PASSWORD_EXPIRED")
+                    if isinstance(self.engine, LdapActiveDirectoryView)
+                    else "PASSWORD_EXPIRED"
                 ),
                 attributes,
             )
@@ -340,6 +348,8 @@ class Ldeep(Command):
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
                     get_key_for_value(USER_ACCOUNT_CONTROL, "PASSWD_NOTREQD")
+                    if isinstance(self.engine, LdapActiveDirectoryView)
+                    else "PASSWD_NOTREQD"
                 ),
                 attributes,
             )
@@ -347,6 +357,8 @@ class Ldeep(Command):
             results = self.engine.query(
                 self.engine.USER_ACCOUNT_CONTROL_FILTER(
                     get_key_for_value(USER_ACCOUNT_CONTROL, "DONT_REQ_PREAUTH")
+                    if isinstance(self.engine, LdapActiveDirectoryView)
+                    else "DONT_REQ_PREAUTH"
                 ),
                 attributes,
             )
@@ -356,6 +368,8 @@ class Ldeep(Command):
                     get_key_for_value(
                         USER_ACCOUNT_CONTROL, "ENCRYPTED_TEXT_PWD_ALLOWED"
                     )
+                    if isinstance(self.engine, LdapActiveDirectoryView)
+                    else "ENCRYPTED_TEXT_PWD_ALLOWED"
                 ),
                 attributes,
             )
@@ -1716,19 +1730,20 @@ class Ldeep(Command):
         verbose = kwargs.get("verbose", False)
 
         guid_map = {}
-        schema_entries = self.engine.ldap.extend.standard.paged_search(
-            self.engine.ldap.server.info.other["schemaNamingContext"][0],
-            "(objectClass=*)",
-            attributes=["name", "schemaidguid"],
-        )
-        for entry in schema_entries:
-            name = entry["attributes"]["name"].lower()
-            if (
-                name in ("ms-laps-encryptedpassword", "ms-laps-password")
-                and entry["attributes"]["schemaIDGUID"]
-            ):
-                guid = str(UUID(bytes_le=entry["attributes"]["schemaIDGUID"]))
-                guid_map[name] = guid
+        if isinstance(self.engine, LdapActiveDirectoryView):
+            schema_entries = self.engine.ldap.extend.standard.paged_search(
+                self.engine.ldap.server.info.other["schemaNamingContext"][0],
+                "(objectClass=*)",
+                attributes=["name", "schemaidguid"],
+            )
+            for entry in schema_entries:
+                name = entry["attributes"]["name"].lower()
+                if (
+                    name in ("ms-laps-encryptedpassword", "ms-laps-password")
+                    and entry["attributes"]["schemaIDGUID"]
+                ):
+                    guid = str(UUID(bytes_le=entry["attributes"]["schemaIDGUID"]))
+                    guid_map[name] = guid
 
         attributes = (
             ALL
@@ -1742,7 +1757,9 @@ class Ldeep(Command):
             if not verbose:
                 for entry in entries:
                     cn = entry["dNSHostName"]
-                    password = entry["ms-Mcs-AdmPwd"]
+                    password = entry.get("ms-Mcs-AdmPwd", None)
+                    if password is None:
+                        continue
                     try:
                         epoch = (
                             int(str(entry["ms-Mcs-AdmPwdExpirationTime"])) / 10000000
