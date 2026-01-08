@@ -406,8 +406,11 @@ class Ldeep(Command):
         Arguments:
             @verbose:bool
                 Results will contain full information
+            #machine:string = '*'
+                Target machine
         """
         verbose = kwargs.get("verbose", False)
+        machine = kwargs.get("machine", "*")
 
         if verbose:
             attributes = self.engine.all_attributes()
@@ -415,7 +418,7 @@ class Ldeep(Command):
             attributes = ["sAMAccountName", "objectClass"]
 
         self.display(
-            self.engine.query(self.engine.COMPUTERS_FILTER(), attributes),
+            self.engine.query(self.engine.COMPUTERS_FILTER(machine), attributes),
             verbose,
             specify_group=False,
         )
@@ -438,7 +441,7 @@ class Ldeep(Command):
 
         hostnames = []
         if not dc:
-            results = self.engine.query(self.engine.COMPUTERS_FILTER(), ["name"])
+            results = self.engine.query(self.engine.COMPUTERS_FILTER("*"), ["name"])
         else:
             results = self.engine.query(self.engine.DC_FILTER(), ["name"])
         for result in results:
@@ -628,17 +631,20 @@ class Ldeep(Command):
         Arguments:
             @verbose:bool
                 Results will contain full information
+            #ou:string = '*'
+                Target ou
         """
         verbose = kwargs.get("verbose", False)
+        ou = kwargs.get("ou", "*")
 
         if verbose:
             attributes = self.engine.all_attributes()
         else:
             attributes = ["objectClass", "gPLink"]
 
-        ous = self.engine.query(self.engine.OU_FILTER(), attributes)
+        ous = self.engine.query(self.engine.OU_FILTER(ou), attributes)
         results = self.engine.query(
-            self.engine.GPO_INFO_FILTER(), ["cn", "displayName"]
+            self.engine.GPO_INFO_FILTER("*"), ["cn", "displayName"]
         )
 
         gpos = {}
@@ -653,16 +659,19 @@ class Ldeep(Command):
         Arguments:
             @verbose:bool
                 Results will contain full information
+            #gpo:string = '*'
+                Target gpo
         """
         verbose = kwargs.get("verbose", False)
+        gpo = kwargs.get("gpo", "*")
 
         if verbose:
             attributes = self.engine.all_attributes()
         else:
             attributes = ["objectClass", "cn", "displayName"]
 
-        results = self.display(
-            self.engine.query(self.engine.GPO_INFO_FILTER(), attributes), verbose
+        self.display(
+            self.engine.query(self.engine.GPO_INFO_FILTER(gpo), attributes), verbose
         )
 
     def list_pso(self, _):
