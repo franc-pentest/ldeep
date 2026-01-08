@@ -69,7 +69,10 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
             and x["sAMAccountName"] != "krbtgt",
         },
     }
-    COMPUTERS_FILTER = lambda _: {"files": ["machines"]}
+    COMPUTERS_FILTER = lambda _, n: {
+        "files": ["machines"],
+        "filter": lambda x: True if n == "*" else eq(x["cn"], n),
+    }
     ANR = lambda _, u: {
         "files": ["users_all", "groups", "machines"],
         "filter": lambda record: eq_anr(record, u),
@@ -115,8 +118,14 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         "fmt": "json",
         "files": ["dns_records"],
     }
-    GPO_INFO_FILTER = lambda _: {"files": ["gpo"]}
-    OU_FILTER = lambda _: {"files": ["ou"]}
+    GPO_INFO_FILTER = lambda _, n: {
+        "files": ["gpo"],
+        "filter": lambda x: True if n == "*" else eq(x["displayName"], n),
+    }
+    OU_FILTER = lambda _, n: {
+        "files": ["ou"],
+        "filter": lambda x: True if n == "*" else eq(x["distinguishedName"], n),
+    }
     PKI_FILTER = lambda _: {"files": ["pkis"]}
     BITLOCKERKEY_FILTER = lambda _: {"files": ["bitlockerkeys"]}
     ALL_DELEGATIONS_FILTER = lambda _: {

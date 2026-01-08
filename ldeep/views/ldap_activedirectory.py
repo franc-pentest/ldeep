@@ -225,7 +225,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     ANR = lambda _, u: f"(anr={u})"
     DISTINGUISHED_NAME = lambda _, n: f"(distinguishedName={n})"
     COMPUTERS_FILTER = (
-        lambda _: "(&(objectClass=computer)(!(objectClass=msDS-GroupManagedServiceAccount)))"
+        lambda _, n: f"(&(objectClass=computer)(!(objectClass=msDS-GroupManagedServiceAccount))(cn={n}))"
     )
     DC_FILTER = lambda _: "(userAccountControl:1.2.840.113556.1.4.803:=8192)"
     GROUP_DN_FILTER = lambda _, g: f"(&(objectClass=group)(sAMAccountName={g}))"
@@ -236,10 +236,14 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     ACCOUNT_IN_GROUPS_FILTER = lambda _, u: f"(sAMAccountName={u})"
     PRIMARY_GROUP_ID = lambda s, i: f"(objectSid={s.get_domain_sid()}-{i})"
     DOMAIN_INFO_FILTER = lambda _: "(objectClass=domain)"
-    GPO_INFO_FILTER = lambda _: "(objectCategory=groupPolicyContainer)"
+    GPO_INFO_FILTER = (
+        lambda _, n: f"(&(objectCategory=groupPolicyContainer)(displayName={n}))"
+    )
     PSO_INFO_FILTER = lambda _: "(objectClass=msDS-PasswordSettings)"
     TRUSTS_INFO_FILTER = lambda _: "(objectCategory=trustedDomain)"
-    OU_FILTER = lambda _: "(|(objectClass=OrganizationalUnit)(objectClass=domain))"
+    OU_FILTER = (
+        lambda _, n: f"(&(|(objectClass=OrganizationalUnit)(objectClass=domain))(distinguishedName={n}))"
+    )
     ENUM_USER_FILTER = (
         lambda _, n: f"(&(NtVer=\x06\x00\x00\x00)(AAC=\x10\x00\x00\x00)(User={n}))"
     )
