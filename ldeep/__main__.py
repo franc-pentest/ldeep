@@ -2117,9 +2117,9 @@ class Ldeep(Command):
 
         Arguments:
             #user:string
-                Target user (dn format). Ex: "CN=bob,CN=Users,DC=CORP,DC=LOCAL"
+                Target user (dn or SID format). Ex: "CN=bob,CN=Users,DC=CORP,DC=LOCAL" or S-1-5-21-2808000538-3973481384-2586621659-1116. SID format will be used for foreign security principal.
             #group:string
-                Target group (dn format). Ex: "CN=Domain Admins,CN=Users,DC=CORP,DC=LOCAL"
+                Target group (dn format). Ex: "CN=Domain Admins,CN=Users,DC=CORP,DC=LOCAL". If the target is using the SID format, group scope must be Domain Local or Universal.
         """
         user = kwargs["user"]
         group = kwargs["group"]

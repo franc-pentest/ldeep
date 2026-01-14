@@ -802,6 +802,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
         @return True if the account was successfully added or False otherwise.
         """
+        if user_dn.startswith("S-1-5-21-"):
+            # build dn for foreign security principal container
+            user_dn = f"CN={user_dn},CN=ForeignSecurityPrincipals,{self.base_dn}"
         try:
             return addUsersInGroups(self.ldap, user_dn, group_dn)
         except ldap3.core.exceptions.LDAPInvalidDnError as e:
@@ -818,6 +821,9 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
 
         @return True if the account was successfully removed or if the account doesn't exist or False otherwise.
         """
+        if user_dn.startswith("S-1-5-21-"):
+            # build dn for security principal container
+            user_dn = f"CN={user_dn},CN=ForeignSecurityPrincipals,{self.base_dn}"
         try:
             return removeUsersInGroups(self.ldap, user_dn, group_dn, fix=True)
         except ldap3.core.exceptions.LDAPInvalidDnError as e:
