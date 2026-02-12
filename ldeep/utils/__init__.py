@@ -1,5 +1,5 @@
 from multiprocessing.dummy import Pool as ThreadPool
-from sys import __stderr__, __stdout__, exit
+from sys import __stderr__, __stdout__
 
 import dns.resolver
 from termcolor import colored

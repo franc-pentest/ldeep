@@ -966,7 +966,9 @@ class Ldeep(Command):
         if verbose:
             self.display(ca_info, verbose)
             return
-        elif isinstance(ca_info, filter) or isinstance(ca_info[0], dict):
+        elif isinstance(ca_info, filter) or (
+            len(ca_info) >= 1 and isinstance(ca_info[0], dict)
+        ):
             ca_number = 1
             print("Certificate Authorities")
             for ca in ca_info:
