@@ -18,6 +18,8 @@ dependencies = [
     "six >= 1.16.0, < 2",
     "termcolor > 3",
     "tqdm >= 4.26.0, < 5",
+    "cffi >= 1.17.1",
+    "zstandard >= 0.23.0",
 ]
 requires-python = ">=3.9,<3.15"
 readme = "README.rst"
