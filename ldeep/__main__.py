@@ -107,6 +107,12 @@ class Ldeep(Command):
                 elif "dnsZone" in record["objectClass"]:
                     print(record["dc"])
                 elif (
+                    not record["objectClass"]
+                    and not record.get("dnsRecord", None) is None
+                ):
+                    if record["dn"] and record["dn"][0:2] == "DC":
+                        print(f"{record['dn'][3:].split(',')[0]}")
+                elif (
                     "domainDNS" in record["objectClass"]
                     and "fSMORoleOwner" in record.keys()
                 ):
