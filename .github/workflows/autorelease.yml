@@ -61,6 +61,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install libkrb5-dev
+        run: sudo apt-get install -y libkrb5-dev
+
       - name: Get tag name
         id: get_tag
         run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
