@@ -234,10 +234,14 @@ class Ldeep(Command):
                     print(f"Management point: {record['dNSHostName']}")
                     print(f"  Default MP: {record['mSSMSDefaultMP']}")
                     print(f"  Site code: {record['mSSMSSiteCode']}")
-                # potential sccm distribution points
-                elif "connectionPoint" in record["objectClass"]:
+                # WDS servers detected
+                # potential sccm distribution points or MDT shares
+                elif (
+                    "connectionPoint" in record["objectClass"]
+                    or "intellimirrorSCP" in record["objectClass"]
+                ):
                     print(
-                        f"Potential distribution point: {','.join(record['distinguishedName'].split(',')[1:])}"
+                        f"WDS server with potential distribution point or MDT shares: {','.join(record['distinguishedName'].split(',')[1:])}"
                     )
 
                 if self.engine.page_size > 0 and k % self.engine.page_size == 0:
@@ -1039,7 +1043,7 @@ class Ldeep(Command):
             attributes = ["objectClass", "distinguishedName"]
 
         results = self.engine.query(
-            self.engine.DP_SCCM_FILTER(),
+            self.engine.WDS_FILTER(),
             attributes,
         )
 
