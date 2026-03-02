@@ -1,5 +1,5 @@
 from multiprocessing.dummy import Pool as ThreadPool
-from sys import __stderr__, __stdout__, exit
+from sys import __stderr__, __stdout__
 
 import dns.resolver
 from termcolor import colored
@@ -14,6 +14,10 @@ def error(content, close_array=False):
     __stderr__.write("%s\n" % colored("[!] " + str(content), "red", attrs=["bold"]))
     if close_array:
         print("]")
+
+
+def get_key_for_value(dic, val):
+    return next((k for k, v in dic.items() if v == val), None)
 
 
 class Logger(object):

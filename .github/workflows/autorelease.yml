@@ -2,9 +2,8 @@ name: Release
 
 on:
   push:
-    branches: [master]
-    paths:
-      - 'VERSION'
+    tags:
+      - "*"
 
 permissions:
   id-token: write
@@ -20,6 +19,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Get tag name
+        id: get_tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
       - name: PDM
         run: python3.12 -m pip install pdm
 
@@ -27,7 +30,7 @@ jobs:
         run: sudo apt-get install -y libkrb5-dev
 
       - name: Installs dev deps and package
-        run : PDM_BUILD_SCM_VERSION=$(cat VERSION) pdm install --dev
+        run : PDM_BUILD_SCM_VERSION=${{ steps.get_tag.outputs.TAG_NAME }} pdm install --dev
 
       - name: Build binary release
         run: |
@@ -35,7 +38,7 @@ jobs:
           mv ldeep.bin ldeep_linux-amd64
 
       - name: Build Source Distribution
-        run: PDM_BUILD_SCM_VERSION=$(cat VERSION) pdm build -d sdist --no-wheel
+        run: PDM_BUILD_SCM_VERSION=${{ steps.get_tag.outputs.TAG_NAME }} pdm build -d sdist --no-wheel
 
       - name: Upload Artifacts (binary)
         uses: actions/upload-artifact@v4
@@ -49,6 +52,36 @@ jobs:
           name: sdist
           path: sdist/*
 
+  linux-arm-build:
+    name: Linux ARM64 Build
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Get tag name
+        id: get_tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: PDM
+        run: python3.12 -m pip install pdm
+
+      - name: Installs dev deps and package
+        run : PDM_BUILD_SCM_VERSION=${{ steps.get_tag.outputs.TAG_NAME }} pdm install --dev
+
+      - name: Build binary release
+        run: |
+          pdm run python3.12 -m nuitka --standalone --onefile --assume-yes-for-downloads --output-filename=ldeep.bin ldeep/__main__.py
+          mv ldeep.bin ldeep_linux-arm64
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm
+          path: ldeep_linux-arm64
+
   windows-build:
     name: Windows Build
     runs-on: "windows-latest"
@@ -60,8 +93,12 @@ jobs:
       - name: PDM
         run: python3 -m pip install pdm
 
+      - name: Get tag name
+        id: get_tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
       - name: Installs dev deps and package
-        run: $env:PDM_BUILD_SCM_VERSION=gc "VERSION"; pdm install --dev
+        run: $env:PDM_BUILD_SCM_VERSION="${{ steps.get_tag.outputs.TAG_NAME }}"; pdm install --dev
 
       - name: Build
         run: |
@@ -82,11 +119,15 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Get tag name
+        id: get_tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
       - name: PDM
         run: python3.12 -m pip install pdm
 
       - name: Installs dev deps and package
-        run: PDM_BUILD_SCM_VERSION=$(cat VERSION) pdm install --dev
+        run: PDM_BUILD_SCM_VERSION=${{ steps.get_tag.outputs.TAG_NAME }} pdm install --dev
 
       - name: Build
         run: |
@@ -101,7 +142,7 @@ jobs:
 
   macos-amd-build:
     name: MacOS AMD64 Build
-    runs-on: "macos-13"
+    runs-on: "macos-15-intel"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -111,8 +152,12 @@ jobs:
       - name: PDM
         run: python3.12 -m pip install pdm
 
+      - name: Get tag name
+        id: get_tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
       - name: Installs dev deps and package
-        run: PDM_BUILD_SCM_VERSION=$(cat VERSION) pdm install --dev
+        run: PDM_BUILD_SCM_VERSION=${{ steps.get_tag.outputs.TAG_NAME }} pdm install --dev
 
       - name: Build
         run: |
@@ -126,19 +171,11 @@ jobs:
           path: ldeep_macos-amd64
 
   tagged-release:
-    needs: [linux-build, windows-build, macos-build, macos-amd-build]
+    needs: [linux-build, windows-build, macos-build, macos-amd-build, linux-arm-build]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Get local version
-        run: echo "version=$(cat VERSION)" >> $GITHUB_ENV
-
-      - name: Create tag
-        uses: rickstaa/action-create-tag@v1
-        with:
-          tag: ${{ env.version }}
 
       - name: Download all workflow run artifacts
         uses: actions/download-artifact@v4
@@ -146,11 +183,11 @@ jobs:
       - name: Create the release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.version }}
           generate_release_notes: true
           body: "${{ github.event.head_commit.message }}"
           files: |
             linux/ldeep_linux-amd64
+            linux/ldeep_linux-arm64
             windows/ldeep_windows-amd64.exe
             macos/ldeep_macos-arm64
             macos-amd/ldeep_macos-amd64
