@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from itertools import chain
 from json import dump as json_dump
 from math import fabs
-from re import compile as re_compile
+from re import compile as re_compile, IGNORECASE
 from time import sleep
 from uuid import UUID
 
@@ -45,8 +45,22 @@ from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
 class Ldeep(Command):
     def __init__(self, query_engine, format="json"):
         self.engine = query_engine
+        self.dns_record_regexp = None
         if format == "json":
             self.__display = self.__display_json
+
+    def extract_record_from_dn(self, dn: str) -> str:
+        # Stop at CN=MicrosoftDNS (case-insensitive)
+        if not self.dns_record_regexp:
+            self.dns_record_regexp = re_compile(r"DC=([^,]+)", flags=IGNORECASE)
+        stop_marker = "CN=MicrosoftDNS"
+        before_marker = dn.split(stop_marker, 1)[0]
+
+        # Find all DC= parts before the marker
+        dc_parts = self.dns_record_regexp.findall(before_marker)
+
+        # Join them with dots
+        return ".".join(dc_parts)
 
     def display(self, records, verbose=False, specify_group=True, extra_records=None):
         def default(o):
@@ -55,13 +69,21 @@ class Ldeep(Command):
             elif isinstance(o, bytes):
                 return b64encode(o).decode("ascii")
 
+        # import pdb; pdb.set_trace()
         if verbose:
             self.__display(records, default)
         else:
             k = 0
             for record in records:
                 k += 1
-                if "objectClass" not in record:
+                # DnsRecord without data
+                if (
+                    record.get("dn", None)
+                    and "CN=MicrosoftDNS" in record["dn"]
+                    and record.get("dnsRecord", None) is None
+                ):
+                    print(f"{self.extract_record_from_dn(record['dn'])}")
+                elif "objectClass" not in record:
                     print(record)
                 elif "group" in record["objectClass"]:
                     print(
@@ -98,12 +120,13 @@ class Ldeep(Command):
                 elif "groupPolicyContainer" in record["objectClass"]:
                     print(f"{record['cn']}: {record['displayName']}")
                 elif "dnsNode" in record["objectClass"]:
+                    record_name = self.extract_record_from_dn(record["dn"])
                     if record["dc"] != "@":
                         for sub_record in record["dnsRecord"]:
-                            print("{dc} {rec}".format(dc=record["dc"], rec=sub_record))
+                            print(f"{record_name} {sub_record}")
                     else:  # TODO: @ seem to be a special record, as well as DomainDnsZones, they seem to have the NS and A of domain controllers
                         for sub_record in record["dnsRecord"]:
-                            print("{dc} {rec}".format(dc=record["dc"], rec=sub_record))
+                            print(f"{record_name} {sub_record}")
                 elif "dnsZone" in record["objectClass"]:
                     print(record["dc"])
                 elif (
