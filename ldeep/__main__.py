@@ -1843,19 +1843,51 @@ class Ldeep(Command):
             for entry in schema_entries:
                 name = entry["attributes"]["name"].lower()
                 if (
-                    name in ("ms-laps-encryptedpassword", "ms-laps-password")
+                    name
+                    in (
+                        "ms-laps-encryptedpassword",
+                        "ms-laps-password",
+                        "ms-mcs-admpwd",
+                    )
                     and entry["attributes"]["schemaIDGUID"]
                 ):
                     guid = str(UUID(bytes_le=entry["attributes"]["schemaIDGUID"]))
                     guid_map[name] = guid
 
-        attributes = (
-            ALL
-            if verbose
-            else ["dNSHostName", "ms-Mcs-AdmPwd", "ms-Mcs-AdmPwdExpirationTime"]
-        )
+        def parse_readers(computer_entry):
+            readers = set()
+            valid_laps_guids = set(guid_map.values())
+            for ace in computer_entry["nTSecurityDescriptor"]["DACL"]["ACEs"]:
+                if "GUID" in ace.keys():
+                    guid = ace["GUID"].strip("{}").lower()
+                    if guid in valid_laps_guids:
+                        if ace["SID"] not in readers:
+                            if ace["SID"] == "S-1-5-10":
+                                continue
+                            else:
+                                try:
+                                    res = next(self.engine.resolve_sid(ace["SID"]))
+                                    if "group" in res["objectClass"]:
+                                        name = f"{res['sAMAccountName']} (group)"
+                                    else:
+                                        name = res["sAMAccountName"]
+                                except StopIteration:
+                                    name = ace["SID"]
+                            print(f"{computer_entry['dNSHostName']}:reader:{name}")
+                            readers.add(ace["SID"])
 
+        self.engine.set_controls(LDAP_SERVER_SD_FLAGS_OID_SEC_DESC)
         try:
+            attributes = (
+                ALL
+                if verbose
+                else [
+                    "dNSHostName",
+                    "ms-Mcs-AdmPwd",
+                    "ms-Mcs-AdmPwdExpirationTime",
+                    "nTSecurityDescriptor",
+                ]
+            )
             # LAPSv1
             entries = self.engine.query(self.engine.LAPS_FILTER(computer), attributes)
             if not verbose:
@@ -1874,68 +1906,39 @@ class Ldeep(Command):
                     except Exception:
                         expiration_date = entry["ms-Mcs-AdmPwdExpirationTime"]
                     print(f"{cn} {password} {expiration_date}")
+                    parse_readers(entry)
             else:
                 self.display(entries, verbose)
-        except LDAPAttributeError:
-            try:
-                # LAPSv2
-                attributes = (
-                    ALL
-                    if verbose
-                    else [
-                        "dNSHostName",
-                        "msLAPS-EncryptedPassword",
-                        "msLAPS-PasswordExpirationTime",
-                        "nTSecurityDescriptor",
-                    ]
-                )
-                entries = self.engine.query(
-                    self.engine.LAPS2_FILTER(computer), attributes
-                )
-                computers = list(entries)
-                computer_count = len(computers)
-                if computer_count > 0:
-                    print("LAPSv2 detected, password decryption is not implemented")
-                    if not verbose:
-                        for c in computers:
-                            if c["msLAPS-EncryptedPassword"]:
-                                print(
-                                    f"{c['dNSHostName']}:::{b64encode(c['msLAPS-EncryptedPassword'])}"
-                                )
-                            else:
-                                print(f"{c['dNSHostName']}")
-
-                            readers = set()
-                            for ace in c["nTSecurityDescriptor"]["DACL"]["ACEs"]:
-                                if "GUID" in ace.keys():
-                                    guid = ace["GUID"].strip("{}")
-                                    if (
-                                        guid == guid_map["ms-laps-encryptedpassword"]
-                                        or guid == guid_map["ms-laps-password"]
-                                    ):
-                                        if ace["SID"] not in readers:
-                                            if ace["SID"] == "S-1-5-10":
-                                                name = "S-1-5-10 (self)"
-                                            else:
-                                                try:
-                                                    res = next(
-                                                        self.engine.resolve_sid(
-                                                            ace["SID"]
-                                                        )
-                                                    )
-                                                    if "group" in res["objectClass"]:
-                                                        name = f"{res['sAMAccountName']} (group)"
-                                                    else:
-                                                        name = res["sAMAccountName"]
-                                                except StopIteration:
-                                                    name = ace["SID"]
-                                            print(f"{c['dNSHostName']}:reader:{name}")
-                                            readers.add(ace["SID"])
-            except Exception as e:
-                print(e)
-                error("No LAPS related attribute has been detected")
         except Exception as e:
-            error(f"{e}. No LAPS attribute or not enough permission to read it.")
+            # Silently fail if v1 attributes don't exist
+            print("LAPSv1 not detected")
+        try:
+            # LAPSv2
+            attributes = (
+                ALL
+                if verbose
+                else [
+                    "dNSHostName",
+                    "msLAPS-EncryptedPassword",
+                    "msLAPS-PasswordExpirationTime",
+                    "nTSecurityDescriptor",
+                ]
+            )
+            entries = self.engine.query(self.engine.LAPS2_FILTER(computer), attributes)
+            computers = list(entries)
+            computer_count = len(computers)
+            if computer_count > 0:
+                print("LAPSv2 detected, password decryption is not implemented")
+                if not verbose:
+                    for c in computers:
+                        if c["msLAPS-EncryptedPassword"]:
+                            print(
+                                f"{c['dNSHostName']}:::{b64encode(c['msLAPS-EncryptedPassword'])}"
+                            )
+                        parse_readers(c)
+        except Exception as e:
+            # Silently fail if v2 attributes don't exist
+            print("LAPSv2 not detected")
 
     def get_object(self, kwargs):
         """
