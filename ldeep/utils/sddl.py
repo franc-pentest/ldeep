@@ -57,6 +57,12 @@ def parse_ntSecurityDescriptor(input_buffer):
     if out["Type"]["DACL Present"]:
         out["DACL"] = parse_acl(input_buffer[out["Offset to DACL"] :])
 
+    del out["Offset to owner SID"]
+    del out["Offset to group SID"]
+    del out["Offset to SACL"]
+    del out["Offset to DACL"]
+    del out["Type"]
+
     return out
 
 
@@ -109,8 +115,6 @@ def parse_aces(input_buffer, count):
 
         ace["Type"] = parse_sddl_dacl_ace_type(ace["Raw Type"])
 
-        ace["Access Required"] = parse_ace_access(ace["Raw Access Required"])
-
         offset = 8
 
         if ace["Type"].endswith("Object"):
@@ -137,37 +141,6 @@ def parse_aces(input_buffer, count):
 
         out.append(ace)
     return out
-
-
-ACEAccessFlags = {
-    "Generic Read": 0b10000000000000000000000000000000,
-    "Generic Write": 0b01000000000000000000000000000000,
-    "Generic Execute": 0b00100000000000000000000000000000,
-    "Generic All": 0b00010000000000000000000000000000,
-    "Maximum Allowed": 0b00000010000000000000000000000000,
-    "Access SACL": 0b00000000100000000000000000000000,
-    "Synchronise": 0b00000000000100000000000000000000,
-    "Write Owner": 0b00000000000010000000000000000000,
-    "Write DAC": 0b00000000000001000000000000000000,
-    "Read Control": 0b00000000000000100000000000000000,
-    "Delete": 0b00000000000000010000000000000000,
-    "Ads Control Access": 0b00000000000000000000000100000000,
-    "Ads List Object": 0b00000000000000000000000010000000,
-    "Ads Delete Tree": 0b00000000000000000000000001000000,
-    "Ads Write Prop": 0b00000000000000000000000000100000,
-    "Ads Read Prop": 0b00000000000000000000000000010000,
-    "Ads Self Write": 0b00000000000000000000000000001000,
-    "Ads List": 0b00000000000000000000000000000100,
-    "Ads Delete Child": 0b00000000000000000000000000000010,
-    "Ads Create Child": 0b00000000000000000000000000000001,
-}
-
-
-def parse_ace_access(input_buffer):
-    """
-    Parses access flags in an ACE.
-    """
-    return resolve_flags(input_buffer, ACEAccessFlags)
 
 
 ACEObjectFlags = {
