@@ -2,8 +2,8 @@
 Project Status
 ==============
 
-.. image:: https://github.com/franc-pentest/ldeep/actions/workflows/autorelease.yml/badge.svg
-   :target: https://github.com/franc-pentest/ldeep/actions/workflows/autorelease.yml
+.. image:: https://github.com/franc-pentest/ldeep/actions/workflows/python-test.yml/badge.svg
+   :target: https://github.com/franc-pentest/ldeep/actions/workflows/python-test.yml
    :alt: Build status
 .. image:: https://badgen.net/pypi/v/ldeep
    :target: https://pypi.org/project/ldeep/
@@ -110,6 +110,8 @@ Help is self-explanatory. Let's check it out::
   $ ldeep ldap -u Administrator -p 'password' -d winlab -s ldap://10.0.0.1 all backup/winlab
   [+] Retrieving auth_policies output
   [+] Retrieving auth_policies verbose output
+  [+] Retrieving bitlockerkeys output
+  [+] Retrieving bitlockerkeys verbose output
   [+] Retrieving computers output
   [+] Retrieving conf output
   [+] Retrieving delegations output
@@ -117,22 +119,47 @@ Help is self-explanatory. Let's check it out::
   [+] Retrieving delegations verbose output
   [+] Retrieving delegations verbose output
   [+] Retrieving delegations verbose output
+  [+] Retrieving dns_records output
+  [+] Domain records:
+  [+] Forest records:
+  [+] Legacy records:
+  [+] Retrieving dns_records verbose output
   [+] Retrieving domain_policy output
+  [+] Retrieving domain_policy verbose output
+  [+] Retrieving fsmo output
+  [+] Retrieving fsmo verbose output
+  [+] Retrieving fsp output
+  [+] Retrieving fsp verbose output
   [+] Retrieving gmsa output
+  [+] Retrieving gmsa verbose output
   [+] Retrieving gpo output
+  [+] Retrieving gpo verbose output
   [+] Retrieving groups output
   [+] Retrieving groups verbose output
   [+] Retrieving machines output
   [+] Retrieving machines verbose output
   [+] Retrieving ou output
+  [+] Retrieving ou verbose output
   [+] Retrieving pkis output
   [+] Retrieving pkis verbose output
   [+] Retrieving pso output
+  [+] Retrieving sccm output
+  [!] invalid attribute type mSSMSDefaultMP. Can't find SCCM management points
+  [+] Retrieving sccm verbose output
+  [!] invalid class in objectClass attribute: mssmsmanagementpoint. Can't find SCCM management points
+  [+] Retrieving schema output
+  [+] Retrieving server_info output
+  [+] Retrieving server_info verbose output
+  [+] Retrieving shadow_principals output
+  [+] Retrieving shadow_principals verbose output
   [+] Retrieving silos output
   [+] Retrieving silos verbose output
+  [+] Retrieving smsa output
+  [+] Retrieving smsa verbose output
   [+] Retrieving subnets output
   [+] Retrieving subnets verbose output
   [+] Retrieving trusts output
+  [+] Retrieving trusts verbose output
   [+] Retrieving users output
   [+] Retrieving users verbose output
   [+] Retrieving users verbose output
@@ -143,8 +170,12 @@ Help is self-explanatory. Let's check it out::
   [+] Retrieving users verbose output
   [+] Retrieving users verbose output
   [+] Retrieving users verbose output
+  [+] Retrieving users verbose output
   [+] Retrieving zones output
+  [+] Domain zones:
+  [+] Forest zones:
   [+] Retrieving zones verbose output
+
 
   $ ldeep cache -d backup -p winlab users
   Administrator
@@ -202,14 +233,16 @@ LDAP
     commands:
       available commands
 
-      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,templates,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,change_uac,create_computer,create_user,modify_password,remove_from_group,unlock}
+      {auth_policies,bitlockerkeys,computers,conf,delegations,dns_records,domain_policy,fsmo,fsp,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,schema,server_info,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone,all,enum_users,search,whoami,add_to_group,change_uac,create_computer,create_user,modify_password,remove_from_group,unlock}
         auth_policies       List the authentication policies configured in the Active Directory.
         bitlockerkeys       Extract the bitlocker recovery keys.
         computers           List the computer hostnames and resolve them if --resolve is specify.
         conf                Dump the configuration partition of the Active Directory.
         delegations         List accounts configured for any kind of delegation.
+        dns_records         List the DNS records configured in the Active Directory.
         domain_policy       Return the domain policy.
         fsmo                List FSMO roles.
+        fsp                 List the Foreign Security Principals.
         gmsa                List the gmsa accounts and retrieve secrets(NT + kerberos keys) if possible.
         gpo                 Return the list of Group policy objects.
         groups              List the groups.
@@ -218,25 +251,26 @@ LDAP
         pkis                List pkis.
         pso                 List the Password Settings Objects.
         sccm                List servers related to SCCM infrastructure (Primary/Secondary Sites and Distribution Points).
+        schema              Dump the schema partition of the Active Directory.
+        server_info         List server info.
         shadow_principals   List the shadow principals and the groups associated with.
         silos               List the silos configured in the Active Directory.
         smsa                List the smsa accounts and the machines they are associated with.
         subnets             List sites and associated subnets.
-        templates           List certificate templates.
         trusts              List the domain's trust relationships.
         users               List users according to a filter.
         zones               List the DNS zones configured in the Active Directory.
         from_guid           Return the object associated with the given `guid`.
         from_sid            Return the object associated with the given `sid`.
         laps                Return the LAPS passwords. If a target is specified, only retrieve the LAPS password for this one.
-        memberships         List the group for which `account` belongs to.
+        memberships         List the groups to which `object` belongs.
         membersof           List the members of `group`.
         object              Return the records containing `object` in a CN.
         sddl                Returns the SDDL of an object given it's CN.
         silo                Get information about a specific `silo`.
         zone                Return the records of a DNS zone.
         all                 Collect and store computers, domain_policy, zones, gpo, groups, ou, users, trusts, pso information
-        enum_users          Anonymously enumerate users with LDAP pings.
+        enum_users          Anonymously enumerate enabled users with LDAP pings.
         search              Query the LDAP with `filter` and retrieve ALL or `attributes` if specified.
         whoami              Return user identity.
         add_to_group        Add `user` to `group`.
@@ -271,15 +305,17 @@ CACHE
     commands:
       available commands
 
-      {auth_policies,bitlockerkeys,computers,conf,delegations,domain_policy,fsmo,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone}
+      {auth_policies,bitlockerkeys,computers,conf,delegations,dns_records,domain_policy,fsmo,fsp,gmsa,gpo,groups,machines,ou,pkis,pso,sccm,schema,server_info,shadow_principals,silos,smsa,subnets,trusts,users,zones,from_guid,from_sid,laps,memberships,membersof,object,sddl,silo,zone}
         auth_policies       List the authentication policies configured in the Active Directory.
         bitlockerkeys       Extract the bitlocker recovery keys.
         computers           List the computer hostnames and resolve them if --resolve is specify.
         conf                Dump the configuration partition of the Active Directory.
         delegations         List accounts configured for any kind of delegation.
+        dns_records         List the DNS records configured in the Active Directory.
         domain_policy       Return the domain policy.
         fsmo                List FSMO roles.
-        gmsa                List the gmsa accounts and retrieve NT hash if possible.
+        fsp                 List the Foreign Security Principals.
+        gmsa                List the gmsa accounts and retrieve secrets(NT + kerberos keys) if possible.
         gpo                 Return the list of Group policy objects.
         groups              List the groups.
         machines            List the machine accounts.
@@ -287,6 +323,8 @@ CACHE
         pkis                List pkis.
         pso                 List the Password Settings Objects.
         sccm                List servers related to SCCM infrastructure (Primary/Secondary Sites and Distribution Points).
+        schema              Dump the schema partition of the Active Directory.
+        server_info         List server info.
         shadow_principals   List the shadow principals and the groups associated with.
         silos               List the silos configured in the Active Directory.
         smsa                List the smsa accounts and the machines they are associated with.
@@ -297,7 +335,7 @@ CACHE
         from_guid           Return the object associated with the given `guid`.
         from_sid            Return the object associated with the given `sid`.
         laps                Return the LAPS passwords. If a target is specified, only retrieve the LAPS password for this one.
-        memberships         List the group for which `account` belongs to.
+        memberships         List the groups to which `object` belongs.
         membersof           List the members of `group`.
         object              Return the records containing `object` in a CN.
         sddl                Returns the SDDL of an object given it's CN.

@@ -133,6 +133,10 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
     }
     PKI_FILTER = lambda _: {"files": ["pkis"]}
     BITLOCKERKEY_FILTER = lambda _: {"files": ["bitlockerkeys"]}
+    FSP_FILTER = lambda _, n: {
+        "files": ["fsp"],
+        "filter": lambda x: True if n == "*" else eq(x["cn"], n),
+    }
     ALL_DELEGATIONS_FILTER = lambda _: {
         "files": ["delegations_all"],
         "replacement": {

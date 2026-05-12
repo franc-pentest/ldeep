@@ -273,6 +273,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     FSMO_SCHEMA_FILTER = lambda _: "(&(objectClass=dMD)(fSMORoleOwner=*))"
     FSMO_DOMAIN_FILTER = lambda _: "(fSMORoleOwner=*)"
     SHADOW_PRINCIPALS_FILTER = lambda _: "(objectClass=msDS-ShadowPrincipal)"
+    FSP_FILTER = lambda _, s: f"(&(objectClass=foreignSecurityPrincipal)(cn={s}))"
     UNCONSTRAINED_DELEGATION_FILTER = (
         lambda _: f"(userAccountControl:1.2.840.113556.1.4.803:=524288)"
     )
