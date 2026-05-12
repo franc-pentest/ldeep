@@ -69,7 +69,6 @@ class Ldeep(Command):
             elif isinstance(o, bytes):
                 return b64encode(o).decode("ascii")
 
-        # import pdb; pdb.set_trace()
         if verbose:
             self.__display(records, default)
         else:
@@ -173,6 +172,7 @@ class Ldeep(Command):
                 elif (
                     "msDS-AuthNPolicy" in record["objectClass"]
                     or "msDS-AuthNPolicySilo" in record["objectClass"]
+                    or "foreignSecurityPrincipal" in record["objectClass"]
                 ):
                     print(record["cn"])
                 elif "msFVE-RecoveryInformation" in record["objectClass"]:
@@ -452,6 +452,31 @@ class Ldeep(Command):
             self.engine.query(self.engine.COMPUTERS_FILTER(machine), attributes),
             verbose,
             specify_group=False,
+        )
+
+    def list_fsp(self, kwargs):
+        """
+        List the Foreign Security Principals.
+
+        Arguments:
+            @verbose:bool
+                Results will contain full information
+            #fsp:string = '*'
+                Target foreign security principal
+        """
+        verbose = kwargs.get("verbose", False)
+        fsp = kwargs.get("fsp", "*")
+
+        if verbose:
+            attributes = self.engine.all_attributes()
+        else:
+            attributes = ["cn", "objectClass"]
+
+        base = f"CN=ForeignSecurityPrincipals,{self.engine.base_dn}"
+
+        self.display(
+            self.engine.query(self.engine.FSP_FILTER(fsp), attributes, base=base),
+            verbose,
         )
 
     def list_computers(self, kwargs):
