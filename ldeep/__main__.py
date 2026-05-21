@@ -1533,7 +1533,7 @@ class Ldeep(Command):
             try:
                 results = list(
                     self.engine.query(
-                        self.engine.ZONE_FILTER(),
+                        self.engine.DNS_FILTER(),
                         base=f"DC={dns_zone},{basePre},{baseSuf}",
                     )
                 )
@@ -1542,6 +1542,8 @@ class Ldeep(Command):
             else:
                 filteredResults = []
                 for result in results:
+                    if result.get("dnsRecord", None) is None:
+                        continue
                     result["dnsRecord"] = list(
                         filter(lambda rec: rec != "", result["dnsRecord"])
                     )
