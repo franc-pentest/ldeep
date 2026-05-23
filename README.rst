@@ -278,6 +278,7 @@ LDAP
         create_computer     Create a computer account
         create_user         Create a user account
         modify_password     Change `user`'s password.
+        remove_from_fsp     Remove `SID` from FSP.
         remove_from_group   Remove `user` from `group`.
         unlock              Unlock `user`.
 
@@ -459,7 +460,6 @@ For Kerberos, you will also need to configure the ``/etc/krb5.conf``.::
 Upcoming
 ========
 
-* Proper DNS zone enumeration
 * ADCS enumeration
 * Project tree
 * Any ideas?

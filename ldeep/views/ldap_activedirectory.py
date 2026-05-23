@@ -15,6 +15,8 @@ from ldap3 import (
     ENCRYPT,
     KERBEROS,
     MODIFY_REPLACE,
+    MODIFY_ADD,
+    MODIFY_DELETE,
     NTLM,
     SASL,
     SIMPLE,
@@ -581,45 +583,6 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     def all_attributes(self):
         return self.attributes
 
-    # Not used anymore
-    def __query(self, ldapfilter, attributes=[], base=None, scope=None):
-        """
-        Perform a query to the LDAP server and return the results.
-
-        @ldapfilter: The LDAP filter to query (see RFC 2254).
-        @attributes: List of attributes to retrieved with the query.
-        @base: Base to use during the request.
-        @scope: Scope to use during the request.
-
-        @return a list of records.
-        """
-        attributes = self.attributes if attributes == [] else attributes
-        result_set = []
-        try:
-            entry_generator = self.ldap.extend.standard.paged_search(
-                search_base=base or self.base_dn,
-                search_filter=ldapfilter,
-                search_scope=scope or self.search_scope,
-                attributes=attributes,
-                controls=self.controls,
-                paged_size=self.page_size,
-                generator=True,
-            )
-
-            for entry in entry_generator:
-                if "dn" in entry:
-                    d = entry["attributes"]
-                    d["dn"] = entry["dn"]
-                    result_set.append(d)
-
-        except LDAPOperationResult as e:
-            raise self.ActiveDirectoryLdapException(e)
-        except LDAPAttributeError as e:
-            if not _getframe().f_back.f_code.co_name == "get_laps":
-                raise self.ActiveDirectoryLdapException(e)
-
-        return result_set
-
     def query(self, ldapfilter, attributes=[], base=None, scope=None):
         """
         Perform a query to the LDAP server and return the results as a generator.
@@ -806,17 +769,19 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @username: the username that will be added to the group. DN format: "CN=username,CN=Users,DC=CORP,DC=LOCAL"
         @group: the target group. DN format: "CN=group,CN=Users,DC=CORP,DC=LOCAL"
 
-        @return True if the account was successfully added or False otherwise.
+        @return True if the account was successfully added or error message otherwise.
         """
         if user_dn.startswith("S-1-5-21-"):
-            # build dn for foreign security principal container
-            user_dn = f"CN={user_dn},CN=ForeignSecurityPrincipals,{self.base_dn}"
+            if self.ldap.modify(
+                group_dn, {"member": [MODIFY_ADD, [f"<SID={user_dn}>"]]}
+            ):
+                return True
+            else:
+                return self.ldap.last_error
         try:
-            return addUsersInGroups(self.ldap, user_dn, group_dn)
+            return addUsersInGroups(self.ldap, user_dn, group_dn, raise_error=True)
         except ldap3.core.exceptions.LDAPInvalidDnError as e:
-            print(f"Unhandled exception: {e}")
-            # catch invalid group dn
-            return False
+            return f"{e}"
 
     def remove_user_from_group(self, user_dn, group_dn):
         """
@@ -825,17 +790,38 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         @username: the username that will be removed from the group. dn format: "CN=username,CN=Users,DC=CORP,DC=LOCAL"
         @group: the target group. dn format: "CN=group,CN=Users,DC=CORP,DC=LOCAL"
 
-        @return True if the account was successfully removed or if the account doesn't exist or False otherwise.
+        @return True if the account was successfully removed or if the account doesn't exist or error message otherwise.
         """
         if user_dn.startswith("S-1-5-21-"):
-            # build dn for security principal container
-            user_dn = f"CN={user_dn},CN=ForeignSecurityPrincipals,{self.base_dn}"
+            if self.ldap.modify(
+                group_dn, {"member": [MODIFY_DELETE, [f"<SID={user_dn}>"]]}
+            ):
+                return True
+            else:
+                return self.ldap.last_error
         try:
-            return removeUsersInGroups(self.ldap, user_dn, group_dn, fix=True)
+            return removeUsersInGroups(
+                self.ldap, user_dn, group_dn, fix=True, raise_error=True
+            )
         except ldap3.core.exceptions.LDAPInvalidDnError as e:
-            print(f"Unhandled exception: {e}")
-            # catch invalid group dn
-            return False
+            return f"{e}"
+
+    def remove_fsp(self, sid):
+        """
+        Remove a SID from FSP.
+
+        @sid: the sid that will be removed from FSP."
+
+        @return True if the sid was successfully removed or error message otherwise.
+        """
+        try:
+            base = f"CN=ForeignSecurityPrincipals,{self.base_dn}"
+            if self.ldap.delete(f"CN={sid},{base}"):
+                return True
+            else:
+                return self.ldap.last_error
+        except ldap3.core.exceptions.LDAPInvalidDnError as e:
+            return f"{e}"
 
     def change_uac(self, user_dn, uac):
         """
