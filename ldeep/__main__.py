@@ -2249,10 +2249,11 @@ class Ldeep(Command):
         user = kwargs["user"]
         group = kwargs["group"]
 
-        if self.engine.add_user_to_group(user, group):
+        ret = self.engine.add_user_to_group(user, group)
+        if isinstance(ret, bool) and ret is True:
             info(f"User {user} successfully added to {group}")
         else:
-            error(f"Unable to add {user} to {group}, check privileges or dn")
+            error(f"Unable to add {user} to {group}, {ret}")
 
     def action_remove_from_group(self, kwargs):
         """
@@ -2267,10 +2268,27 @@ class Ldeep(Command):
         user = kwargs["user"]
         group = kwargs["group"]
 
-        if self.engine.remove_user_from_group(user, group):
+        ret = self.engine.remove_user_from_group(user, group)
+        if isinstance(ret, bool) and ret is True:
             info(f"User {user} successfully removed from {group}")
         else:
-            error(f"Unable to remove {user} from {group}, check privileges or dn")
+            error(f"Unable to remove {user} from {group}, {ret}")
+
+    def action_remove_from_fsp(self, kwargs):
+        """
+        Remove `SID` from FSP.
+
+        Arguments:
+            #sid:string
+                Target SID. Ex: S-1-5-21-2808000538-3973481384-2586621659-1116"
+        """
+        sid = kwargs["sid"]
+
+        ret = self.engine.remove_fsp(sid)
+        if isinstance(ret, bool) and ret is True:
+            info(f"SID {sid} successfully removed from FSP")
+        else:
+            error(f"Unable to remove {sid} from FSP, {ret}")
 
     def action_change_uac(self, kwargs):
         """
