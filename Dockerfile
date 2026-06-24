@@ -3,7 +3,9 @@
 
 FROM python:3.12-slim
 WORKDIR /ldeep
-RUN apt-get update && apt-get install -y libkrb5-dev gcc python3-dev
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git libkrb5-dev gcc python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 COPY . .
-RUN PDM_BUILD_SCM_VERSION=$(cat VERSION) pip install .
+RUN pip install .
 ENTRYPOINT [ "ldeep" ]

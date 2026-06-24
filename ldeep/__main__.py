@@ -579,13 +579,12 @@ class Ldeep(Command):
                             pass
                 except Exception:
                     pass
-            blob = MSDS_MANAGEDPASSWORD_BLOB()
             try:
-                blob.fromString(data)
+                blob = MSDS_MANAGEDPASSWORD_BLOB.from_bytes(data)
             except (TypeError, KeyError):
                 continue
 
-            password = blob["CurrentPassword"][:-2]
+            password = blob.current_password[:-2]
 
             # Compute NT hash
             hash = MD4.new()

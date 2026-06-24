@@ -1,46 +1,34 @@
-from ldeep.utils.structure import Structure
+import struct
+from dataclasses import dataclass
 
 
-class MSDS_MANAGEDPASSWORD_BLOB(Structure):
-    structure = (
-        ("Version", "<H"),
-        ("Reserved", "<H"),
-        ("Length", "<L"),
-        ("CurrentPasswordOffset", "<H"),
-        ("PreviousPasswordOffset", "<H"),
-        ("QueryPasswordIntervalOffset", "<H"),
-        ("UnchangedPasswordIntervalOffset", "<H"),
-        ("CurrentPassword", ":"),
-        ("PreviousPassword", ":"),
-        ("QueryPasswordInterval", ":"),
-        ("UnchangedPasswordInterval", ":"),
-    )
+@dataclass
+class MSDS_MANAGEDPASSWORD_BLOB:
+    """MS-ADTS gMSA managed password blob."""
 
-    def __init__(self, data=None):
-        Structure.__init__(self, data=data)
+    _HEADER = struct.Struct("<HHLHHHH")  # Version, Reserved, Length + 4 offsets
 
-    def fromString(self, data):
-        Structure.fromString(self, data)
+    version: int
+    reserved: int
+    length: int
+    current_password: bytes
+    previous_password: bytes | None
+    query_password_interval: bytes
+    unchanged_password_interval: bytes
 
-        if self["PreviousPasswordOffset"] == 0:
-            endData = self["QueryPasswordIntervalOffset"]
-        else:
-            endData = self["PreviousPasswordOffset"]
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "MSDS_MANAGEDPASSWORD_BLOB":
+        version, reserved, length, cur_off, prev_off, query_off, unchanged_off = (
+            cls._HEADER.unpack_from(data)
+        )
 
-        self["CurrentPassword"] = self.rawData[self["CurrentPasswordOffset"] :][
-            : endData - self["CurrentPasswordOffset"]
-        ]
-        if self["PreviousPasswordOffset"] != 0:
-            self["PreviousPassword"] = self.rawData[self["PreviousPasswordOffset"] :][
-                : self["QueryPasswordIntervalOffset"] - self["PreviousPasswordOffset"]
-            ]
-
-        self["QueryPasswordInterval"] = self.rawData[
-            self["QueryPasswordIntervalOffset"] :
-        ][
-            : self["UnchangedPasswordIntervalOffset"]
-            - self["QueryPasswordIntervalOffset"]
-        ]
-        self["UnchangedPasswordInterval"] = self.rawData[
-            self["UnchangedPasswordIntervalOffset"] :
-        ]
+        cur_end = query_off if prev_off == 0 else prev_off
+        return cls(
+            version,
+            reserved,
+            length,
+            current_password=data[cur_off:cur_end],
+            previous_password=(data[prev_off:query_off] if prev_off else None),
+            query_password_interval=data[query_off:unchanged_off],
+            unchanged_password_interval=data[unchanged_off:],
+        )
