@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 
+import os
 import sys
 from argparse import ArgumentParser
-from base64 import b64decode, b64encode
+from base64 import b64encode
 from datetime import date, datetime, timedelta
 from itertools import chain
 from json import dump as json_dump
 from math import fabs
-from re import compile as re_compile, IGNORECASE
+from re import IGNORECASE
+from re import compile as re_compile
 from time import sleep
 from uuid import UUID
 
@@ -22,6 +24,15 @@ from pyasn1.error import PyAsn1UnicodeDecodeError
 from ldeep._version import __version__
 from ldeep.utils import Logger, error, get_key_for_value, info
 from ldeep.utils import resolve as utils_resolve
+from ldeep.utils.bloodhound import (
+    BLOODHOUND_NODE_TYPES,
+    configuration_object_type,
+    convert_certtemplates,
+    convert_configuration,
+)
+from ldeep.utils.bloodhound import (
+    convert as convert_bloodhound,
+)
 from ldeep.utils.protections import checkProtections
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldeep.views.activedirectory import (
@@ -42,11 +53,35 @@ from ldeep.views.ldap_activedirectory import LdapActiveDirectoryView
 from ldeep.views.structures import MSDS_MANAGEDPASSWORD_BLOB
 
 
+def _record_identity(record):
+    for field in ("objectGUID", "objectSid", "distinguishedName", "dn"):
+        value = record.get(field)
+        if value:
+            if isinstance(value, (list, tuple)):
+                value = tuple(value)
+            return field, str(value).casefold()
+    return None
+
+
+def _deduplicate_records(records):
+    result = []
+    seen = set()
+    for record in records:
+        identity = _record_identity(record) if isinstance(record, dict) else None
+        if identity is None or identity not in seen:
+            result.append(record)
+            if identity is not None:
+                seen.add(identity)
+    return result
+
+
 class Ldeep(Command):
     def __init__(self, query_engine, format="json"):
         self.engine = query_engine
+        self.bloodhound = format == "bloodhound"
+        self.bloodhound_type_hint = None
         self.dns_record_regexp = None
-        if format == "json":
+        if format in ("json", "bloodhound"):
             self.__display = self.__display_json
 
     def extract_record_from_dn(self, dn: str) -> str:
@@ -70,7 +105,10 @@ class Ldeep(Command):
                 return b64encode(o).decode("ascii")
 
         if verbose:
-            self.__display(records, default)
+            if self.bloodhound:
+                self.__display_bloodhound(records, default)
+            else:
+                self.__display(records, default)
         else:
             k = 0
             for record in records:
@@ -297,6 +335,283 @@ class Ldeep(Command):
         sys.stdout.write("]\n")
         sys.stdout.flush()
 
+    def __display_bloodhound(self, records, default):
+        records = list(records)
+        if self.bloodhound_type_hint == "users":
+            records.extend(getattr(self, "bloodhound_gmsa_records", []))
+            records = _deduplicate_records(records)
+        if self.bloodhound_type_hint in {"users", "groups", "computers"}:
+            principals = getattr(self, "bloodhound_principal_records", [])
+            known_sids = {
+                record.get("objectSid")
+                for record in principals
+                if isinstance(record, dict)
+            }
+            principals.extend(
+                record
+                for record in records
+                if isinstance(record, dict)
+                and record.get("objectSid") not in known_sids
+            )
+        principal_cache = {}
+
+        def available_cache_files(*names):
+            if not isinstance(self.engine, CacheActiveDirectoryView):
+                return list(names)
+            expanded_names = []
+            for name in names:
+                if name == "users_all":
+                    expanded_names.extend(self.engine.user_cache_files())
+                elif name == "machines":
+                    expanded_names.extend(self.engine.computer_cache_files())
+                else:
+                    expanded_names.append(name)
+            return [
+                name
+                for name in expanded_names
+                if any(
+                    os.path.exists(
+                        os.path.join(
+                            self.engine.path,
+                            f"{self.engine.prefix}_{name}.{extension}",
+                        )
+                    )
+                    for extension in ("json", "lst")
+                )
+            ]
+
+        def resolve_member(distinguished_name):
+            try:
+                if isinstance(self.engine, CacheActiveDirectoryView):
+                    files = available_cache_files(
+                        "users_all",
+                        "gmsa",
+                        "groups",
+                        "machines",
+                        "fsp",
+                        "shadow_principals",
+                    )
+                    if not files:
+                        return None
+                    member_filter = {
+                        "fmt": "json",
+                        "files": files,
+                        "filter": lambda record: (
+                            record.get("distinguishedName") == distinguished_name
+                        ),
+                    }
+                else:
+                    member_filter = self.engine.DISTINGUISHED_NAME(distinguished_name)
+                results = self.engine.query(member_filter, ["objectSid", "objectClass"])
+                return next(iter(results), None)
+            except Exception:
+                return None
+
+        def resolve_principal(sid):
+            if sid in principal_cache:
+                return principal_cache[sid]
+            try:
+                if isinstance(self.engine, CacheActiveDirectoryView):
+                    files = available_cache_files(
+                        "users_all",
+                        "gmsa",
+                        "groups",
+                        "machines",
+                        "fsp",
+                        "shadow_principals",
+                    )
+                    if not files:
+                        principal_cache[sid] = None
+                        return None
+                    principal_filter = {
+                        "fmt": "json",
+                        "files": files,
+                        "filter": lambda record: (
+                            record.get("objectSid") == sid
+                            or sid
+                            in (
+                                record.get("msDS-ShadowPrincipalSid")
+                                if isinstance(
+                                    record.get("msDS-ShadowPrincipalSid"), list
+                                )
+                                else [record.get("msDS-ShadowPrincipalSid")]
+                            )
+                        ),
+                    }
+                else:
+                    principal_filter = f"(objectSid={sid})"
+                principal_cache[sid] = next(
+                    iter(
+                        self.engine.query(
+                            principal_filter, ["objectSid", "objectClass"]
+                        )
+                    ),
+                    None,
+                )
+            except Exception:
+                principal_cache[sid] = None
+            return principal_cache[sid]
+
+        def resolve_host(hostname):
+            try:
+                if isinstance(self.engine, CacheActiveDirectoryView):
+                    files = available_cache_files("machines")
+                    if not files:
+                        return None
+                    host_filter = {
+                        "fmt": "json",
+                        "files": files,
+                        "filter": lambda record: (
+                            str(record.get("dNSHostName", "")).lower()
+                            == str(hostname).lower()
+                        ),
+                    }
+                else:
+                    host_filter = f"(dNSHostName={hostname})"
+                return next(iter(self.engine.query(host_filter, ["objectSid"])), None)
+            except Exception:
+                return None
+
+        domain_sid = ""
+        try:
+            has_domain_policy = True
+            if isinstance(self.engine, CacheActiveDirectoryView):
+                has_domain_policy = any(
+                    os.path.exists(
+                        os.path.join(
+                            self.engine.path,
+                            f"{self.engine.prefix}_domain_policy.{extension}",
+                        )
+                    )
+                    for extension in ("json", "lst")
+                )
+            if has_domain_policy:
+                domain_filter = self.engine.DOMAIN_INFO_FILTER()
+                if isinstance(domain_filter, dict):
+                    domain_filter = dict(domain_filter)
+                    domain_filter.pop("fmt", None)
+                domain_records = self.engine.query(domain_filter, ["objectSid"])
+                domain_record = next(iter(domain_records), None)
+                if isinstance(domain_record, dict):
+                    domain_sid = domain_record.get("objectSid", "")
+        except Exception:
+            pass
+        self.bloodhound_domain_sid = domain_sid
+        self.bloodhound_last_records = records
+
+        trust_records = None
+        object_type_guids = None
+        if isinstance(self.engine, LdapActiveDirectoryView):
+            try:
+                self.engine.create_objecttype_guid_map()
+                object_type_guids = self.engine.objecttype_guid_map
+            except Exception:
+                # Schema enumeration is an enhancement for LDAP mode.  The
+                # static GUIDs still cover the standard BloodHound rights.
+                object_type_guids = None
+        domain_controllers = None
+        if self.bloodhound_type_hint == "groups":
+            try:
+                if isinstance(self.engine, CacheActiveDirectoryView):
+                    files = available_cache_files("machines")
+                    if files:
+                        dc_filter = {
+                            "fmt": "json",
+                            "files": files,
+                            "filter": lambda record: (
+                                record.get("primaryGroupID") == 516
+                            ),
+                        }
+                    else:
+                        domain_controllers = []
+                else:
+                    dc_filter = self.engine.DC_FILTER()
+                if domain_controllers is not None:
+                    domain_controllers = list(
+                        self.engine.query(dc_filter, ["objectSid", "objectClass"])
+                    )
+            except Exception:
+                domain_controllers = None
+        if any(
+            isinstance(record, dict)
+            and any(
+                str(object_class).lower() in {"domain", "domaindns"}
+                for object_class in (record.get("objectClass") or [])
+            )
+            for record in records
+        ):
+            try:
+                trust_filter = self.engine.TRUSTS_INFO_FILTER()
+                if isinstance(self.engine, CacheActiveDirectoryView):
+                    files = available_cache_files("trusts")
+                    if files:
+                        trust_filter = dict(trust_filter)
+                        trust_filter["files"] = files
+                        trust_records = self.engine.query(trust_filter)
+                    else:
+                        trust_records = []
+                else:
+                    trust_records = self.engine.query(trust_filter)
+            except Exception:
+                trust_records = None
+
+        computer_records = getattr(self, "bloodhound_computer_records", [])
+        if (
+            not computer_records
+            and isinstance(self.engine, CacheActiveDirectoryView)
+            and self.bloodhound_type_hint in {"domains", "ous"}
+        ):
+            # Reuse the existing machines cache as conversion context.  This
+            # does not add a collection method or query a new data source.
+            try:
+                if available_cache_files("machines"):
+                    computer_records = list(
+                        self.engine.query(
+                            self.engine.COMPUTERS_FILTER("*"),
+                            self.engine.all_attributes(),
+                        )
+                    )
+                else:
+                    computer_records = []
+            except Exception:
+                computer_records = []
+
+        document = convert_bloodhound(
+            records,
+            resolve_member=resolve_member,
+            resolve_principal=resolve_principal,
+            resolve_host=resolve_host,
+            domain_sid=domain_sid,
+            trusts=trust_records,
+            include_well_known=True,
+            object_type_hint=self.bloodhound_type_hint,
+            object_type_guids=object_type_guids,
+            domain_controllers=domain_controllers,
+            certtemplate_records=[
+                record
+                for record in getattr(self, "bloodhound_configuration_records", [])
+                if isinstance(record, dict)
+                and configuration_object_type(record) == "certtemplates"
+            ],
+            gpo_records=getattr(self, "bloodhound_gpo_records", []),
+            configuration_records=getattr(self, "bloodhound_configuration_records", []),
+            containment_records=(
+                list(getattr(self, "bloodhound_ou_records", []))
+                + list(getattr(self, "bloodhound_configuration_records", []))
+            ),
+            computer_records=computer_records,
+        )
+        json_dump(
+            document,
+            sys.stdout,
+            ensure_ascii=False,
+            default=default,
+            sort_keys=True,
+            indent=2,
+        )
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
     # LISTERS #
 
     def list_server_info(self, kwargs):
@@ -325,6 +640,7 @@ class Ldeep(Command):
                 Results will contain full information
             @filter:string = ["all", "spn", "enabled", "disabled", "locked", "nopasswordexpire", "passwordexpired", "passwordnotrequired", "nokrbpreauth", "reversible"]
         """
+        self.bloodhound_type_hint = "users"
         verbose = kwargs.get("verbose", False)
         filter_ = kwargs.get("filter", "all")
 
@@ -405,7 +721,7 @@ class Ldeep(Command):
                 attributes,
             )
         else:
-            return None
+            return
 
         self.display(results, verbose)
 
@@ -417,6 +733,7 @@ class Ldeep(Command):
             @verbose:bool
                 Results will contain full information
         """
+        self.bloodhound_type_hint = "groups"
         verbose = kwargs.get("verbose", False)
 
         if verbose:
@@ -440,6 +757,7 @@ class Ldeep(Command):
             #machine:string = '*'
                 Target machine
         """
+        self.bloodhound_type_hint = "computers"
         verbose = kwargs.get("verbose", False)
         machine = kwargs.get("machine", "*")
 
@@ -448,11 +766,14 @@ class Ldeep(Command):
         else:
             attributes = ["sAMAccountName", "objectClass"]
 
-        self.display(
-            self.engine.query(self.engine.COMPUTERS_FILTER(machine), attributes),
-            verbose,
-            specify_group=False,
+        records = list(
+            self.engine.query(self.engine.COMPUTERS_FILTER(machine), attributes)
         )
+        if self.bloodhound:
+            self.bloodhound_computer_records = records
+            if hasattr(self, "bloodhound_principal_records"):
+                self.bloodhound_principal_records.extend(records)
+        self.display(records, verbose, specify_group=False)
 
     def list_fsp(self, kwargs):
         """
@@ -491,9 +812,27 @@ class Ldeep(Command):
             @dc:bool
                 List only domain controllers
         """
+        self.bloodhound_type_hint = "computers"
         resolve = "resolve" in kwargs and kwargs["resolve"]
         dns = kwargs.get("dns", "")
         dc = kwargs.get("dc", False)
+
+        if self.bloodhound:
+            computer_filter = (
+                self.engine.DC_FILTER() if dc else self.engine.COMPUTERS_FILTER("*")
+            )
+            records = list(
+                self.engine.query(computer_filter, self.engine.all_attributes())
+            )
+            self.bloodhound_computer_records = records
+            if hasattr(self, "bloodhound_principal_records"):
+                self.bloodhound_principal_records.extend(records)
+            self.display(
+                records,
+                True,
+                specify_group=False,
+            )
+            return
 
         hostnames = []
         if not dc:
@@ -529,6 +868,7 @@ class Ldeep(Command):
             @target:string
                 Retrieve only the information regarding the specified target account
         """
+        self.bloodhound_type_hint = "computers"
         verbose = kwargs.get("verbose", False)
         target = kwargs.get("target", "*")
         hidden_attributes = ["msDS-ManagedPassword"]
@@ -621,6 +961,9 @@ class Ldeep(Command):
             entry["aes128-cts-hmac-sha1-96"] = f"{aes128_key.hex()}"
             entry["aes256-cts-hmac-sha1-96"] = f"{aes256_key.hex()}"
 
+        if kwargs.get("_bloodhound_collect_only"):
+            self.bloodhound_gmsa_records = entries
+            return
         if verbose:
             self.display(entries, verbose)
         else:
@@ -654,6 +997,7 @@ class Ldeep(Command):
             @verbose:bool
                 Results will contain full information
         """
+        self.bloodhound_type_hint = "domains"
         verbose = kwargs.get("verbose", False)
 
         if verbose:
@@ -675,9 +1019,15 @@ class Ldeep(Command):
                 "msDS-Behavior-Version",
             ]
 
-        self.display(
-            self.engine.query(self.engine.DOMAIN_INFO_FILTER(), attributes), verbose
-        )
+        domain_filter = self.engine.DOMAIN_INFO_FILTER()
+        if self.bloodhound and isinstance(domain_filter, dict):
+            # The cache normally forces domain_policy to its human-readable
+            # .lst representation. BloodHound requires the detailed JSON
+            # record instead.
+            domain_filter = dict(domain_filter)
+            domain_filter.pop("fmt", None)
+
+        self.display(self.engine.query(domain_filter, attributes), verbose)
 
     def list_ou(self, kwargs):
         """
@@ -689,6 +1039,7 @@ class Ldeep(Command):
             #ou:string = '*'
                 Target ou
         """
+        self.bloodhound_type_hint = "ous"
         verbose = kwargs.get("verbose", False)
         ou = kwargs.get("ou", "*")
 
@@ -697,7 +1048,9 @@ class Ldeep(Command):
         else:
             attributes = ["objectClass", "gPLink"]
 
-        ous = self.engine.query(self.engine.OU_FILTER(ou), attributes)
+        ous = list(self.engine.query(self.engine.OU_FILTER(ou), attributes))
+        if self.bloodhound:
+            self.bloodhound_ou_records = ous
         results = self.engine.query(
             self.engine.GPO_INFO_FILTER("*"), ["cn", "displayName"]
         )
@@ -717,6 +1070,7 @@ class Ldeep(Command):
             #gpo:string = '*'
                 Target gpo
         """
+        self.bloodhound_type_hint = "gpos"
         verbose = kwargs.get("verbose", False)
         gpo = kwargs.get("gpo", "*")
 
@@ -725,9 +1079,10 @@ class Ldeep(Command):
         else:
             attributes = ["objectClass", "cn", "displayName"]
 
-        self.display(
-            self.engine.query(self.engine.GPO_INFO_FILTER(gpo), attributes), verbose
-        )
+        records = list(self.engine.query(self.engine.GPO_INFO_FILTER(gpo), attributes))
+        if self.bloodhound:
+            self.bloodhound_gpo_records = records
+        self.display(records, verbose)
 
     def list_pso(self, _):
         """
@@ -769,14 +1124,12 @@ class Ldeep(Command):
                 else:
                     val = policy[field]
 
-                if field in FILETIME_TIMESTAMP_FIELDS.keys():
+                if field in FILETIME_TIMESTAMP_FIELDS:
                     val = int(
                         (fabs(float(val)) / 10**7) / FILETIME_TIMESTAMP_FIELDS[field][0]
                     )
-                    val = "{val} {typ}".format(
-                        val=val, typ=FILETIME_TIMESTAMP_FIELDS[field][1]
-                    )
-                print("{field}: {val}".format(field=field, val=val))
+                    val = f"{val} {FILETIME_TIMESTAMP_FIELDS[field][1]}"
+                print(f"{field}: {val}")
 
         # enum principals affected by PSO if unpriv
         results = []
@@ -872,8 +1225,8 @@ class Ldeep(Command):
             for field in FIELDS_TO_PRINT:
                 if field in result:
                     val = result[field]
-                    print("{field}: {val}".format(field=field, val=val))
-            print("")
+                    print(f"{field}: {val}")
+            print()
 
     def list_zones(self, kwargs):
         """
@@ -955,7 +1308,7 @@ class Ldeep(Command):
                     )
                 )
 
-            except LdapActiveDirectoryView.ActiveDirectoryLdapException as e:
+            except LdapActiveDirectoryView.ActiveDirectoryLdapException:
                 error(f"Can't list {name.lower()} records", close_array=verbose)
             else:
                 filteredResults = []
@@ -985,6 +1338,7 @@ class Ldeep(Command):
             @verbose:bool
                 Results will contain full information
         """
+        self.bloodhound_type_hint = "enterprisecas"
         verbose = kwargs.get("verbose", False)
 
         if verbose:
@@ -1157,15 +1511,15 @@ class Ldeep(Command):
                     )
                     servers_list = [d["cn"] for d in servers]
 
-                    output = "Site: {}".format(site_name)
-                    output += " | Subnet: {}".format(subnet_name) if subnet_name else ""
+                    output = f"Site: {site_name}"
+                    output += f" | Subnet: {subnet_name}" if subnet_name else ""
                     output += (
-                        " | Site description: {}".format(site_description)
+                        f" | Site description: {site_description}"
                         if site_description
                         else ""
                     )
                     output += (
-                        " | Subnet description: {}".format(subnet_description)
+                        f" | Subnet description: {subnet_description}"
                         if subnet_description
                         else ""
                     )
@@ -1180,14 +1534,24 @@ class Ldeep(Command):
         """
         Dump the configuration partition of the Active Directory.
         """
-        self.display(
+        configuration_base = None
+        if not isinstance(self.engine, CacheActiveDirectoryView):
+            configuration_base = ",".join(["CN=Configuration", self.engine.base_dn])
+        records = list(
             self.engine.query(
                 self.engine.ALL_FILTER(),
                 ALL,
-                base=",".join(["CN=Configuration", self.engine.base_dn]),
-            ),
-            True,
+                base=configuration_base,
+            )
         )
+        if self.bloodhound:
+            # ``cache all`` already includes the conf collection.  Keep it
+            # in memory so the BloodHound exporter can split it into the
+            # dedicated Container/ADCS node files without querying anything
+            # else.
+            self.bloodhound_configuration_records = records
+            return
+        self.display(records, True)
 
     def list_schema(self, kwargs):
         """
@@ -1323,10 +1687,8 @@ class Ldeep(Command):
             else:
                 for entry in entries:
                     print(
-                        (
-                            f"Members of the shadow principal {entry['name']} "
-                            f"(shadow principal SID: {entry['msDS-ShadowPrincipalSid']}):"
-                        )
+                        f"Members of the shadow principal {entry['name']} "
+                        f"(shadow principal SID: {entry['msDS-ShadowPrincipalSid']}):"
                     )
                     for member in entry.get("member", []):
                         print(f"{member:>{len(member) + 4}}")
@@ -1424,7 +1786,7 @@ class Ldeep(Command):
                     attributes,
                 )
             else:
-                return None
+                return
 
             # Force the actual LDAP request to be done there, to catch potential LDAPAttributeError errors related
             # to an old domain functional level. We don't want to miss the other delegation types because of RBCD
@@ -1783,7 +2145,7 @@ class Ldeep(Command):
         groups_from_primary_group = []
         # For some reason, when we request an attribute which is not set on an object,
         # ldap3 returns an empty list as the value of this attribute
-        if "primaryGroupID" in target_obj and target_obj["primaryGroupID"]:
+        if target_obj.get("primaryGroupID"):
             try:
                 pgid = target_obj["primaryGroupID"]
                 pg_res = list(self.engine.query(self.engine.PRIMARY_GROUP_ID(pgid)))
@@ -1796,7 +2158,7 @@ class Ldeep(Command):
 
         # Handle direct 'memberOf' groups
         groups_from_memberof = []
-        if "memberOf" in target_obj and target_obj["memberOf"]:
+        if target_obj.get("memberOf"):
             groups = target_obj["memberOf"]
             for group_dn in groups:
                 groups_from_memberof.append(process_group(group_dn, 0))
@@ -1935,7 +2297,7 @@ class Ldeep(Command):
                     parse_readers(entry)
             else:
                 self.display(entries, verbose)
-        except Exception as e:
+        except Exception:
             # Silently fail if v1 attributes don't exist
             print("LAPSv1 not detected")
         try:
@@ -1962,7 +2324,7 @@ class Ldeep(Command):
                                 f"{c['dNSHostName']}:::{b64encode(c['msLAPS-EncryptedPassword'])}"
                             )
                         parse_readers(c)
-        except Exception as e:
+        except Exception:
             # Silently fail if v2 attributes don't exist
             print("LAPSv2 not detected")
 
@@ -2024,7 +2386,7 @@ class Ldeep(Command):
                 "msDS-UserAuthNPolicy",
             ]
         else:
-            return None
+            return
 
         try:
             results = list(
@@ -2072,7 +2434,9 @@ class Ldeep(Command):
         filter_ = kwargs["filter"]
 
         try:
-            if attr and attr != "ALL":
+            if self.bloodhound:
+                results = self.engine.query(filter_)
+            elif attr and attr != "ALL":
                 results = self.engine.query(filter_, attr.split(","))
             else:
                 results = self.engine.query(filter_)
@@ -2094,32 +2458,173 @@ class Ldeep(Command):
                 File prefix for the files that will be created during the execution
         """
         output = kwargs["output"]
+
+        if self.bloodhound:
+            if kwargs.get("output_dir"):
+                os.makedirs(output, exist_ok=True)
+                output = os.path.join(output, "bh")
+
+            def write_document(object_type, document):
+                with open(
+                    f"{output}_{object_type}.json", "w", encoding="utf-8"
+                ) as document_file:
+                    json_dump(
+                        document,
+                        document_file,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        indent=2,
+                    )
+
+            self.bloodhound_configuration_records = []
+            self.bloodhound_gmsa_records = []
+            self.bloodhound_ou_records = []
+            self.bloodhound_computer_records = []
+            self.bloodhound_principal_records = []
+            for object_type in BLOODHOUND_NODE_TYPES:
+                write_document(
+                    object_type,
+                    convert_bloodhound([], object_type_hint=object_type),
+                )
+            # BloodHound accepts one node type per JSON file.  Keep the
+            # useful AD object collections from ldeep's aggregate command and
+            # emit them directly as importable BloodHound files.
+            bloodhound_commands = {
+                "domain_policy": "domains",
+                "gpo": "gpos",
+                "groups": "groups",
+                "machines": "computers",
+                "ou": "ous",
+                "pkis": "enterprisecas",
+                "users": "users",
+            }
+            cache_files = {
+                "domain_policy": "domain_policy",
+                "gpo": "gpo",
+                "groups": "groups",
+                "machines": "machines",
+                "ou": "ou",
+                "pkis": "pkis",
+                "users": "users_all",
+            }
+            commands = list(self.get_commands(prefix="list_"))
+            command_order = {
+                "gpo": 0,
+                "conf": 1,
+                "ou": 2,
+                "machines": 3,
+                "domain_policy": 4,
+                "groups": 5,
+                "pkis": 6,
+                "gmsa": 7,
+                "users": 8,
+            }
+            commands.sort(key=lambda item: command_order.get(item[0], 99))
+            for command, method in commands:
+                if command == "gmsa":
+                    if isinstance(
+                        self.engine, CacheActiveDirectoryView
+                    ) and not self.engine.has_cache_file("gmsa"):
+                        continue
+                    kwargs["verbose"] = True
+                    kwargs["_bloodhound_collect_only"] = True
+                    getattr(self, method)(kwargs)
+                    kwargs.pop("_bloodhound_collect_only", None)
+                    continue
+                if command == "conf":
+                    if isinstance(self.engine, CacheActiveDirectoryView) and not any(
+                        os.path.exists(
+                            os.path.join(
+                                self.engine.path,
+                                f"{self.engine.prefix}_conf.{extension}",
+                            )
+                        )
+                        for extension in ("json", "lst")
+                    ):
+                        continue
+                    info("Retrieving conf BloodHound source data")
+                    kwargs["verbose"] = True
+                    getattr(self, method)(kwargs)
+                    continue
+                object_type = bloodhound_commands.get(command)
+                if not object_type:
+                    continue
+                if isinstance(self.engine, CacheActiveDirectoryView):
+                    if command == "users":
+                        if not self.engine.user_cache_files() and not (
+                            isinstance(self.engine, CacheActiveDirectoryView)
+                            and self.engine.has_cache_file("gmsa")
+                        ):
+                            continue
+                    elif command == "machines":
+                        if not self.engine.computer_cache_files():
+                            continue
+                    else:
+                        cache_file = cache_files[command]
+                        if not any(
+                            os.path.exists(
+                                os.path.join(
+                                    self.engine.path,
+                                    f"{self.engine.prefix}_{cache_file}.{extension}",
+                                )
+                            )
+                            for extension in ("json", "lst")
+                        ):
+                            continue
+                info(f"Retrieving {command} BloodHound output")
+                sys.stdout = Logger(
+                    f"{output}_{object_type}.json",
+                    quiet=True,
+                )
+                kwargs["verbose"] = True
+                getattr(self, method)(kwargs)
+                if object_type == "enterprisecas":
+                    self.bloodhound_enterpriseca_records = getattr(
+                        self, "bloodhound_last_records", []
+                    )
+                    certtemplates = convert_certtemplates(
+                        getattr(self, "bloodhound_last_records", []),
+                        domain_sid=getattr(self, "bloodhound_domain_sid", ""),
+                        configuration_records=getattr(
+                            self, "bloodhound_configuration_records", []
+                        ),
+                        principal_records=(
+                            list(getattr(self, "bloodhound_principal_records", []))
+                            + list(getattr(self, "bloodhound_computer_records", []))
+                        ),
+                    )
+                    write_document("certtemplates", certtemplates)
+            configuration_documents = convert_configuration(
+                getattr(self, "bloodhound_configuration_records", []),
+                domain_sid=getattr(self, "bloodhound_domain_sid", ""),
+                certificate_records=getattr(
+                    self, "bloodhound_enterpriseca_records", []
+                ),
+                principal_records=getattr(self, "bloodhound_principal_records", [])
+                + list(getattr(self, "bloodhound_computer_records", [])),
+            )
+            for object_type, document in configuration_documents.items():
+                write_document(object_type, document)
+            return
+
         kwargs["verbose"] = False
 
         for command, method in self.get_commands(prefix="list_"):
-            info("Retrieving {command} output".format(command=command))
+            info(f"Retrieving {command} output")
             if self.has_option(method, "filter"):
                 filter_ = self.retrieve_default_val_for_arg(method, "filter")
                 for f in filter_:
                     sys.stdout = Logger(
-                        "{output}_{command}_{filter}.lst".format(
-                            output=output, command=command, filter=f
-                        ),
+                        f"{output}_{command}_{f}.lst",
                         quiet=True,
                     )
                     kwargs["filter"] = f
                     getattr(self, method)(kwargs)
 
                     if self.has_option(method, "verbose"):
-                        info(
-                            "Retrieving {command} verbose output".format(
-                                command=command
-                            )
-                        )
+                        info(f"Retrieving {command} verbose output")
                         sys.stdout = Logger(
-                            "{output}_{command}_{filter}.json".format(
-                                output=output, command=command, filter=f
-                            ),
+                            f"{output}_{command}_{f}.json",
                             quiet=True,
                         )
                         kwargs["verbose"] = True
@@ -2128,17 +2633,15 @@ class Ldeep(Command):
                 kwargs["filter"] = None
             else:
                 sys.stdout = Logger(
-                    "{output}_{command}.lst".format(output=output, command=command),
+                    f"{output}_{command}.lst",
                     quiet=True,
                 )
                 getattr(self, method)(kwargs)
 
                 if self.has_option(method, "verbose"):
-                    info("Retrieving {command} verbose output".format(command=command))
+                    info(f"Retrieving {command} verbose output")
                     sys.stdout = Logger(
-                        "{output}_{command}.json".format(
-                            output=output, command=command
-                        ),
+                        f"{output}_{command}.json",
                         quiet=True,
                     )
                     kwargs["verbose"] = True
@@ -2199,13 +2702,9 @@ class Ldeep(Command):
         user = kwargs["user"]
 
         if self.engine.unlock(user):
-            info(
-                "User {username} unlocked (or was already unlocked)".format(
-                    username=user
-                )
-            )
+            info(f"User {user} unlocked (or was already unlocked)")
         else:
-            error("Unable to unlock {username}, check privileges".format(username=user))
+            error(f"Unable to unlock {user}, check privileges")
 
     def action_modify_password(self, kwargs):
         """
@@ -2227,7 +2726,7 @@ class Ldeep(Command):
 
         try:
             if self.engine.modify_password(user, curr, new):
-                info("Password of {username} changed".format(username=user))
+                info(f"Password of {user} changed")
             else:
                 error(
                     f"Unable to change {user}'s password, check domain password policy or privileges"
@@ -2407,7 +2906,6 @@ def main():
         action="store_true",
         help="Enable the retrieval of security descriptors in ldeep results",
     )
-
     sub = parser.add_subparsers(
         title="Mode",
         dest="mode",
@@ -2418,6 +2916,31 @@ def main():
 
     ldap = sub.add_parser("ldap", description="LDAP mode")
     cache = sub.add_parser("cache", description="Cache mode")
+    bloodhound = sub.add_parser(
+        "bloodhound",
+        description="Convert an existing ldeep cache to BloodHound JSON",
+    )
+    bloodhound.add_argument(
+        "-d",
+        "--dir",
+        default=".",
+        type=str,
+        help="Directory containing the ldeep cache",
+    )
+    bloodhound.add_argument(
+        "-p",
+        "--prefix",
+        required=True,
+        type=str,
+        help="Prefix of the ldeep cache files",
+    )
+    bloodhound.add_argument(
+        "-o",
+        "--output",
+        required=True,
+        type=str,
+        help="Directory where bh_*.json files will be written",
+    )
     protections = sub.add_parser("protections", description="Protections mode")
     protections.add_argument(
         "-d", "--domain", required=True, help="The domain as NetBIOS or FQDN"
@@ -2537,12 +3060,32 @@ def main():
     Ldeep.add_subparsers(
         cache,
         "cache",
-        ["list_", "get_"],
+        ["list_", "get_", "misc_"],
         title="commands",
         description="available commands",
     )
 
     args = parser.parse_args()
+
+    if args.mode == "bloodhound":
+        try:
+            query_engine = CacheActiveDirectoryView(args.dir, args.prefix)
+            # The dedicated cache converter must keep security descriptors in
+            # memory.  CacheActiveDirectoryView otherwise scrubs them when
+            # ``ntSecurityDescriptor`` is not part of the requested attrs.
+            query_engine.set_all_attributes(
+                [ALL_ATTRIBUTES, ALL_OPERATIONAL_ATTRIBUTES, "ntSecurityDescriptor"]
+            )
+            Ldeep(query_engine, format="bloodhound").misc_all(
+                {"output": args.output, "output_dir": True}
+            )
+        except (
+            CacheActiveDirectoryView.CacheActiveDirectoryDirNotFoundException,
+            CacheActiveDirectoryView.CacheActiveDirectoryFileNotFoundException,
+        ) as e:
+            error(e)
+            sys.exit(1)
+        return
 
     # Output
     if args.outfile:
@@ -2634,6 +3177,8 @@ def main():
         error(e)
     except NotImplementedError:
         error("Feature not yet available")
+    except ValueError as e:
+        error(e)
 
 
 if __name__ == "__main__":

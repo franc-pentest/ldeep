@@ -20,7 +20,7 @@ def get_key_for_value(dic, val):
     return next((k for k, v in dic.items() if v == val), None)
 
 
-class Logger(object):
+class Logger:
     def __init__(self, outfile=None, quiet=False):
         self.quiet = quiet
         self.terminal = __stdout__
@@ -35,10 +35,9 @@ class Logger(object):
     def flush(self):
         if self.log:
             self.log.flush()
-        pass
 
 
-class ResolverThread(object):
+class ResolverThread:
     def __init__(self, dns_server):
         self.dns_server = dns_server
         self.resolutions = []

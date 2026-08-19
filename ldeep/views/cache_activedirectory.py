@@ -59,20 +59,36 @@ def eq_anr(record, value):
 
 
 class CacheActiveDirectoryView(ActiveDirectoryView):
+    USER_CACHE_FILES = (
+        "users_all",
+        "users_enabled",
+        "users_disabled",
+        "users_locked",
+        "users_nopasswordexpire",
+        "users_passwordexpired",
+        "users_passwordnotrequired",
+        "users_nokrbpreauth",
+        "users_reversible",
+        "users_spn",
+    )
+    DELEGATION_CACHE_FILES = (
+        "delegations_all",
+        "delegations_unconstrained",
+        "delegations_constrained",
+        "delegations_rbcd",
+    )
+
     # Constant functions (first arg -> self but we don't need it)
     GROUPS_FILTER = lambda _: {"files": ["groups"]}
-    USER_ALL_FILTER = lambda _: {"files": ["users_all"]}
     USER_SPN_FILTER = lambda _: {
         "files": ["users_spn"],
         "replacement": {
             "files": ["users_all"],
-            "filter": lambda x: x.get("servicePrincipalName", None) is not None
-            and x["sAMAccountName"] != "krbtgt",
+            "filter": lambda x: (
+                x.get("servicePrincipalName", None) is not None
+                and x["sAMAccountName"] != "krbtgt"
+            ),
         },
-    }
-    COMPUTERS_FILTER = lambda _, n: {
-        "files": ["machines"],
-        "filter": lambda x: True if n == "*" else eq(x["cn"], n),
     }
     DC_FILTER = lambda _: {
         "files": ["machines"],
@@ -90,8 +106,10 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
     ACCOUNTS_IN_GROUP_FILTER = lambda _, p, g: {
         "fmt": "json",
         "files": ["users_all", "smsa", "gmsa", "groups", "machines"],
-        "filter": lambda x: ("primaryGroupID" in x and eq(p, x["primaryGroupID"]))
-        or ("memberOf" in x and g in x["memberOf"]),
+        "filter": lambda x: (
+            ("primaryGroupID" in x and eq(p, x["primaryGroupID"]))
+            or ("memberOf" in x and g in x["memberOf"])
+        ),
     }
     ACCOUNT_IN_GROUPS_FILTER = lambda _, u: {
         "fmt": "json",
@@ -100,7 +118,13 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
     }
     DISTINGUISHED_NAME = lambda _, n: {
         "fmt": "json",
-        "files": ["users_all", "groups", "machines", "shadow_principals"],
+        "files": [
+            "users_all",
+            "gmsa",
+            "groups",
+            "machines",
+            "shadow_principals",
+        ],
         "filter": lambda x: eq(x["distinguishedName"], n),
     }
     PRIMARY_GROUP_ID = lambda _, i: {
@@ -132,6 +156,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         "filter": lambda x: True if n == "*" else eq(x["distinguishedName"], n),
     }
     PKI_FILTER = lambda _: {"files": ["pkis"]}
+    ALL_FILTER = lambda _: {"files": ["conf"]}
     BITLOCKERKEY_FILTER = lambda _: {"files": ["bitlockerkeys"]}
     FSP_FILTER = lambda _, n: {
         "files": ["fsp"],
@@ -141,9 +166,11 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         "files": ["delegations_all"],
         "replacement": {
             "files": ["users_all", "machines"],
-            "filter": lambda x: "TRUSTED_FOR_DELEGATION" in x["userAccountControl"]
-            or x.get("msDS-AllowedToDelegateTo", None) is not None
-            or x.get("msDS-AllowedToActOnBehalfOfOtherIdentity") is not None,
+            "filter": lambda x: (
+                "TRUSTED_FOR_DELEGATION" in x["userAccountControl"]
+                or x.get("msDS-AllowedToDelegateTo", None) is not None
+                or x.get("msDS-AllowedToActOnBehalfOfOtherIdentity") is not None
+            ),
         },
     }
     UNCONSTRAINED_DELEGATION_FILTER = lambda _: {
@@ -164,8 +191,9 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         "files": ["delegations_rbcd"],
         "replacement": {
             "files": ["users_all", "machines"],
-            "filter": lambda x: x.get("msDS-AllowedToActOnBehalfOfOtherIdentity", None)
-            is not None,
+            "filter": lambda x: (
+                x.get("msDS-AllowedToActOnBehalfOfOtherIdentity", None) is not None
+            ),
         },
     }
     # TODO: Handle FSMO, SCCM cases later, file is composed of 3 JSON array
@@ -221,6 +249,74 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
             else True
         ),
     }
+
+    def has_cache_file(self, name):
+        return any(
+            path.exists(path.join(self.path, f"{self.prefix}_{name}.{extension}"))
+            for extension in ("json", "lst")
+        )
+
+    def delegation_cache_files(self):
+        available = [
+            name for name in self.DELEGATION_CACHE_FILES if self.has_cache_file(name)
+        ]
+        return ["delegations_all"] if "delegations_all" in available else available
+
+    def user_cache_files(self):
+        available = [
+            name for name in self.USER_CACHE_FILES if self.has_cache_file(name)
+        ]
+        if "users_all" in available:
+            return ["users_all"] + (["smsa"] if self.has_cache_file("smsa") else [])
+        return (
+            available
+            + (["smsa"] if self.has_cache_file("smsa") else [])
+            + self.delegation_cache_files()
+        )
+
+    def computer_cache_files(self):
+        if self.has_cache_file("machines"):
+            return ["machines"]
+        return self.delegation_cache_files()
+
+    @staticmethod
+    def _is_user_record(record):
+        classes = record.get("objectClass", [])
+        if isinstance(classes, str):
+            classes = [classes]
+        classes = {str(value).casefold() for value in classes}
+        managed_service_account = classes & {
+            "msds-groupmanagedserviceaccount",
+            "msds-managedserviceaccount",
+        }
+        return ("user" in classes or "msds-managedserviceaccount" in classes) and (
+            "computer" not in classes or managed_service_account
+        )
+
+    @staticmethod
+    def _is_computer_record(record):
+        classes = record.get("objectClass", [])
+        if isinstance(classes, str):
+            classes = [classes]
+        classes = {str(value).casefold() for value in classes}
+        return (
+            "computer" in classes
+            and "msds-groupmanagedserviceaccount" not in classes
+            and "msds-managedserviceaccount" not in classes
+        )
+
+    def USER_ALL_FILTER(self):
+        return {
+            "files": self.user_cache_files(),
+            "filter": self._is_user_record,
+        }
+
+    def COMPUTERS_FILTER(self, name):
+        return {
+            "files": self.computer_cache_files(),
+            "filter": lambda record: self._is_computer_record(record)
+            and (name == "*" or eq(record["cn"], name)),
+        }
 
     class CacheActiveDirectoryException(Exception):
         pass
@@ -292,13 +388,14 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         if base is not None:
             if "filter" in cachefilter:
                 oldFilter = cachefilter["filter"]
-                cachefilter["filter"] = lambda elt: oldFilter(elt) and (
-                    "dn" not in elt or elt["dn"].endswith("," + base)
+                cachefilter["filter"] = lambda elt: (
+                    oldFilter(elt)
+                    and ("dn" not in elt or elt["dn"].endswith("," + base))
                 )
             else:
-                cachefilter["filter"] = lambda elt: "dn" not in elt or elt[
-                    "dn"
-                ].endswith("," + base)
+                cachefilter["filter"] = lambda elt: (
+                    "dn" not in elt or elt["dn"].endswith("," + base)
+                )
 
         # Get format of cache files to use: either `lst` or `json`
         if "fmt" in cachefilter:
@@ -311,26 +408,23 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         data = []
         # For each file, retrieve result based on an optional filter
         for fil in cachefilter["files"]:
-            filename = "{prefix}_{file}.{ext}".format(
-                prefix=self.prefix, file=fil, ext=fmt
-            )
+            filename = f"{self.prefix}_{fil}.{fmt}"
             # In case the JSON file exists, parse it unless specified by the query engine
             if (
                 path.exists(path.join(self.path, filename[:-3] + "json"))
                 and not "fmt" in cachefilter
             ):
                 fmt = "json"
-                filename = "{prefix}_{file}.{ext}".format(
-                    prefix=self.prefix, file=fil, ext=fmt
-                )
+                filename = f"{self.prefix}_{fil}.{fmt}"
 
             replacement = cachefilter.get("replacement", None)
-            if not path.exists(filename) and replacement is None:
-                if filename not in warned_missing_files:
-                    error(f"{filename} required but not found")
-                    warned_missing_files.add(filename)
+            cache_path = path.join(self.path, filename)
+            if not path.exists(cache_path) and replacement is None:
+                if cache_path not in warned_missing_files:
+                    error(f"{cache_path} required but not found")
+                    warned_missing_files.add(cache_path)
                 continue
-            if not path.exists(filename) and replacement:
+            if not path.exists(cache_path) and replacement:
                 cachefilter["files"] = cachefilter["replacement"]["files"]
                 cachefilter["filter"] = cachefilter["replacement"]["filter"]
                 del cachefilter["replacement"]
@@ -342,7 +436,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
                 if path.join(self.path, filename) in FILE_CONTENT_DICT:
                     json = FILE_CONTENT_DICT[path.join(self.path, filename)]
                 else:
-                    fp = open(path.join(self.path, filename))
+                    fp = open(cache_path)
                     json = json_load(fp)
                     if "ntSecurityDescriptor" not in self.attributes:
                         scrub_json_from_key(json, lambda x: x == "nTSecurityDescriptor")
@@ -360,7 +454,7 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
                 if path.join(self.path, filename) in FILE_CONTENT_DICT:
                     fp = FILE_CONTENT_DICT[path.join(self.path, filename)]
                 else:
-                    fp = open(path.join(self.path, filename))
+                    fp = open(cache_path)
                     FILE_CONTENT_DICT[path.join(self.path, filename)] = fp
                 if "filter" in cachefilter:
                     for line in fp:
@@ -432,14 +526,69 @@ class CacheActiveDirectoryView(ActiveDirectoryView):
         """
         Private functions to retrieve the cache domain name.
         """
-        filename = "{prefix}_server_info.json".format(prefix=self.prefix)
-        if not path.exists(filename):
-            raise self.CacheActiveDirectoryFileNotFoundException(
-                f"{filename} not found"
-            )
-        with open(path.join(self.path, filename)) as fp:
-            info = json_load(fp)
-            base = info[0]["raw"]["defaultNamingContext"][0]
-            forest_base = info[0]["raw"]["rootDomainNamingContext"][0]
-            domain = base.replace("DC=", ".")[1:].replace(",", "")
-            return domain, base, forest_base
+        filename = f"{self.prefix}_server_info.json"
+        if path.exists(path.join(self.path, filename)):
+            with open(path.join(self.path, filename)) as fp:
+                info = json_load(fp)
+                base = info[0]["raw"]["defaultNamingContext"][0]
+                forest_base = info[0]["raw"]["rootDomainNamingContext"][0]
+                domain = base.replace("DC=", ".")[1:].replace(",", "")
+                return domain, base, forest_base
+
+        # A BloodHound conversion is useful with a deliberately partial ldeep
+        # cache (for example only users and computers).  server_info is not
+        # needed to read those JSON records, so derive a conservative naming
+        # context from the first distinguished name available instead of
+        # refusing to open the cache.
+        for cache_file in (
+            "users_all",
+            "users_enabled",
+            "users_disabled",
+            "users_locked",
+            "users_nopasswordexpire",
+            "users_passwordexpired",
+            "users_passwordnotrequired",
+            "users_nokrbpreauth",
+            "users_reversible",
+            "users_spn",
+            "smsa",
+            "delegations_all",
+            "delegations_unconstrained",
+            "delegations_constrained",
+            "delegations_rbcd",
+            "fsp",
+            "shadow_principals",
+            "groups",
+            "machines",
+            "domain_policy",
+            "gmsa",
+            "ou",
+            "gpo",
+            "pkis",
+            "conf",
+        ):
+            candidate = path.join(self.path, f"{self.prefix}_{cache_file}.json")
+            if not path.exists(candidate):
+                continue
+            try:
+                with open(candidate) as fp:
+                    records = json_load(fp)
+            except (OSError, ValueError):
+                continue
+            for record in records if isinstance(records, list) else []:
+                dn = record.get("distinguishedName") or record.get("dn")
+                if not isinstance(dn, str):
+                    continue
+                components = [
+                    component.split("=", 1)[1].strip()
+                    for component in dn.split(",")
+                    if component.split("=", 1)[0].strip().lower() == "dc"
+                    and "=" in component
+                ]
+                if components:
+                    base = ",".join(f"DC={component}" for component in components)
+                    return ".".join(components), base, base
+
+        raise self.CacheActiveDirectoryFileNotFoundException(
+            f"{filename} not found and no domain DN was found in the cache"
+        )

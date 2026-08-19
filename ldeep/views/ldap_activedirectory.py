@@ -14,9 +14,9 @@ from ldap3 import (
     DEREF_NEVER,
     ENCRYPT,
     KERBEROS,
-    MODIFY_REPLACE,
     MODIFY_ADD,
     MODIFY_DELETE,
+    MODIFY_REPLACE,
     NTLM,
     SASL,
     SIMPLE,
@@ -277,14 +277,14 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
     SHADOW_PRINCIPALS_FILTER = lambda _: "(objectClass=msDS-ShadowPrincipal)"
     FSP_FILTER = lambda _, s: f"(&(objectClass=foreignSecurityPrincipal)(cn={s}))"
     UNCONSTRAINED_DELEGATION_FILTER = (
-        lambda _: f"(userAccountControl:1.2.840.113556.1.4.803:=524288)"
+        lambda _: "(userAccountControl:1.2.840.113556.1.4.803:=524288)"
     )
-    CONSTRAINED_DELEGATION_FILTER = lambda _: f"(msDS-AllowedToDelegateTo=*)"
+    CONSTRAINED_DELEGATION_FILTER = lambda _: "(msDS-AllowedToDelegateTo=*)"
     RESOURCE_BASED_CONSTRAINED_DELEGATION_FILTER = (
-        lambda _: f"(msDS-AllowedToActOnBehalfOfOtherIdentity=*)"
+        lambda _: "(msDS-AllowedToActOnBehalfOfOtherIdentity=*)"
     )
     ALL_DELEGATIONS_FILTER = (
-        lambda _: f"(|(userAccountControl:1.2.840.113556.1.4.803:=524288)(msDS-AllowedToDelegateTo=*)(msDS-AllowedToActOnBehalfOfOtherIdentity=*))"
+        lambda _: "(|(userAccountControl:1.2.840.113556.1.4.803:=524288)(msDS-AllowedToDelegateTo=*)(msDS-AllowedToActOnBehalfOfOtherIdentity=*))"
     )
 
     class ActiveDirectoryLdapException(Exception):
@@ -442,9 +442,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
                         sasl_mechanism=KERBEROS,
                         session_security=ENCRYPT,
                     )
-        elif method == "Certificate":
-            self.ldap = Connection(server)
-        elif method == "anonymous":
+        elif method == "Certificate" or method == "anonymous":
             self.ldap = Connection(server)
         elif method == "NTLM":
             if password is not None:

@@ -4,9 +4,12 @@
 A module used to verify LDAP Signing and LDAPS Channel Binding from Active Directory LDAP.
 """
 
-import sys, socket, ssl
+import socket
+import ssl
+import sys
 from io import StringIO
-from ldap3 import Connection, SASL, KERBEROS, NTLM, Server, ALL
+
+from ldap3 import ALL, KERBEROS, NTLM, SASL, Connection, Server
 
 
 # Check LDAP Signing enforcement
@@ -109,9 +112,7 @@ def checkEPA(server, userDN, password, kerberosAuth):
     err = conn.result["message"]
     if "data 80090346" in err:
         return True
-    elif "data 52e" in err:
-        return False
-    elif "LdapErr" not in err:
+    elif "data 52e" in err or "LdapErr" not in err:
         return False
 
 
@@ -124,8 +125,8 @@ def do_ntlm_bind_null_avpair_epa(
         if not self.sasl_in_progress:
             self.sasl_in_progress = True
             try:
-                from ldap3.utils.ntlm import NtlmClient
                 from ldap3.core.connection import bind_operation
+                from ldap3.utils.ntlm import NtlmClient
 
                 domain_name, user_name = self.user.split("\\", 1)
                 self.ntlm_client = NtlmClient(
@@ -159,7 +160,7 @@ def do_ntlm_bind_null_avpair_epa(
                     digest.update(self.server.tls.peer_certificate)
                     peer_certificate_digest = digest.finalize()
 
-                    channel_binding_struct = bytes()
+                    channel_binding_struct = b""
                     initiator_address = b"\x00" * 8
                     acceptor_address = b"\x00" * 8
                     application_data_raw = (
@@ -243,7 +244,7 @@ def checkEPAPolicy(server, userDN, password):
             channel_binding="TLS_CHANNEL_BINDING",
             auto_bind=False,
         )
-    except Exception as e:
+    except Exception:
         return None
     originalSTDOUT = sys.stdout
     originalSTDERR = sys.stderr
@@ -255,9 +256,7 @@ def checkEPAPolicy(server, userDN, password):
     err = conn.result["message"]
     if "data 80090346" in err:
         return True
-    elif "data 52e" in err:
-        return False
-    elif "LdapErr" not in err:
+    elif "data 52e" in err or "LdapErr" not in err:
         return False
 
 
@@ -282,14 +281,14 @@ def checkProtections(target, username, password, ntlm, domain, kerberosAuth):
         print("LDAP Signing not required")
 
     if not LDAPSCompleteHandshake(target):
-        print(f"LDAPS connection failed. DC certificate probably not configured")
+        print("LDAPS connection failed. DC certificate probably not configured")
     else:
         policyEPA = None
         ldapsChannelBindingAlways = checkEPA(
             serverLDAPS, user_dn, password, kerberosAuth
         )
         if ldapsChannelBindingAlways == None:
-            print(f"Failed to verify Channel Binding (EPA) enforcement")
+            print("Failed to verify Channel Binding (EPA) enforcement")
         else:
             if ldapsChannelBindingAlways == True:
                 policyEPA = "Always"
@@ -303,7 +302,7 @@ def checkProtections(target, username, password, ntlm, domain, kerberosAuth):
                         serverLDAPS, user_dn, password
                     )
                     if ldapsChannelBindingWhenSupported == None:
-                        print(f"Failed to verify Channel Binding (EPA) policy")
+                        print("Failed to verify Channel Binding (EPA) policy")
                     else:
                         if ldapsChannelBindingWhenSupported == True:
                             policyEPA = "When supported"

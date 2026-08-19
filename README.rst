@@ -102,7 +102,7 @@ Help is self-explanatory. Let's check it out::
   Mode:
     Available modes
 
-    {ldap,cache}          Backend engine to retrieve data
+    {ldap,cache,bloodhound,protections}          Backend engine to retrieve data
 
 
 `ldeep` can either run against an Active Directory LDAP server or locally on saved files::
@@ -181,7 +181,22 @@ Help is self-explanatory. Let's check it out::
   Administrator
   [...]
 
-These two modes have different options:
+An existing ldeep cache can be converted directly with the dedicated
+``bloodhound`` mode::
+
+  $ ldeep bloodhound -d backup -p winlab -o /tmp/bh_result
+  [+] Retrieving gpo BloodHound output
+  [+] Retrieving conf BloodHound source data
+  [+] Retrieving ou BloodHound output
+  [+] Retrieving machines BloodHound output
+  [+] Retrieving domain_policy BloodHound output
+  [+] Retrieving groups BloodHound output
+  [+] Retrieving pkis BloodHound output
+  [+] Retrieving users BloodHound output
+
+If some files information are not present (eg, the cache only contains users info), ldeep will still generate all bloodhound files only with empty data where it does not have sufficient info
+
+These three modes have different options:
 
 ----
 LDAP
@@ -343,7 +358,22 @@ CACHE
         silo                Get information about a specific `silo`.
         zone                Return the records of a DNS zone.
 
+-----
+BLODHOUND
+-----
 
+::
+
+  $ ldeep bloodhound -h
+  usage: ldeep bloodhound [-h] [-d DIR] -p PREFIX -o OUTPUT
+
+  Convert an existing ldeep cache to BloodHound JSON
+
+  options:
+    -h, --help           show this help message and exit
+    -d, --dir DIR        Directory containing the ldeep cache
+    -p, --prefix PREFIX  Prefix of the ldeep cache files
+    -o, --output OUTPUT  Directory where bh_*.json files will be written
 
 
 ==============

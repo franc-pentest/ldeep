@@ -8,7 +8,7 @@ validate_sid = validate_sid
 validate_guid = validate_guid
 
 
-class ActiveDirectoryView(object):
+class ActiveDirectoryView:
     """
     Manage a view of a Active Directory.
     """
