@@ -53,10 +53,12 @@ def checkLDAPSigning(server, userDN, password, kerberosAuth):
 #     a certificate setup for LDAPS on port 636 and TLS handshake will hang)
 def LDAPSCompleteHandshake(target):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(5)
-    ssl_sock = ssl.wrap_socket(
+    s.settimeout(10)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_OPTIONAL
+    ssl_sock = context.wrap_socket(
         s,
-        cert_reqs=ssl.CERT_OPTIONAL,
         suppress_ragged_eofs=False,
         do_handshake_on_connect=False,
     )

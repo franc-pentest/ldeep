@@ -90,19 +90,20 @@ ldeep
 Help is self-explanatory. Let's check it out::
 
   $ ldeep -h
-  usage: ldeep [-h] [--version] [-o OUTFILE] [--security_desc] {ldap,cache} ...
+  usage: ldeep - 2.0.4.dev6+gf055cc0 [-h] [-o OUTFILE] [--security_desc] {ldap,cache,protections} ...
 
   options:
     -h, --help            show this help message and exit
-    --version             show program's version number and exit
-    -o OUTFILE, --outfile OUTFILE
+    -o, --outfile OUTFILE
                           Store the results in a file
     --security_desc       Enable the retrieval of security descriptors in ldeep results
 
   Mode:
     Available modes
 
-    {ldap,cache}          Backend engine to retrieve data
+    {ldap,cache,protections}
+                          Operation to be performed
+
 
 
 `ldeep` can either run against an Active Directory LDAP server or locally on saved files::
@@ -344,6 +345,31 @@ CACHE
         zone                Return the records of a DNS zone.
 
 
+
+Lastly, ldeep allows checking LDAP security mechanisms
+
+
+-----------
+PROTECTIONS
+-----------
+
+::
+    $ ldeep protections -h
+    usage: ldeep - 2.0.4.dev6+gf055cc0 protections [-h] -d DOMAIN -s LDAPSERVER [-u USERNAME] [-p PASSWORD] [-H NTLM] [-k]
+
+    Protections mode
+
+    options:
+      -h, --help            show this help message and exit
+      -d, --domain DOMAIN   The domain as NetBIOS or FQDN
+      -s, --ldapserver LDAPSERVER
+                            The LDAP server (IP or FQDN for Kerberos)
+      -u, --username USERNAME
+                            The username
+      -p, --password PASSWORD
+                            The password used for the authentication
+      -H, --ntlm NTLM       NTLM hashes, format is LMHASH:NTHASH
+      -k, --kerberos        For Kerberos authentication, ticket file should be pointed by $KRB5NAME env variable
 
 
 ==============
