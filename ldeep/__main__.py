@@ -2,7 +2,7 @@
 
 import sys
 from argparse import ArgumentParser
-from base64 import b64decode, b64encode
+from base64 import b64encode
 from datetime import date, datetime, timedelta
 from itertools import chain
 from json import dump as json_dump
@@ -2412,7 +2412,7 @@ def main():
         title="Mode",
         dest="mode",
         description="Available modes",
-        help="Backend engine to retrieve data",
+        help="Operation to be performed",
     )
     sub.required = True
 
