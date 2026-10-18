@@ -8,7 +8,7 @@ lock_version = "4.5.1"
 content_hash = "sha256:a8a180773c1520dd91e4975d6e32b4b2b859fdd46c0e89471d8e6d61ae9d7192"
 
 [[metadata.targets]]
-requires_python = ">=3.9,<3.14"
+requires_python = ">=3.9,<3.16"
 
 [[package]]
 name = "asn1crypto"
