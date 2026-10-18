@@ -167,6 +167,13 @@ ldap3.protocol.formatters.standard.standard_formatter[
     format_ad_timestamp,
     None,
 )
+# msLAPS-PasswordExpirationTime
+ldap3.protocol.formatters.standard.standard_formatter[
+    "1.2.840.113556.1.6.44.1.1"
+] = (
+    format_ad_timestamp,
+    None,
+)
 # groupType
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.750"] = (
     lambda val: format_bitmask(val, GROUP_TYPE, 32),
