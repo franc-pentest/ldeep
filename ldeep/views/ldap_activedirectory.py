@@ -167,6 +167,11 @@ ldap3.protocol.formatters.standard.standard_formatter[
     format_ad_timestamp,
     None,
 )
+# msLAPS-PasswordExpirationTime
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.6.44.1.1"] = (
+    format_ad_timestamp,
+    None,
+)
 # groupType
 ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.750"] = (
     lambda val: format_bitmask(val, GROUP_TYPE, 32),
@@ -184,11 +189,19 @@ ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.4.2324"]
 )
 
 
-class LdapActiveDirectoryView(ActiveDirectoryView):
-    """
-    Manage a LDAP connection to a LDAP Active Directory.
-    """
+def parse_laps_v2_blob(encrypted_blob):
+    if len(encrypted_blob) < 16:
+        raise ValueError("msLAPS-EncryptedPassword too short to contain a header")
+    _, _, buffer_size, _ = unpack("<IIII", encrypted_blob[:16])
+    return encrypted_blob[16 : 16 + buffer_size]
 
+
+def parse_laps_v2_plaintext(decrypted):
+    data = json_loads(decrypted.decode("utf-16-le").rstrip("\x00"))
+    return data.get("n", ""), data.get("p", "")
+
+
+class LdapActiveDirectoryView(ActiveDirectoryView):
     # Constant functions
     USER_LOCKED_FILTER = (
         lambda _: "(&(objectCategory=Person)(objectClass=user)(lockoutTime:1.2.840.113556.1.4.804:=4294967295))"
@@ -316,6 +329,7 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
         self.username = username
         self.password = password
         self.ntlm = ntlm
+        self.method = method
         self.pfx_file = pfx_file
         self.pfx_pass = pfx_pass
         self.cert = cert_pem
@@ -557,6 +571,63 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             )
         )
         self.search_scope = SUBTREE
+
+    def decrypt_laps_v2(self, encrypted_blob):
+        import dpapi_ng
+
+        blob = parse_laps_v2_blob(encrypted_blob)
+
+        # RPC target: the DC ldeep is talking to, without the ldap(s):// scheme/port.
+        server = self.server.split("://", 1)[-1].split("/", 1)[0].rsplit(":", 1)[0]
+
+        # Map ldeep's auth to the pyspnego credentials used by the GKDI client.
+        username = password = None
+        if self.password:
+            username = f"{self.domain}\\{self.username}"
+            password = self.password
+            auth_protocol = "negotiate"
+        elif self.ntlm:
+            username = f"{self.domain}\\{self.username}"
+            # pyspnego only recognises a pass-the-hash password as LMHASH:NTHASH
+            # with both halves present; ldeep accepts an empty LM (":NTHASH").
+            lm, _, nt = self.ntlm.partition(":")
+            password = f"{lm or 'aad3b435b51404eeaad3b435b51404ee'}:{nt}"
+            auth_protocol = "ntlm"
+        elif self.method == "Kerberos":
+            # Reuse the ambient Kerberos ticket (KRB5CCNAME). "negotiate" with no
+            # explicit credentials fails to build a mech list; force Kerberos so
+            # the default credential cache is used. The server must be the SPN
+            # hostname (not an IP) for the service ticket to be obtainable.
+            auth_protocol = "kerberos"
+        else:
+            raise self.ActiveDirectoryLdapException(
+                "LAPSv2 decryption needs password, NTLM hash or Kerberos "
+                "authentication; certificate and anonymous binds cannot drive "
+                "the MS-GKDI RPC. Obtain a TGT (e.g. via PKINIT) and use -k."
+            )
+
+        decrypted = dpapi_ng.ncrypt_unprotect_secret(
+            blob,
+            server,
+            username=username,
+            password=password,
+            auth_protocol=auth_protocol,
+        )
+        return parse_laps_v2_plaintext(decrypted)
+
+    def laps_v2_target_principal(self, encrypted_blob):
+        from dpapi_ng._blob import DPAPINGBlob
+
+        blob = parse_laps_v2_blob(encrypted_blob)
+        descriptor = DPAPINGBlob.unpack(blob).protection_descriptor
+        sid = getattr(descriptor, "value", None)
+        if not sid:
+            return None
+        try:
+            res = next(self.resolve_sid(sid))
+            return f"{res.get('sAMAccountName', sid)} ({sid})"
+        except Exception:
+            return sid
 
     def set_controls(self, controls=[]):
         self.controls = controls

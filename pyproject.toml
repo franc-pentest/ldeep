@@ -10,6 +10,7 @@ dependencies = [
     "commandparse >= 1.1.1, < 2",
     "cryptography>=42.0.7",
     "dnspython >= 1.15.0",
+    "dpapi-ng >= 0.2.0",
     "gssapi >= 1.8.0, < 2",
     "ldap3-bleeding-edge == 2.10.1.1337",
     "oscrypto >= 1.3.0, < 2",

@@ -1976,13 +1976,50 @@ class Ldeep(Command):
             computers = list(entries)
             computer_count = len(computers)
             if computer_count > 0:
-                print("LAPSv2 detected, password decryption is not implemented")
                 if not verbose:
                     for c in computers:
-                        if c["msLAPS-EncryptedPassword"]:
-                            print(
-                                f"{c['dNSHostName']}:::{b64encode(c['msLAPS-EncryptedPassword'])}"
-                            )
+                        blob = c.get("msLAPS-EncryptedPassword")
+                        if blob:
+                            try:
+                                epoch = (
+                                    int(str(c["msLAPS-PasswordExpirationTime"]))
+                                    / 10000000
+                                ) - 11644473600
+                                expiration_date = datetime.fromtimestamp(
+                                    epoch
+                                ).strftime("%m-%d-%Y")
+                            except Exception:
+                                expiration_date = c.get(
+                                    "msLAPS-PasswordExpirationTime", ""
+                                )
+                            if isinstance(self.engine, LdapActiveDirectoryView):
+                                try:
+                                    account, password = self.engine.decrypt_laps_v2(
+                                        blob
+                                    )
+                                    print(
+                                        f"{c['dNSHostName']} {account} {password} {expiration_date}"
+                                    )
+                                except Exception as e:
+                                    hint = ""
+                                    try:
+                                        principal = (
+                                            self.engine.laps_v2_target_principal(blob)
+                                        )
+                                        if principal:
+                                            hint = (
+                                                f"; encrypted for {principal} - the "
+                                                "authenticating account must be a "
+                                                "member to decrypt"
+                                            )
+                                    except Exception:
+                                        pass
+                                    print(
+                                        f"{c['dNSHostName']}:::{b64encode(blob)} (decryption failed: {e}{hint})"
+                                    )
+                            else:
+                                # Cache mode: no credentials/network to reach the GKDI service.
+                                print(f"{c['dNSHostName']}:::{b64encode(blob)}")
                         parse_readers(c)
         except Exception as e:
             # Silently fail if v2 attributes don't exist
