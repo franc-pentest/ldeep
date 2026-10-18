@@ -41,6 +41,7 @@ from ldap3.extend.microsoft.removeMembersFromGroups import (
 from ldap3.extend.microsoft.unlockAccount import ad_unlock_account
 from ldap3.protocol.formatters.formatters import format_ad_timestamp, format_sid
 
+from ldeep.utils import error, format_bitmask
 from ldeep.utils.sddl import parse_ntSecurityDescriptor
 from ldeep.views.activedirectory import (
     ALL,
@@ -50,11 +51,13 @@ from ldeep.views.activedirectory import (
 )
 from ldeep.views.constants import (
     DNS_TYPES,
+    EXTENDED_RIGHTS_MAP,
     GROUP_TYPE,
     KERBEROS_ENC_TYPE,
     LOGON_SAM_LOGON_RESPONSE_EX,
     PWD_PROPERTIES,
     SAM_ACCOUNT_TYPE,
+    SCHEMA_GUIDS_MAP,
     TRUSTS_INFOS,
     USER_ACCOUNT_CONTROL,
     WELL_KNOWN_SIDS,
@@ -94,25 +97,6 @@ def format_ad_timedelta(raw_value):
     if isinstance(raw_value, bytes):
         raw_value = int(raw_value)
     return raw_value
-
-
-def format_bitmask(value, enum, bits=32):
-    try:
-        val = int(value)
-        if val == 0:
-            return enum.get(0, "Unknown")
-        result = []
-        for i in range(bits):
-            mask = 1 << i
-            if bool(val & mask) and enum.get(mask):
-                result.append(enum.get(mask))
-            # Handle unknown mask in enum
-            elif bool(val & mask) and enum.get(mask, None) is None:
-                result.append(f"{mask:#2x} (Unknown)")
-        return " | ".join(result)
-    except Exception:
-        pass
-    return value
 
 
 # from http://www.kouti.com/tables/baseattributes.htm
@@ -635,6 +619,44 @@ class LdapActiveDirectoryView(ActiveDirectoryView):
             if res["attributes"]["schemaIDGUID"]:
                 guid = str(UUID(bytes_le=res["attributes"]["schemaIDGUID"]))
                 self.objecttype_guid_map[res["attributes"]["name"].lower()] = guid
+
+    def get_guid_maps(self):
+        """
+        Return the (schema objects, extended rights) maps of GUID to name used to display ACEs.
+        Maps are retrieved once from the schema and the extended rights container, completing the static ones.
+        """
+        if getattr(self, "guid_maps", None) is None:
+            schema_guids = dict(SCHEMA_GUIDS_MAP)
+            rights_guids = dict(EXTENDED_RIGHTS_MAP)
+            try:
+                for res in self.ldap.extend.standard.paged_search(
+                    self.ldap.server.info.other["schemaNamingContext"][0],
+                    "(schemaIDGUID=*)",
+                    attributes=["lDAPDisplayName", "schemaIDGUID"],
+                    paged_size=self.page_size,
+                    generator=True,
+                ):
+                    attributes = res.get("attributes", {})
+                    if attributes.get("schemaIDGUID"):
+                        guid = str(UUID(bytes_le=attributes["schemaIDGUID"]))
+                        schema_guids[guid] = attributes["lDAPDisplayName"]
+                for res in self.ldap.extend.standard.paged_search(
+                    "CN=Extended-Rights,"
+                    + self.ldap.server.info.other["configurationNamingContext"][0],
+                    "(objectClass=controlAccessRight)",
+                    attributes=["cn", "rightsGuid"],
+                    paged_size=self.page_size,
+                    generator=True,
+                ):
+                    attributes = res.get("attributes", {})
+                    if attributes.get("rightsGuid"):
+                        rights_guids[attributes["rightsGuid"].lower()] = attributes[
+                            "cn"
+                        ]
+            except Exception as e:
+                error(f"Unable to retrieve schema GUIDs, using static ones: {e}")
+            self.guid_maps = (schema_guids, rights_guids)
+        return self.guid_maps
 
     def get_domain_sid(self):
         """
