@@ -168,9 +168,7 @@ ldap3.protocol.formatters.standard.standard_formatter[
     None,
 )
 # msLAPS-PasswordExpirationTime
-ldap3.protocol.formatters.standard.standard_formatter[
-    "1.2.840.113556.1.6.44.1.1"
-] = (
+ldap3.protocol.formatters.standard.standard_formatter["1.2.840.113556.1.6.44.1.1"] = (
     format_ad_timestamp,
     None,
 )
