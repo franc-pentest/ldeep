@@ -8,6 +8,19 @@ from struct import unpack
 
 from ldap3.protocol.formatters.formatters import format_sid, format_uuid_le
 
+from ldeep.utils import format_bitmask
+from ldeep.views.constants import (
+    ACCESS_MASK,
+    ACCESS_MASK_COMPOSITES,
+    ACE_FLAGS,
+    ACE_OBJECT_FLAGS,
+    EXTENDED_RIGHTS_MAP,
+    SCHEMA_GUIDS_MAP,
+    SD_CONTROL_FLAGS,
+    WELL_KNOWN_DOMAIN_RIDS,
+    WELL_KNOWN_SIDS,
+)
+
 SDDLTypeFlags = {
     "Self Relative": 0b1000000000000000,
     "RM Control Valid": 0b0100000000000000,
@@ -28,6 +41,9 @@ SDDLTypeFlags = {
 }
 
 SID_SIZE = 28
+
+ADS_RIGHT_DS_SELF = 0x00000008
+ADS_RIGHT_DS_CONTROL_ACCESS = 0x00000100
 
 
 def parse_ntSecurityDescriptor(input_buffer):
@@ -185,3 +201,103 @@ def parse_sddl_dacl_ace_type(ace_type):
     Parses the type of an ACE.
     """
     return ACEType[ace_type]
+
+
+def resolve_sid_name(sid):
+    """
+    Return the name of a well-known SID (universal or domain relative), else the SID itself.
+    """
+    if sid in WELL_KNOWN_SIDS:
+        return WELL_KNOWN_SIDS[sid]
+    if sid.startswith("S-1-5-21-"):
+        try:
+            rid = int(sid.rsplit("-", 1)[1])
+        except ValueError:
+            return sid
+        return WELL_KNOWN_DOMAIN_RIDS.get(rid, sid)
+    return sid
+
+
+def resolve_guid_name(guid, schema_guids, rights_guids, prefer_rights=False):
+    """
+    Return the name of a schema object or extended right GUID, else the GUID itself.
+
+    Validated writes share their GUID with the attribute they protect, hence
+    `prefer_rights` to choose which name to display first.
+    """
+    key = guid.strip("{}").lower()
+    maps = (
+        (rights_guids, schema_guids) if prefer_rights else (schema_guids, rights_guids)
+    )
+    for guid_map in maps:
+        if key in guid_map:
+            return guid_map[key]
+    return guid
+
+
+def format_access_mask(mask):
+    """
+    Return a human readable access mask.
+    """
+    if mask in ACCESS_MASK_COMPOSITES:
+        return ACCESS_MASK_COMPOSITES[mask]
+    return format_bitmask(mask, ACCESS_MASK, 32)
+
+
+def format_ace(ace, schema_guids, rights_guids):
+    """
+    Return a human readable copy of an ACE parsed by `parse_aces`.
+    """
+    # Already formatted
+    if "Raw Type" not in ace:
+        return ace
+
+    mask = ace["Raw Access Required"]
+    out = {
+        "Type": ace["Type"],
+        "Size": ace["Size"],
+        "Flags": format_bitmask(ace["Raw Flags"], ACE_FLAGS, 8),
+        "Access Required": format_access_mask(mask),
+        "SID": resolve_sid_name(ace["SID"]),
+    }
+    if "Raw Object Flags" in ace:
+        out["Object Flags"] = format_bitmask(
+            ace["Raw Object Flags"], ACE_OBJECT_FLAGS, 32
+        )
+    if "GUID" in ace:
+        # ExtendedRight and Self GUIDs are control access rights, others are schema objects
+        prefer_rights = bool(mask & (ADS_RIGHT_DS_CONTROL_ACCESS | ADS_RIGHT_DS_SELF))
+        out["GUID"] = resolve_guid_name(
+            ace["GUID"], schema_guids, rights_guids, prefer_rights
+        )
+    if "Inherited GUID" in ace:
+        out["Inherited GUID"] = resolve_guid_name(
+            ace["Inherited GUID"], schema_guids, rights_guids
+        )
+    return out
+
+
+def format_ntSecurityDescriptor(
+    sd, schema_guids=SCHEMA_GUIDS_MAP, rights_guids=EXTENDED_RIGHTS_MAP
+):
+    """
+    Return a human readable copy of a ntSecurityDescriptor parsed by `parse_ntSecurityDescriptor`.
+
+    Raw values are replaced by flag names, and SIDs and GUIDs by their names when known.
+    """
+    if not isinstance(sd, dict):
+        return sd
+
+    out = dict(sd)
+    if "Raw Type" in out:
+        out["Control"] = format_bitmask(out.pop("Raw Type"), SD_CONTROL_FLAGS, 16)
+    for x in ("Owner SID", "Group SID"):
+        if x in out:
+            out[x] = resolve_sid_name(out[x])
+    for x in ("DACL", "SACL"):
+        if x in out:
+            out[x] = dict(out[x])
+            out[x]["ACEs"] = [
+                format_ace(ace, schema_guids, rights_guids) for ace in out[x]["ACEs"]
+            ]
+    return out

@@ -23,7 +23,7 @@ from ldeep._version import __version__
 from ldeep.utils import Logger, error, get_key_for_value, info
 from ldeep.utils import resolve as utils_resolve
 from ldeep.utils.protections import checkProtections
-from ldeep.utils.sddl import parse_ntSecurityDescriptor
+from ldeep.utils.sddl import format_ntSecurityDescriptor, parse_ntSecurityDescriptor
 from ldeep.views.activedirectory import (
     ALL,
     ALL_ATTRIBUTES,
@@ -46,6 +46,8 @@ class Ldeep(Command):
     def __init__(self, query_engine, format="json"):
         self.engine = query_engine
         self.dns_record_regexp = None
+        # Keep parsed security descriptors raw instead of human readable (used for cache files)
+        self.raw_security_descriptors = False
         if format == "json":
             self.__display = self.__display_json
 
@@ -231,11 +233,8 @@ class Ldeep(Command):
                         if ace["SID"].startswith("S-1-5-21") and not ace[
                             "SID"
                         ].endswith(("-512", "-519")):
-                            # looking for GenericAll ACE
-                            if (
-                                ace["Access Required"]["Write DAC"] == True
-                                and ace["Access Required"]["Write Owner"] == True
-                            ):
+                            # looking for GenericAll ACE (WriteDacl and WriteOwner)
+                            if (ace["Raw Access Required"] & 0x000C0000) == 0x000C0000:
                                 # resolve SID
                                 try:
                                     sid = ace.get("SID")
@@ -270,6 +269,21 @@ class Ldeep(Command):
                 if self.engine.page_size > 0 and k % self.engine.page_size == 0:
                     sleep(self.engine.throttle)
 
+    def format_security_descriptors(self, record):
+        """
+        Return the record with its parsed nTSecurityDescriptor made human readable.
+        """
+        if self.raw_security_descriptors or not isinstance(record, dict):
+            return record
+        for key, value in record.items():
+            if key.lower() == "ntsecuritydescriptor" and isinstance(value, dict):
+                record = dict(record)
+                record[key] = format_ntSecurityDescriptor(
+                    value, *self.engine.get_guid_maps()
+                )
+                break
+        return record
+
     def __display_json(self, records, default):
         need_comma_sep = False
         k = 0
@@ -277,6 +291,7 @@ class Ldeep(Command):
         sys.stdout.write("[")
         for record in records:
             k += 1
+            record = self.format_security_descriptors(record)
             if need_comma_sep:
                 sys.stdout.write(",\n")
             else:
@@ -567,7 +582,11 @@ class Ldeep(Command):
                     entry["readers"] = []
                     for ace in readers_sd["DACL"]["ACEs"]:
                         try:
-                            reader_object = list(self.engine.resolve_sid(ace["SID"]))
+                            reader_object = self.engine.resolve_sid(ace["SID"])
+                            if isinstance(reader_object, str):
+                                entry["readers"].append(reader_object)
+                                continue
+                            reader_object = list(reader_object)
                             if reader_object:
                                 name = reader_object[0]["sAMAccountName"]
                                 if "group" in reader_object[0]["objectClass"]:
@@ -1892,8 +1911,11 @@ class Ldeep(Command):
                                 continue
                             else:
                                 try:
-                                    res = next(self.engine.resolve_sid(ace["SID"]))
-                                    if "group" in res["objectClass"]:
+                                    res = self.engine.resolve_sid(ace["SID"])
+                                    # Well-known SIDs are resolved to their name
+                                    if isinstance(res, str):
+                                        name = res
+                                    elif "group" in (res := next(res))["objectClass"]:
                                         name = f"{res['sAMAccountName']} (group)"
                                     else:
                                         name = res["sAMAccountName"]
@@ -2132,6 +2154,8 @@ class Ldeep(Command):
         """
         output = kwargs["output"]
         kwargs["verbose"] = False
+        # Cache files keep raw security descriptors, they are formatted when displayed
+        self.raw_security_descriptors = True
 
         for command, method in self.get_commands(prefix="list_"):
             info("Retrieving {command} output".format(command=command))
