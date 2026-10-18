@@ -20,6 +20,25 @@ def get_key_for_value(dic, val):
     return next((k for k, v in dic.items() if v == val), None)
 
 
+def format_bitmask(value, enum, bits=32):
+    try:
+        val = int(value)
+        if val == 0:
+            return enum.get(0, "Unknown")
+        result = []
+        for i in range(bits):
+            mask = 1 << i
+            if bool(val & mask) and enum.get(mask):
+                result.append(enum.get(mask))
+            # Handle unknown mask in enum
+            elif bool(val & mask) and enum.get(mask, None) is None:
+                result.append(f"{mask:#2x} (Unknown)")
+        return " | ".join(result)
+    except Exception:
+        pass
+    return value
+
+
 class Logger(object):
     def __init__(self, outfile=None, quiet=False):
         self.quiet = quiet
